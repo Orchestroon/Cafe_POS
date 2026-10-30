@@ -1,0 +1,19 @@
+{
+  "name": "drip-cafe-erp",
+  "version": "1.0.0",
+  "description": "Operations Connected - Specialized ERP and POS for Drip Café, Cairo",
+  "scripts": {
+    "start": "npx -y serve . -l 8080",
+    "dev": "npx -y serve . -l 8080"
+  },
+  "keywords": [
+    "coffee",
+    "erp",
+    "pos",
+    "inventory-management",
+    "specialty-coffee",
+    "cairo"
+  ],
+  "author": "Antigravity",
+  "license": "MIT"
+}
