@@ -2,16 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Drip Café — Powered by Growl Tech</title>
   <meta name="description" content="Café POS & Operations Platform for Drip Café, Cairo. Powered by Growl Tech — software that runs the business.">
+
+  <!-- PWA & Mobile App Meta -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Drip Café POS">
+  <meta name="theme-color" content="#000823">
+  <link rel="apple-touch-icon" href="./favicon.png">
   
   <!-- Instrument Sans — Growl Tech Brand Typeface -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   
-  <link rel="stylesheet" href="./css/style.css?v=20261030_v7">
+  <link rel="stylesheet" href="./css/style.css?v=20261030_v8">
   <link rel="icon" type="image/png" href="./favicon.png">
   <link rel="apple-touch-icon" href="./favicon.png">
 </head>
@@ -179,7 +187,31 @@
   <!-- Reusable Modal Container -->
   <div id="modal-container"></div>
 
+  <!-- Mobile Bottom Navigation Bar (phones only) -->
+  <nav class="mobile-bottom-nav" id="mobile-bottom-nav">
+    <button class="mobile-nav-btn active" data-view="overview" id="mob-nav-overview">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+      <span>Overview</span>
+    </button>
+    <button class="mobile-nav-btn" data-view="pos" id="mob-nav-pos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 8h1a4 4 0 1 1 0 8h-1"></path><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path></svg>
+      <span>POS</span>
+    </button>
+    <button class="mobile-nav-btn" data-view="inventory" id="mob-nav-inventory">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+      <span>Stock</span>
+    </button>
+    <button class="mobile-nav-btn" data-view="invoices" id="mob-nav-invoices">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+      <span>Invoices</span>
+    </button>
+    <button class="mobile-nav-btn" data-view="__menu" id="mob-nav-more">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+      <span>Menu</span>
+    </button>
+  </nav>
+
   <!-- Main ES Module Application -->
-  <script type="module" src="./js/app.js?v=20261030_v7"></script>
+  <script type="module" src="./js/app.js?v=20261030_v8"></script>
 </body>
 </html>

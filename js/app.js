@@ -50,7 +50,7 @@ class DripApp {
   }
 
   bindGlobalEvents() {
-    // Navigation items
+    // Navigation items (sidebar)
     document.querySelectorAll('.nav-link').forEach(link => {
       link.addEventListener('click', (e) => {
         e.preventDefault();
@@ -58,6 +58,42 @@ class DripApp {
         this.navigateTo(targetView);
       });
     });
+
+    // Bottom navigation bar (mobile)
+    document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetView = btn.getAttribute('data-view');
+        if (targetView === '__menu') {
+          // "Menu" button opens the sidebar drawer
+          document.getElementById('app')?.classList.toggle('sidebar-open');
+        } else {
+          this.navigateTo(targetView);
+        }
+      });
+    });
+
+    // Swipe right to open sidebar, swipe left to close
+    let touchStartX = 0;
+    let touchStartY = 0;
+    document.addEventListener('touchstart', (e) => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+    document.addEventListener('touchend', (e) => {
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      const dy = e.changedTouches[0].clientY - touchStartY;
+      // Only trigger if horizontal swipe is dominant and > 60px
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        const appEl = document.getElementById('app');
+        if (dx > 0 && touchStartX < 30) {
+          // Swipe right from left edge → open sidebar
+          appEl?.classList.add('sidebar-open');
+        } else if (dx < 0) {
+          // Swipe left → close sidebar
+          appEl?.classList.remove('sidebar-open');
+        }
+      }
+    }, { passive: true });
 
     // Reset Demo Button
     document.getElementById('btn-reset-demo').addEventListener('click', () => {
@@ -116,12 +152,21 @@ class DripApp {
     this.currentView = viewName;
     document.getElementById('app')?.classList.remove('sidebar-open');
 
-    // Update active nav link
+    // Update active state on sidebar nav links
     document.querySelectorAll('.nav-link').forEach(link => {
       if (link.getAttribute('data-view') === viewName) {
         link.classList.add('active');
       } else {
         link.classList.remove('active');
+      }
+    });
+
+    // Update active state on bottom nav buttons
+    document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
+      if (btn.getAttribute('data-view') === viewName) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
       }
     });
 
@@ -292,7 +337,7 @@ class DripApp {
               <a href="#" class="card-link" id="link-view-all-invoices">View invoices ↗</a>
             </div>
 
-            <table class="erp-table">
+            <div class="erp-table-wrap"><table class="erp-table">
               <thead>
                 <tr>
                   <th>SALE / INVOICE</th>
@@ -315,7 +360,7 @@ class DripApp {
                   </tr>
                 `).join('')}
               </tbody>
-            </table>
+            </table></div>
 
             <div style="margin-top: 14px; font-size: 12px; color: var(--text-muted); display: flex; gap: 16px;">
               <span>Cash EGP 4,900</span>
@@ -1354,7 +1399,7 @@ class DripApp {
               Only completed orders · Cashier ${session.cashier} · Session ${session.id}
             </div>
 
-            <table class="erp-table">
+            <div class="erp-table-wrap"><table class="erp-table">
               <thead>
                 <tr>
                   <th>ORDER / TIME</th>
@@ -1375,7 +1420,7 @@ class DripApp {
                   </tr>
                 `).join('')}
               </tbody>
-            </table>
+            </table></div>
           </div>
 
           <div class="card">
@@ -1590,7 +1635,7 @@ class DripApp {
               <button class="btn btn-outline btn-sm" style="color: #b45309; border-color: #fed7aa; background: #fffcf5;">3 low stock</button>
             </div>
 
-            <table class="erp-table">
+            <div class="erp-table-wrap"><table class="erp-table">
               <thead>
                 <tr>
                   <th>ITEM / SKU</th>
@@ -1616,7 +1661,7 @@ class DripApp {
                   </tr>
                 `).join('')}
               </tbody>
-            </table>
+            </table></div>
 
             <div style="margin-top: 14px; font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between;">
               <span>Showing ${state.inventory.length} stock items</span>
@@ -1636,7 +1681,7 @@ class DripApp {
               <a href="#" class="card-link">Full movement history ↗</a>
             </div>
 
-            <table class="erp-table">
+            <div class="erp-table-wrap"><table class="erp-table">
               <thead>
                 <tr>
                   <th>REFERENCE</th>
@@ -1657,7 +1702,7 @@ class DripApp {
                   </tr>
                 `).join('')}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </div>
 
@@ -2012,7 +2057,7 @@ class DripApp {
             <button class="btn btn-ghost btn-sm" style="color: #b45309;">Unpaid · ${state.invoices.filter(i => i.status === 'Unpaid').length}</button>
           </div>
 
-          <table class="erp-table">
+          <div class="erp-table-wrap"><table class="erp-table">
             <thead>
               <tr>
                 <th>INVOICE / SALE</th>
@@ -2039,7 +2084,7 @@ class DripApp {
                 </tr>
               `).join('')}
             </tbody>
-          </table>
+          </table></div>
 
           <div style="margin-top: 14px; font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between;">
             <span>Showing ${state.invoices.length} invoices</span>
@@ -2233,7 +2278,7 @@ class DripApp {
 
             <input type="text" class="form-input" placeholder="Search reference or supplier" style="margin-bottom: 12px;">
 
-            <table class="erp-table">
+            <div class="erp-table-wrap"><table class="erp-table">
               <thead>
                 <tr>
                   <th>RECEIPT / SUPPLIER</th>
@@ -2256,7 +2301,7 @@ class DripApp {
                   </tr>
                 `).join('')}
               </tbody>
-            </table>
+            </table></div>
           </div>
 
           <!-- Supplier Directory -->
@@ -2266,7 +2311,7 @@ class DripApp {
               <a href="#" class="card-link" id="link-add-supplier-inline">+ Add supplier ↗</a>
             </div>
 
-            <table class="erp-table">
+            <div class="erp-table-wrap"><table class="erp-table">
               <thead>
                 <tr>
                   <th>SUPPLIER</th>
@@ -2283,7 +2328,7 @@ class DripApp {
                   </tr>
                 `).join('')}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </div>
 
@@ -2454,7 +2499,7 @@ class DripApp {
 
             <input type="text" class="form-input" placeholder="Search name or email" style="margin-bottom: 14px;">
 
-            <table class="erp-table">
+            <div class="erp-table-wrap"><table class="erp-table">
               <thead>
                 <tr>
                   <th>PERSON</th>
@@ -2484,7 +2529,7 @@ class DripApp {
                   </tr>
                 `).join('')}
               </tbody>
-            </table>
+            </table></div>
 
             <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 14px;">
               All accounts belong to Main café.

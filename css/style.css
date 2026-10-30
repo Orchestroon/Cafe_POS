@@ -814,6 +814,13 @@ a {
 }
 
 /* Standard ERP Tables */
+.erp-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius-sm);
+  width: 100%;
+}
+
 .erp-table {
   width: 100%;
   border-collapse: collapse;
@@ -2099,6 +2106,378 @@ input:checked + .toggle-slider:before {
 
   .metrics-grid {
     grid-template-columns: 1fr !important;
+  }
+}
+
+/* ==========================================================================
+   MOBILE BOTTOM NAVIGATION BAR
+   Shown only on phones (≤768px). Gives thumb-reachable nav at the bottom.
+   ========================================================================== */
+
+.mobile-bottom-nav {
+  display: none; /* hidden on desktop */
+}
+
+@media (max-width: 768px) {
+  /* Show bottom nav */
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    background-color: #000823;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 6px 0 calc(6px + env(safe-area-inset-bottom, 0px));
+    height: calc(60px + env(safe-area-inset-bottom, 0px));
+    justify-content: space-around;
+    align-items: center;
+  }
+
+  .mobile-nav-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #5a6380;
+    padding: 6px 4px;
+    min-height: 44px;
+    border-radius: var(--radius-sm);
+    transition: color 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-nav-btn svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+
+  .mobile-nav-btn span {
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    font-family: var(--font-sans);
+  }
+
+  .mobile-nav-btn.active {
+    color: #FF7A00;
+  }
+
+  .mobile-nav-btn.active svg {
+    filter: drop-shadow(0 0 4px rgba(255, 122, 0, 0.4));
+  }
+
+  /* Push main content up so it's not hidden behind bottom nav */
+  .main-content {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* iOS safe area top padding for status bar */
+  .top-bar {
+    padding-top: calc(10px + env(safe-area-inset-top, 0px)) !important;
+  }
+
+  /* Hide the sidebar hamburger — bottom nav replaces it */
+  .mobile-menu-btn {
+    display: none !important;
+  }
+
+  /* The "Menu" button in bottom nav still opens the sidebar */
+  /* Sidebar still works for accessing secondary pages */
+}
+
+/* ==========================================================================
+   TOUCH TARGETS — minimum 44×44px on all interactive elements (mobile)
+   ========================================================================== */
+
+@media (max-width: 1024px) {
+  .nav-link {
+    min-height: 44px;
+  }
+
+  .btn {
+    min-height: 44px;
+  }
+
+  .qty-btn {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  .type-tab {
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .pay-btn {
+    min-height: 44px;
+  }
+
+  .cat-pill {
+    min-height: 36px;
+    padding: 6px 14px;
+  }
+
+  .icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Horizontal scroll for category pills — no wrap */
+  .pos-category-pills {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .pos-category-pills::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* All data tables scroll horizontally */
+  .erp-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--radius-sm);
+  }
+
+  /* Two-column invoice layout stacks on mobile */
+  .invoices-layout {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ==========================================================================
+   SWIPE GESTURE SUPPORT (via JS class toggles)
+   ========================================================================== */
+
+/* Smooth cart-to-menu and menu-to-cart transitions on POS */
+@media (max-width: 1024px) {
+  .pos-menu-section,
+  .pos-cart-panel {
+    transition: opacity 0.15s ease;
+  }
+}
+
+/* ==========================================================================
+   IMPROVED MOBILE TOP BAR
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .top-bar {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  /* Only show POS shortcut and notifications in top bar on mobile */
+  .demo-controls {
+    display: none !important;
+  }
+
+  /* Compact breadcrumb — just current view name */
+  .breadcrumbs {
+    font-size: 15px;
+    font-weight: 700;
+  }
+}
+
+/* ==========================================================================
+   MOBILE INVOICE VIEW — stacks to list-then-detail
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .invoices-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+  }
+
+  .invoice-list-panel {
+    max-height: 320px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-light);
+  }
+
+  .invoice-detail-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+/* ==========================================================================
+   MOBILE FORM IMPROVEMENTS
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  /* Larger input height for easier tapping */
+  .form-input,
+  .form-select,
+  .form-textarea {
+    min-height: 44px;
+    font-size: 16px !important; /* prevents iOS auto-zoom on focus */
+  }
+
+  /* Prevent iOS zoom on select */
+  select {
+    font-size: 16px !important;
+  }
+
+  /* Better checkbox/radio targets */
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+  }
+}
+
+/* ==========================================================================
+   MOBILE TABLE IMPROVEMENTS — horizontal scroll with sticky first column
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .erp-table {
+    min-width: 520px;
+    font-size: 12.5px;
+  }
+
+  .erp-table th,
+  .erp-table td {
+    padding: 10px 10px !important;
+    white-space: nowrap;
+  }
+
+  /* Sticky first column for reference */
+  .erp-table th:first-child,
+  .erp-table td:first-child {
+    position: sticky;
+    left: 0;
+    background: var(--bg-surface);
+    z-index: 1;
+    border-right: 1px solid var(--border-light);
+  }
+}
+
+/* ==========================================================================
+   MOBILE CARD IMPROVEMENTS
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .metric-card {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .metric-card:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
+  }
+
+  /* Event cards full width */
+  .event-card {
+    padding: 16px !important;
+  }
+
+  /* Warehouse cards stack cleanly */
+  .warehouse-card {
+    padding: 16px !important;
+  }
+}
+
+/* ==========================================================================
+   POS MOBILE — CHARGE BUTTON STICKY AT BOTTOM
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .btn-charge {
+    position: sticky;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    z-index: 10;
+    box-shadow: 0 4px 16px rgba(255, 122, 0, 0.35);
+  }
+
+  /* Larger charge button on mobile */
+  .btn-charge {
+    padding: 16px !important;
+    font-size: 15px !important;
+    border-radius: var(--radius-md) !important;
+  }
+}
+
+/* ==========================================================================
+   POS MOBILE — PRODUCT CARD IMPROVEMENTS
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .pos-product-card {
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  .pos-product-card:active {
+    transform: scale(0.97);
+    transition: transform 0.1s ease;
+  }
+
+  .add-plus-btn {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 18px !important;
+  }
+}
+
+/* ==========================================================================
+   MOBILE MODAL — BOTTOM SHEET STYLE
+   ========================================================================== */
+
+@media (max-width: 640px) {
+  .modal-overlay {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+
+  .modal-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
+    max-height: 90vh !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* ==========================================================================
+   LANDSCAPE MOBILE ADJUSTMENTS
+   ========================================================================== */
+
+@media (max-width: 768px) and (orientation: landscape) {
+  .mobile-bottom-nav {
+    height: calc(50px + env(safe-area-inset-bottom, 0px));
+    padding: 4px 0 calc(4px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .mobile-nav-btn span {
+    display: none; /* hide labels in landscape to save space */
+  }
+
+  .pos-active-header {
+    display: none !important; /* hide session header in landscape POS for more screen real estate */
+  }
+
+  .pos-metrics-bar {
+    grid-template-columns: repeat(4, 1fr) !important;
   }
 }
 
