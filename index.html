@@ -3,16 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Drip Café ERP — Operations, Connected.</title>
-  <meta name="description" content="Specialized Specialty Coffee ERP & Barista POS designed for Drip Café, Cairo. Multi-warehouse stock tracking, recipe-linked sales deduction, and shift reconciliation.">
+  <title>Drip Café — Powered by Growl Tech</title>
+  <meta name="description" content="Café POS & Operations Platform for Drip Café, Cairo. Powered by Growl Tech — software that runs the business.">
   
-  <!-- Modern Editorial & Grotesk Typography from Google Fonts -->
+  <!-- Instrument Sans — Growl Tech Brand Typeface -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   
-  <link rel="stylesheet" href="./css/style.css?v=20261030_v6">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23b85834%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22M17 8h1a4 4 0 1 1 0 8h-1%22></path><path d=%22M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z%22></path><line x1=%226%22 y1=%222%22 x2=%226%22 y2=%224%22></line><line x1=%2210%22 y1=%222%22 x2=%2210%22 y2=%224%22></line><line x1=%2214%22 y1=%222%22 x2=%2214%22 y2=%224%22></line></svg>">
+  <link rel="stylesheet" href="./css/style.css?v=20261030_v7">
+  <link rel="icon" type="image/png" href="./favicon.png">
+  <link rel="apple-touch-icon" href="./favicon.png">
 </head>
 <body>
   <div id="app">
@@ -20,18 +21,11 @@
     <aside class="sidebar">
       <div class="brand-header" id="nav-brand" title="Return to Operations overview">
         <div class="brand-logo-icon">
-          <!-- Coffee cup vector logo -->
-          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M17 8h1a4 4 0 1 1 0 8h-1"></path>
-            <path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path>
-            <line x1="6" y1="2" x2="6" y2="4"></line>
-            <line x1="10" y1="2" x2="10" y2="4"></line>
-            <line x1="14" y1="2" x2="14" y2="4"></line>
-          </svg>
+          <!-- Growl Tech official logo -->
+          <img src="./growl-logo.png" alt="Growl Tech" style="width:140px;height:auto;display:block;">
         </div>
         <div class="brand-text">
-          <h1>drip café</h1>
-          <span>OPERATIONS, CONNECTED.</span>
+          <span>CAFÉ OPERATIONS</span>
         </div>
         <button class="sidebar-close-btn" id="btn-close-sidebar" aria-label="Close menu">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
@@ -124,6 +118,9 @@
             <div class="role">Owner · Admin</div>
           </div>
         </div>
+        <div style="margin-top: 12px; text-align: center; font-size: 10px; color: var(--text-sidebar-muted); letter-spacing: 0.08em; padding: 6px 0; border-top: 1px solid rgba(255,255,255,0.05);">
+          Built by <span style="color: #FF7A00; font-weight: 600;">Growl Tech™</span> · growl.co
+        </div>
       </div>
     </aside>
 
@@ -183,6 +180,6 @@
   <div id="modal-container"></div>
 
   <!-- Main ES Module Application -->
-  <script type="module" src="./js/app.js?v=20261030_v6"></script>
+  <script type="module" src="./js/app.js?v=20261030_v7"></script>
 </body>
 </html>

@@ -1,61 +1,62 @@
 /* ==========================================================================
-   DRIP CAFÉ ERP — DESIGN SYSTEM & STYLESHEET
-   Design tokens, warm editorial typography & responsive layouts
+   GROWL TECH — CAFÉ POS DESIGN SYSTEM & STYLESHEET
+   Growl Tech brand identity · Instrument Sans typography
+   Colors: Nightshade #000823 · Strong Orange #FF7A00 · Orange Tint #FCCA9C · White Tech #F8F8F8
    ========================================================================== */
 
 :root {
-  /* Warm Charcoal & Espresso Tones */
-  --bg-sidebar: #191412;
-  --bg-sidebar-hover: #26201d;
-  --bg-sidebar-active: #312824;
-  --text-sidebar: #c5bfb9;
+  /* Growl Tech Nightshade Sidebar */
+  --bg-sidebar: #000823;
+  --bg-sidebar-hover: #0d1535;
+  --bg-sidebar-active: #1a2547;
+  --text-sidebar: #a8b0c8;
   --text-sidebar-bright: #ffffff;
-  --text-sidebar-muted: #8c847d;
+  --text-sidebar-muted: #5a6380;
 
-  /* Editorial Warm Cream Canvas */
-  --bg-app: #fbf9f5;
+  /* Growl Tech White Tech Canvas */
+  --bg-app: #F8F8F8;
   --bg-surface: #ffffff;
-  --bg-subtle: #f5f1eb;
+  --bg-subtle: #f0f1f5;
   --bg-input: #ffffff;
 
-  /* Terracotta Brand Colors */
-  --brand-terracotta: #b85834;
-  --brand-terracotta-hover: #9e4726;
-  --brand-terracotta-light: #faece6;
-  --brand-terracotta-border: #f0cbbd;
+  /* Growl Tech Strong Orange — Primary Brand Color */
+  --brand-terracotta: #FF7A00;
+  --brand-terracotta-hover: #e06b00;
+  --brand-terracotta-light: #fff3e6;
+  --brand-terracotta-border: #FCCA9C;
 
-  /* Typography Colors */
-  --text-heading: #1c1917;
-  --text-body: #3c3835;
-  --text-muted: #78716c;
-  --text-subtle: #a8a29e;
+  /* Typography Colors (Nightshade-based) */
+  --text-heading: #000823;
+  --text-body: #1a2547;
+  --text-muted: #5a6380;
+  --text-subtle: #8a93b0;
 
   /* Borders & Dividers */
-  --border-light: #ece7e0;
-  --border-medium: #ded6cb;
-  --border-dark: #2f2723;
+  --border-light: #e8eaf0;
+  --border-medium: #d4d8e8;
+  --border-dark: #0d1535;
 
   /* Functional Status Colors */
   --status-success-bg: #eaf5ea;
   --status-success-text: #256f2a;
   --status-success-border: #c3e6c5;
 
-  --status-warning-bg: #fef7e6;
+  --status-warning-bg: #fff8ed;
   --status-warning-text: #a16207;
-  --status-warning-border: #fed7aa;
+  --status-warning-border: #FCCA9C;
 
   --status-alert-bg: #fdf2f2;
   --status-alert-text: #b91c1c;
   --status-alert-border: #fecaca;
 
   /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(28, 25, 23, 0.06), 0 2px 4px -2px rgba(28, 25, 23, 0.04);
-  --shadow-lg: 0 10px 15px -3px rgba(28, 25, 23, 0.07), 0 4px 6px -4px rgba(28, 25, 23, 0.04);
+  --shadow-sm: 0 1px 2px rgba(0, 8, 35, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(0, 8, 35, 0.08), 0 2px 4px -2px rgba(0, 8, 35, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 8, 35, 0.10), 0 4px 6px -4px rgba(0, 8, 35, 0.05);
 
-  /* Fonts */
-  --font-serif: 'Newsreader', Georgia, 'Times New Roman', serif;
-  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Growl Tech Fonts — Instrument Sans */
+  --font-serif: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-sans: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', SFMono-Regular, Consolas, monospace;
 
   /* Dimensions */
@@ -135,39 +136,40 @@ a {
 }
 
 .brand-header {
-  padding: 24px 20px 16px;
+  padding: 20px 20px 12px;
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
   cursor: pointer;
 }
 
 .brand-logo-icon {
-  width: 32px;
-  height: 32px;
-  color: #fff;
+  width: auto;
+  height: auto;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .brand-text h1 {
   font-family: var(--font-sans);
-  font-size: 19px;
+  font-size: 20px;
   font-weight: 700;
   color: var(--text-sidebar-bright);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   line-height: 1.1;
 }
 
 .brand-text span {
-  font-size: 8.5px;
-  letter-spacing: 0.12em;
+  font-size: 9px;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-sidebar-muted);
   font-weight: 600;
   display: block;
-  margin-top: 2px;
+  margin-top: 0;
+  padding-left: 2px;
 }
 
 /* Workspace selector card */
@@ -287,14 +289,14 @@ a {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background-color: #38302b;
-  color: #f5f1eb;
+  background-color: #FF7A00;
+  color: #ffffff;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .user-meta .name {
@@ -503,7 +505,7 @@ a {
 }
 
 .demo-chip {
-  background-color: #f0eae1;
+  background-color: #e8eaf0;
   color: var(--text-body);
   font-size: 11px;
   font-weight: 600;
@@ -577,9 +579,9 @@ a {
 }
 
 .view-titles h2 {
-  font-family: var(--font-serif);
-  font-size: 32px;
-  font-weight: 500;
+  font-family: var(--font-sans);
+  font-size: 30px;
+  font-weight: 700;
   color: var(--text-heading);
   letter-spacing: -0.02em;
   line-height: 1.2;
@@ -686,9 +688,9 @@ a {
 }
 
 .metric-value {
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: 28px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-heading);
   letter-spacing: -0.02em;
   line-height: 1.1;
@@ -981,9 +983,9 @@ a {
 }
 
 .cat-pill.active {
-  background-color: #211c19;
+  background-color: #000823;
   color: #ffffff;
-  border-color: #211c19;
+  border-color: #000823;
 }
 
 .pos-grid {
@@ -1321,7 +1323,7 @@ a {
 }
 
 .mod-pill.selected {
-  background-color: #faece6;
+  background-color: #fff3e6;
   border-color: var(--brand-terracotta);
   color: var(--brand-terracotta);
   font-weight: 600;

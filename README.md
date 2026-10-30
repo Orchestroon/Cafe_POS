@@ -98,7 +98,7 @@ Follow this structured script when demonstrating the MVP to your client:
 ## 🏗️ Architecture & Technology Stack
 
 - **Frontend Core**: Semantic HTML5 and modular ES6 JavaScript.
-- **Design System**: Vanilla CSS with bespoke design tokens matching the Figma color palette (`#191412` Warm Roasted Charcoal, `#b85834` Terracotta, and `#fbf9f5` Editorial Cream Canvas).
-- **Typography**: Google Fonts pairing of **Newsreader** (editorial serif headlines) + **Plus Jakarta Sans** (clean grotesk UI) + **JetBrains Mono** (SKUs, timestamps, invoices).
+- **Design System**: Vanilla CSS with bespoke design tokens matching the Growl Tech brand identity (`#000823` Nightshade, `#FF7A00` Strong Orange, `#FCCA9C` Orange Tint, and `#F8F8F8` White Tech).
+- **Typography**: Google Fonts — **Instrument Sans** (Growl Tech brand typeface, 400–700 weights) + **JetBrains Mono** (SKUs, timestamps, invoices).
 - **State Management**: Reactive in-memory state engine persisting to `localStorage` with automated stock deduction algorithms and audit logging.
 - **Production Container**: Nginx Alpine Linux container (`< 25MB` total image size) with Gzip compression and single-page routing.

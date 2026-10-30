@@ -1,6 +1,7 @@
 /* ==========================================================================
-   DRIP CAFÉ ERP — APPLICATION CONTROLLER & VIEW RENDERERS
+   GROWL TECH — CAFÉ POS · APPLICATION CONTROLLER & VIEW RENDERERS
    Production-grade operational workflows & touch-optimized interface
+   Built by Growl Tech · growl.co
    ========================================================================== */
 
 import { store } from './store.js';
@@ -233,7 +234,7 @@ class DripApp {
       <!-- Date & Subheader Filter -->
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; font-size: 13px; color: var(--text-muted);">
         <div style="display: flex; align-items: center; gap: 12px;">
-          <span style="font-weight: 600; color: var(--text-heading); background: #eee8de; padding: 4px 10px; border-radius: 4px;">Today · 26 October</span>
+          <span style="font-weight: 600; color: var(--text-heading); background: #e8eaf0; padding: 4px 10px; border-radius: 4px;">Today · 26 October</span>
           <span>As of 14:32</span>
         </div>
         <div>
@@ -2055,7 +2056,7 @@ class DripApp {
           <div class="card" style="position: sticky; top: 80px;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
               <div>
-                <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">DRIP CAFÉ · MAIN CAFÉ</div>
+                <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">DRIP CAFÉ · MAIN CAFÉ — Powered by Growl Tech</div>
                 <h3 style="font-family: var(--font-serif); font-size: 26px; font-weight: 700;">${selectedInv.id}</h3>
               </div>
               <span class="badge ${selectedInv.status === 'Paid' ? 'badge-paid' : (selectedInv.status === 'Voided' ? 'badge-voided' : 'badge-unpaid')}">
@@ -4151,7 +4152,8 @@ class DripApp {
             <div class="receipt-slip">
               <div class="receipt-logo">
                 <h4>DRIP CAFÉ</h4>
-                <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Operations Connected · Cairo</div>
+                <div style="font-size: 9px; color: #FF7A00; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px;">Powered by Growl Tech™</div>
+                <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">growl.co · Cairo, Egypt</div>
               </div>
 
               <div class="receipt-meta">
@@ -4192,7 +4194,7 @@ class DripApp {
 
               <div class="receipt-footer-text">
                 Thank you for choosing Drip Café.<br>
-                drip.example · Cairo, Egypt
+                Powered by Growl Tech · growl.co · Cairo, Egypt
               </div>
             </div>
           </div>
@@ -4256,7 +4258,7 @@ class DripApp {
         position: fixed;
         bottom: 24px;
         right: 24px;
-        background: #1c1917;
+        background: #000823;
         color: #ffffff;
         padding: 12px 20px;
         border-radius: 8px;

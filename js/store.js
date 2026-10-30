@@ -1,8 +1,7 @@
 /* ==========================================================================
-   DRIP CAFÉ ERP — REACTIVE STATE STORE & BUSINESS LOGIC ENGINE
+   GROWL TECH — CAFÉ POS · REACTIVE STATE STORE & BUSINESS LOGIC ENGINE
    Pre-loaded with operational branch data (Cairo, Egypt)
-   Enhanced with Outside Events, Dynamic Warehouses, Supplier Popups,
-   and Invoice Rectification / Mistake Control & Automated Stock Reversals.
+   Built by Growl Tech · growl.co
    ========================================================================== */
 
 const STORAGE_KEY = 'drip_cafe_erp_state_v2';
