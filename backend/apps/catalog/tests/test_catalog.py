@@ -1,9 +1,13 @@
+import threading
+
 import pytest
+from django.db import connection
 
 from apps.audit.models import AuditEvent
-from apps.catalog.models import ProductVariant
+from apps.catalog.models import Category, Product, ProductVariant
+from apps.catalog.serializers import CategorySerializer
 from apps.modifiers.models import ModifierGroup
-from conftest import data
+from conftest import client_for, data
 
 pytestmark = pytest.mark.django_db
 
@@ -172,3 +176,44 @@ def test_product_list_filters_and_pagination(admin_c):
     assert r["meta"] == {"page": 3, "page_size": 10, "total_count": 26}
     assert admin_c.get("/api/v1/products?search=latte").json()["meta"]["total_count"] == 1
     assert admin_c.get("/api/v1/products?page_size=1000").json()["meta"]["page_size"] == 100
+
+
+def test_malformed_category_filter_is_400(admin_c):
+    r = admin_c.get("/api/v1/products?category_id=abc")
+    assert r.status_code == 400 and r.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_lost_uniqueness_race_is_400_not_500(admin_c, monkeypatch):
+    assert admin_c.post("/api/v1/categories", {"name": "Cold"}, format="json").status_code == 201
+    monkeypatch.setattr(CategorySerializer, "validate_name", lambda self, v: v)  # check raced
+    r = admin_c.post("/api/v1/categories", {"name": "Cold"}, format="json")
+    assert r.status_code == 400 and r.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert Category.objects.filter(name="Cold").count() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_price_edits_audit_a_consistent_chain(org, admin):
+    cat = Category.objects.create(organization=org, name="C")
+    prod = Product.objects.create(organization=org, category=cat, name="P")
+    v = ProductVariant.objects.create(organization=org, product=prod, label="S", price="10.00")
+    statuses, barrier = [], threading.Barrier(2)
+
+    def work(price):
+        try:
+            c = client_for(admin)
+            barrier.wait()
+            r = c.patch(f"/api/v1/variants/{v.id}", {"price": price}, format="json")
+            statuses.append(r.status_code)
+        finally:
+            connection.close()
+
+    threads = [threading.Thread(target=work, args=(p,)) for p in ("20.00", "30.00")]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert statuses == [200, 200]
+    events = AuditEvent.objects.filter(action="variant.updated").order_by("created_at")
+    chain = [
+        (e.summary["changes"]["price"]["before"], e.summary["changes"]["price"]["after"])
+        for e in events
+    ]
+    assert chain[0][0] == "10.00" and chain[1][0] == chain[0][1]  # 2nd "before" = 1st "after"

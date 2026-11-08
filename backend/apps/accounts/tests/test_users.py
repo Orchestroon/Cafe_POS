@@ -1,7 +1,12 @@
-import pytest
+import threading
 
+import pytest
+from django.db import connection
+
+from apps.accounts import services
 from apps.accounts.models import User
 from apps.audit.models import AuditEvent
+from apps.core.exceptions import ApiError
 from conftest import PW, data, make_user
 
 pytestmark = pytest.mark.django_db
@@ -105,3 +110,34 @@ def test_reset_password_validated(admin_c, barista):
     assert r.status_code == 400
     barista.refresh_from_db()
     assert barista.check_password(PW)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_cross_deactivation_keeps_one_admin_without_deadlock(org):
+    """Two admins deactivate each other at once: one wins, the other gets LAST_ADMIN (not a 500)."""
+    a, b = make_user(org, "admin_a", "admin"), make_user(org, "admin_b", "admin")
+    for _ in range(5):
+        User.objects.filter(pk__in=[a.pk, b.pk]).update(is_active=True)
+        results, barrier = [], threading.Barrier(2)
+
+        def work(results, barrier, actor_id, target_id):
+            try:
+                actor, target = User.objects.get(pk=actor_id), User.objects.get(pk=target_id)
+                barrier.wait()
+                services.update_user(actor, target, {"is_active": False})
+                results.append("ok")
+            except ApiError as e:
+                results.append(e.code)
+            except Exception as e:  # noqa: BLE001
+                results.append(repr(e))
+            finally:
+                connection.close()
+
+        threads = [
+            threading.Thread(target=work, args=(results, barrier, a.pk, b.pk)),
+            threading.Thread(target=work, args=(results, barrier, b.pk, a.pk)),
+        ]
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+        assert sorted(results) == ["LAST_ADMIN", "ok"]
+        assert User.objects.filter(role="admin", is_active=True).count() == 1

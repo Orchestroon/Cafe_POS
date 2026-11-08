@@ -1,6 +1,8 @@
 import logging
 
 from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import DataError, IntegrityError
 from django.http import Http404
 from rest_framework import exceptions as drf
 from rest_framework.response import Response
@@ -36,6 +38,10 @@ def exception_handler(exc, context):
         status, body = 404, _body("NOT_FOUND", "Not found.")
     elif isinstance(exc, drf.Throttled):
         status, body = 429, _body("RATE_LIMITED", "Too many requests.")
+    elif isinstance(exc, (IntegrityError, DataError, DjangoValidationError)):
+        # Lost uniqueness race, numeric overflow or a malformed lookup value: bad input, not a 500.
+        logger.warning("request rejected by the database: %s", type(exc).__name__)
+        status, body = 400, _body("VALIDATION_ERROR", "Validation failed.")
     elif isinstance(exc, drf.APIException):
         status = exc.status_code
         body = _body(str(exc.default_code).upper(), exc.detail)

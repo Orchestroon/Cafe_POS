@@ -1,4 +1,4 @@
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.middleware.csrf import get_token
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect
@@ -119,4 +119,6 @@ class UserViewSet(
         ser = ResetPasswordSerializer(data=request.data, context={"target": user})
         ser.is_valid(raise_exception=True)
         services.reset_password(request.user, user, ser.validated_data["password"])
+        if user.pk == request.user.pk:  # keep the admin's own session; all others still end
+            update_session_auth_hash(request, user)
         return Response(status=204)

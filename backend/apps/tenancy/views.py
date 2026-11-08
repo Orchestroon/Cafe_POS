@@ -32,5 +32,5 @@ class SettingsView(APIView):
         s = self._obj(request)
         ser = SettingsSerializer(s, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
-        update_settings(request.user, s, ser.validated_data)
+        s = update_settings(request.user, s, ser.validated_data)
         return Response(SettingsSerializer(s).data)

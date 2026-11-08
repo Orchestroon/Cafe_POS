@@ -392,3 +392,39 @@ def test_concurrent_adjustments_do_not_lose_updates(org, admin):
     assert sorted(StockMovement.objects.values_list("balance_after", flat=True)) == [
         D(i) for i in range(1, 21)
     ]
+
+
+def test_adjustment_overflowing_balance_is_rejected_not_500(admin_c):
+    a = new_ing(admin_c, "A", "g")
+    big = {"ingredient_id": a["id"], "mode": "delta", "qty_delta": "99999999999.999", "reason": "t"}
+    assert admin_c.post("/api/v1/inventory/adjustments", big, format="json").status_code == 201
+    r = admin_c.post("/api/v1/inventory/adjustments", big, format="json")
+    assert r.status_code == 400 and r.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert balance(a["id"]) == D("99999999999.999") and StockMovement.objects.count() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_opening_balances_apply_once(org, admin):
+    ing = Ingredient.objects.create(organization=org, name="Beans", base_unit="g")
+    StockBalance.objects.create(organization=org, ingredient=ing, location=default_location(org))
+    statuses, barrier = [], threading.Barrier(2)
+
+    def work():
+        try:
+            c = client_for(admin)
+            barrier.wait()
+            r = c.post(
+                "/api/v1/inventory/opening-balances",
+                {"items": [{"ingredient_id": str(ing.id), "qty": "100.000"}]},
+                format="json",
+            )
+            statuses.append(r.status_code)
+        finally:
+            connection.close()
+
+    threads = [threading.Thread(target=work) for _ in range(2)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert sorted(statuses) == [201, 409]
+    assert StockBalance.objects.get(ingredient=ing).qty == D("100")
+    assert StockMovement.objects.filter(ingredient=ing).count() == 1

@@ -31,7 +31,8 @@ def create_ingredient(actor, serializer):
 
 @transaction.atomic
 def update_ingredient(actor, serializer):
-    ing = serializer.instance
+    ing = type(serializer.instance).objects.select_for_update().get(pk=serializer.instance.pk)
+    serializer.instance = ing
     changes = {}
     for k, v in serializer.validated_data.items():
         if str(getattr(ing, k)) != str(v):

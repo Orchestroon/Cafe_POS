@@ -83,6 +83,9 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PAGINATION_CLASS": "apps.core.pagination.EnvelopePagination",
     "DEFAULT_THROTTLE_RATES": {"login_ip": "10/min", "login_username": "10/min"},
+    # 0 = throttle by REMOTE_ADDR and ignore X-Forwarded-For (a client could forge it). Behind a
+    # reverse proxy set NUM_PROXIES to the number of trusted proxies in front of Django.
+    "NUM_PROXIES": env.int("NUM_PROXIES", default=0),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 

@@ -31,7 +31,9 @@ def create_obj(actor, serializer, action, fields, **extra):
 
 @transaction.atomic
 def update_obj(actor, serializer, action):
-    instance = serializer.instance
+    # Lock and re-read so the audited "before" is the committed value (concurrent price edits).
+    instance = type(serializer.instance).objects.select_for_update().get(pk=serializer.instance.pk)
+    serializer.instance = instance
     changes = _diff(instance, serializer.validated_data)
     obj = serializer.save()
     if changes:
@@ -41,6 +43,7 @@ def update_obj(actor, serializer, action):
 
 @transaction.atomic
 def replace_modifier_groups(actor, product, links):
+    product = type(product).objects.select_for_update().get(pk=product.pk)  # serialize replaces
     ids = [str(link["group_id"]) for link in links]
     if len(set(ids)) != len(ids):
         raise ApiError("VALIDATION_ERROR", "Duplicate groups.", 400)

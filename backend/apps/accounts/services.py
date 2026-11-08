@@ -6,14 +6,14 @@ from apps.core.exceptions import ApiError
 from .models import User
 
 
-def _other_active_admins(org, exclude_id):
-    # Lock all active admins of the org so two concurrent demotions cannot both pass the check.
-    admins = list(
+def _lock_active_admins(org):
+    """Lock the org's active admins by id. Taken BEFORE the target row in every role/active change,
+    so concurrent changes cannot deadlock nor both pass the LAST_ADMIN check."""
+    return list(
         User.objects.select_for_update()
         .filter(organization=org, role=User.Role.ADMIN, is_active=True)
         .order_by("id")
     )
-    return [a for a in admins if a.id != exclude_id]
 
 
 @transaction.atomic
@@ -31,13 +31,16 @@ def create_user(actor, *, username, password, role, display_name=""):
 
 @transaction.atomic
 def update_user(actor, user, changes):
+    admins = (
+        _lock_active_admins(user.organization) if {"role", "is_active"} & changes.keys() else []
+    )
     user = User.objects.select_for_update().get(pk=user.pk)
     deactivating = user.is_active and changes.get("is_active") is False
     demoting = user.role == User.Role.ADMIN and changes.get("role") == User.Role.BARISTA
     if deactivating and user.pk == actor.pk:
         raise ApiError("CANNOT_DEACTIVATE_SELF", "You cannot deactivate yourself.", 422)
     if (deactivating or demoting) and user.role == User.Role.ADMIN and user.is_active:
-        if not _other_active_admins(user.organization, user.pk):
+        if not any(a.pk != user.pk for a in admins):
             raise ApiError(
                 "LAST_ADMIN", "The last active admin cannot be deactivated or demoted.", 422
             )

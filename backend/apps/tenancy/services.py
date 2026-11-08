@@ -5,6 +5,7 @@ from apps.audit.services import record
 
 @transaction.atomic
 def update_settings(actor, settings_obj, validated):
+    settings_obj = type(settings_obj).objects.select_for_update().get(pk=settings_obj.pk)
     before = {k: str(getattr(settings_obj, k)) for k in validated}
     for k, v in validated.items():
         setattr(settings_obj, k, v)

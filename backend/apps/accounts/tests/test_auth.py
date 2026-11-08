@@ -1,7 +1,11 @@
 import pytest
+from django.core.management import call_command
+from django.db import connection
+from django.test import override_settings
 from rest_framework.test import APIClient
 
 from apps.audit.models import AuditEvent
+from apps.catalog.models import Category
 from conftest import PW, client_for, data
 
 pytestmark = pytest.mark.django_db
@@ -108,3 +112,57 @@ def test_login_requires_csrf_token(admin):
 def test_unsafe_authenticated_request_requires_csrf(admin):
     c = client_for(admin, enforce_csrf_checks=True)
     assert c.post("/api/v1/auth/logout").status_code == 403
+
+
+def test_login_ip_throttle_ignores_forged_x_forwarded_for(anon, admin):
+    for i in range(10):
+        anon.post(
+            "/api/v1/auth/login",
+            {"username": f"user{i}", "password": "x"},
+            format="json",
+            HTTP_X_FORWARDED_FOR=f"10.0.0.{i}",
+        )
+    r = anon.post(
+        "/api/v1/auth/login",
+        {"username": "another", "password": "x"},
+        format="json",
+        HTTP_X_FORWARDED_FOR="10.0.0.99",
+    )
+    assert r.status_code == 429
+
+
+def test_login_throttle_works_on_the_database_cache(anon, admin):
+    """Dev/prod use DatabaseCache (owner decision); tests default to LocMem for speed."""
+    db_cache = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+            "LOCATION": "django_cache",
+        }
+    }
+    with override_settings(CACHES=db_cache):
+        call_command("createcachetable", verbosity=0)  # what core migration 0002 runs
+        for _ in range(10):
+            assert login(anon, "admin", "wrong").status_code == 401
+        assert login(anon, "admin", PW).status_code == 429
+        with connection.cursor() as cur:
+            cur.execute("SELECT count(*) FROM django_cache")
+            assert cur.fetchone()[0] >= 2  # per-IP and per-username counters
+
+
+def test_deactivated_users_live_session_cannot_write(admin, admin_c):
+    admin.is_active = False
+    admin.save()
+    r = admin_c.post("/api/v1/categories", {"name": "Sneaky"}, format="json")
+    assert r.status_code == 401 and r.json()["error"]["code"] == "NOT_AUTHENTICATED"
+    assert not Category.objects.exists()
+
+
+def test_self_password_reset_keeps_current_session_and_ends_others(admin, admin_c):
+    other = client_for(admin)
+    assert other.get("/api/v1/auth/me").status_code == 200
+    r = admin_c.post(
+        f"/api/v1/users/{admin.id}/reset-password", {"password": "N3w-Str0ng-Pass!"}, format="json"
+    )
+    assert r.status_code == 204
+    assert admin_c.get("/api/v1/auth/me").status_code == 200
+    assert other.get("/api/v1/auth/me").status_code == 401
