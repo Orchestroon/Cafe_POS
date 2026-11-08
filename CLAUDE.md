@@ -14,3 +14,6 @@ Work one sprint at a time and stop for owner approval at the end of each sprint.
 - Preserve the visual theme, colors, typography and layout shell from `legacy/index.html` and `legacy/css/style.css` (Growl Tech tokens, Instrument Sans, sidebar/top-bar/bottom-nav shell).
 - Convert physical left/right CSS properties to logical properties (RTL support) as the styles are ported.
 - Do NOT copy legacy business logic or flows from `legacy/js/app.js` / `legacy/js/store.js`. `legacy/` is a read-only reference; never edit it.
+
+## Git
+- Never include `Co-Authored-By` trailers (or any other attribution lines) in git commit messages.

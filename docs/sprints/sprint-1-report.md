@@ -1,6 +1,6 @@
 # Sprint 1 report — Foundation and master data
 
-Status: **approved by the owner** (2026-11-08), effective once the audit fixes below are committed.
+Status: **finalized** (2026-11-08). Approved by the owner, audit fixes committed (`2bfc0f4`) and on `main`. CI on `main` confirmed passing by the owner (not re-checked by the assistant). Nothing is pending.
 
 ## What was built
 **Backend** (Django 5.2 LTS, DRF, Postgres 16, Python 3.12 in Docker)
@@ -29,7 +29,7 @@ Status: **approved by the owner** (2026-11-08), effective once the audit fixes b
 | `spectacular` schema generation | no warnings or errors |
 | `tsc --noEmit`, `eslint src`, `vite build` | pass |
 | Browser run (headless Chrome vs. dev stack) | login, guards, category/product/size, opening balance, adjustment, ledger, user create/deactivate, settings, RTL: all pass; no horizontal overflow at 1280 / 820 / 390 px; no console errors besides expected 400s |
-| CI workflow | unchanged, **not run** (not pushed) |
+| CI workflow | passing on `main` (owner-confirmed, 2026-11-08) |
 
 ## Audit fixes (post-review, 2026-11-08)
 A read-only code and security audit of Sprint 0–1 found 1 High and 5 Medium issues. All are fixed, and each fix has a test that fails without it.
@@ -52,7 +52,7 @@ Test map: AT-01 (`catalog/tests`); permission matrix with a guard that fails if 
 6. Barista `/settings` omits only `invoice_prefix`.
 7. Backend runs in Docker only (Python 3.12); host ports 5433 (DB) and `BACKEND_PORT` for Django.
 8. Audit-log screen/endpoint and the invoice-prefix "sales exist" warning are not in Sprint 1.
-9. (Audit fix) An admin resetting **their own** password stays logged in on the current session; their other sessions end. Resets of other users end all of that user's sessions, as before.
+9. (Audit fix) An admin resetting **their own** password stays logged in on the current session; their other sessions end. Resets of other users end all of that user's sessions, as before. **Approved by the owner (2026-11-08).**
 
 ## Known issues / limits
 - Append-only is enforced in the ORM; raw SQL could still change rows (code comment `shortcut:`). Consider DB triggers or a restricted DB role in Sprint 5.
@@ -60,7 +60,7 @@ Test map: AT-01 (`catalog/tests`); permission matrix with a guard that fails if 
 - A dev DB that already ran older throttling tests may show "too many attempts" for a minute.
 - Pickers load all ingredients (max 100 per request, looped); fine for hundreds, revisit if thousands.
 - Frontend has no unit tests (spec only requires tsc/lint/build for the frontend until Sprint 4 Playwright).
-- CI not yet verified on GitHub. `npm audit` advisories unreviewed.
+- `npm audit` advisories unreviewed.
 
 ## Owner manual test checklist
 Start: `docker compose up -d --wait db`, `docker compose --profile backend up -d --wait backend`, `docker compose exec backend sh -c "python manage.py migrate && python manage.py seed_demo"`, `cd frontend && npm install && npm run dev` (use `BACKEND_PORT` / `VITE_API_TARGET` if 8000 is busy). Logins: `admin`, `barista1`, `barista2`; password `Demo-pass-123`.
@@ -76,6 +76,11 @@ Start: `docker compose up -d --wait db`, `docker compose --profile backend up -d
 - [ ] Extra: second opening balance for the same ingredient → blocked with a clear message.
 
 ## Owner decisions (2026-11-08)
-1. **Approved:** Sprint 1 and deviations 1–8, effective once the audit fixes are committed and the incorrect "REMOTE_ADDR" claim is corrected (both done above).
+1. **Approved:** Sprint 1 and deviations 1–9 (deviation 9 approved separately, 2026-11-08), effective once the audit fixes are committed and the incorrect "REMOTE_ADDR" claim is corrected (both done above).
 2. **Sprint 2 order unchanged:** recipes + modifiers CRUD → pricing and consumption engines → quote → checkout (the lock/error issues are fixed first).
 3. **Audit-log screen stays in Sprint 4.** Sprint 2 stays focused on selling; audit events are already being recorded.
+
+## Handoff to the Sprint 2 developer
+- **Before writing any Sprint 2 code:** confirm the owner's final business decisions on **printer, taxes, shifts and returns**, and update `docs/PROJECT_SPEC.md` (and §14 open items) to match. The spec wins over any plan, so Sprint 2 must not start from stale assumptions.
+- **UI polish (from the owner's manual review):** consider adding a Save button at the bottom of the Settings page so admins do not have to scroll back up. Not a bug, not done in Sprint 1.
+- Production: set `NUM_PROXIES` (see Audit fixes). Sprint 2 was not started by the Sprint 1 assistant.
