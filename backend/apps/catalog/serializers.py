@@ -85,7 +85,7 @@ class ProductSerializer(StrictSerializerMixin, serializers.ModelSerializer):
                 organization=request.user.organization
             )
 
-    def get_modifier_groups(self, obj):
+    def get_modifier_groups(self, obj) -> list[dict]:
         return [
             {"group_id": link.group_id, "name": link.group.name, "sort_order": link.sort_order}
             for link in obj.modifier_links.all()

@@ -62,11 +62,11 @@ class BalanceSerializer(serializers.ModelSerializer):
             "is_negative",
         ]
 
-    def get_is_low(self, b):
+    def get_is_low(self, b) -> bool:
         t = b.ingredient.low_stock_threshold
         return t is not None and b.qty <= t
 
-    def get_is_negative(self, b):
+    def get_is_negative(self, b) -> bool:
         return b.qty < 0
 
 

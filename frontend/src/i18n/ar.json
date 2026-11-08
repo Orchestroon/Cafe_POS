@@ -1,5 +1,162 @@
 {
-  "app": { "name": "" },
-  "health": { "title": "", "loading": "", "ok": "", "error": "" },
-  "errors": { "UNKNOWN": "" }
+  "app": {
+    "name": "",
+    "tagline": ""
+  },
+  "common": {
+    "loading": "",
+    "close": "",
+    "save": "",
+    "cancel": "",
+    "new": "",
+    "edit": "",
+    "name": "",
+    "sort": "",
+    "status": "",
+    "active": "",
+    "inactive": "",
+    "search": "",
+    "all": "",
+    "empty": "",
+    "total": "",
+    "prev": "",
+    "next": "",
+    "from": "",
+    "to": "",
+    "date": "",
+    "decimalInvalid": ""
+  },
+  "nav": {
+    "home": "",
+    "products": "",
+    "categories": "",
+    "ingredients": "",
+    "inventory": "",
+    "users": "",
+    "settings": "",
+    "logout": "",
+    "menu": "",
+    "workspace": ""
+  },
+  "roles": {
+    "admin": "",
+    "barista": ""
+  },
+  "login": {
+    "username": "",
+    "password": "",
+    "submit": ""
+  },
+  "home": {
+    "welcome": "",
+    "baristaNote": ""
+  },
+  "categories": {
+    "new": "",
+    "edit": ""
+  },
+  "products": {
+    "new": "",
+    "edit": "",
+    "category": "",
+    "sizes": "",
+    "description": "",
+    "label": "",
+    "sku": "",
+    "price": "",
+    "addSize": "",
+    "saveFirst": "",
+    "labelRequired": "",
+    "priceInvalid": ""
+  },
+  "ingredients": {
+    "new": "",
+    "edit": "",
+    "unit": "",
+    "threshold": "",
+    "cost": "",
+    "costHint": "",
+    "unitLocked": "",
+    "note": ""
+  },
+  "inventory": {
+    "tabs": {
+      "balances": "",
+      "movements": "",
+      "adjust": "",
+      "opening": ""
+    },
+    "qty": "",
+    "low": "",
+    "negative": "",
+    "adjust": "",
+    "type": "",
+    "delta": "",
+    "balanceAfter": "",
+    "by": "",
+    "mode": "",
+    "modeDelta": "",
+    "modeCount": "",
+    "deltaQty": "",
+    "countedQty": "",
+    "deltaHint": "",
+    "countHint": "",
+    "reason": "",
+    "reasonRequired": "",
+    "pickIngredient": "",
+    "adjusted": "",
+    "openingNote": "",
+    "openingDone": "",
+    "openingInvalid": "",
+    "types": {
+      "opening_balance": "",
+      "adjustment": "",
+      "sale": "",
+      "purchase": ""
+    }
+  },
+  "users": {
+    "new": "",
+    "username": "",
+    "displayName": "",
+    "role": "",
+    "language": "",
+    "deactivate": "",
+    "reactivate": "",
+    "resetPassword": "",
+    "newPassword": "",
+    "resetNote": ""
+  },
+  "settings": {
+    "business": "",
+    "businessName": "",
+    "currency": "",
+    "timezone": "",
+    "language": "",
+    "receipt": "",
+    "receiptHeader": "",
+    "receiptFooter": "",
+    "paperWidth": "",
+    "invoicePrefix": "",
+    "tax": "",
+    "taxEnabled": "",
+    "taxRate": "",
+    "taxLabel": "",
+    "taxNumber": "",
+    "pricesIncludeTax": "",
+    "saved": "",
+    "taxRateInvalid": ""
+  },
+  "errors": {
+    "UNKNOWN": "",
+    "VALIDATION_ERROR": "",
+    "NOT_AUTHENTICATED": "",
+    "INVALID_CREDENTIALS": "",
+    "PERMISSION_DENIED": "",
+    "NOT_FOUND": "",
+    "RATE_LIMITED": "",
+    "LAST_ADMIN": "",
+    "CANNOT_DEACTIVATE_SELF": "",
+    "OPENING_BALANCE_EXISTS": ""
+  }
 }

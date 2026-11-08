@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -16,6 +17,7 @@ class SettingsView(APIView):
     def _obj(self, request):
         return OrganizationSettings.objects.get(organization=request.user.organization)
 
+    @extend_schema(responses=SettingsSerializer)
     def get(self, request):
         s = self._obj(request)
         cls = (
@@ -25,6 +27,7 @@ class SettingsView(APIView):
         )
         return Response(cls(s).data)
 
+    @extend_schema(request=SettingsSerializer, responses=SettingsSerializer)
     def patch(self, request):
         s = self._obj(request)
         ser = SettingsSerializer(s, data=request.data, partial=True)

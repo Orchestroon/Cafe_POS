@@ -1,0 +1,13 @@
+/* Overrides for transforms that cannot be expressed with logical properties. */
+[dir="rtl"] input:checked + .toggle-slider:before {
+  transform: translateX(-20px);
+}
+
+@media (max-width: 1024px) {
+  [dir="rtl"] .sidebar {
+    transform: translateX(100%) !important;
+  }
+  [dir="rtl"] #app.sidebar-open .sidebar {
+    transform: translateX(0) !important;
+  }
+}

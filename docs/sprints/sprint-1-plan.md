@@ -24,8 +24,8 @@ Read: CLAUDE.md, PROGRESS.md, sprint-0-report, spec §5–§9, §10.1/10.6, §11
 - [x] 8 `seed_demo`
 - [x] 9 tests: AT-01, parametrized permission test for every endpoint, tenancy isolation, auth/deactivation, ledger/stock, last admin
 ## Frontend
-- [ ] 10 theme + shell ported from legacy (logical CSS), i18n `dir`, API client (CSRF, 401, errors)
-- [ ] 11 login/logout, route guards, 403 page, responsive shell
-- [ ] 12 admin: categories, products+variants, ingredients, balances, movements, adjustments, opening balances, users, settings
+- [x] 10 theme + shell ported from legacy (logical CSS), i18n `dir`, API client (CSRF, 401, errors)
+- [x] 11 login/logout, route guards, 403 page, responsive shell
+- [x] 12 admin: categories, products+variants, ingredients, balances, movements, adjustments, opening balances, users, settings
 ## Close
-- [ ] 13 full §4.4 check suite, PROGRESS.md, sprint-1-report.md, STOP
+- [x] 13 full §4.4 check suite, PROGRESS.md, sprint-1-report.md, STOP

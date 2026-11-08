@@ -1,5 +1,63 @@
 {
-  "app": { "name": "Drip Café POS" },
-  "health": { "title": "System status", "loading": "Checking…", "ok": "API and database are up", "error": "API is not reachable" },
-  "errors": { "UNKNOWN": "Something went wrong." }
+  "app": { "name": "Drip Café POS", "tagline": "CAFÉ OPERATIONS" },
+  "common": {
+    "loading": "Loading…", "close": "Close", "save": "Save", "cancel": "Cancel", "new": "+ New", "edit": "Edit",
+    "name": "Name", "sort": "Sort order", "status": "Status", "active": "Active", "inactive": "Inactive",
+    "search": "Search", "all": "All", "empty": "Nothing here yet.", "total": "{{count}} total", "prev": "Previous",
+    "next": "Next", "from": "From", "to": "To", "date": "Date", "decimalInvalid": "Enter a valid number (e.g. 12.500)."
+  },
+  "nav": {
+    "home": "Overview", "products": "Products", "categories": "Categories", "ingredients": "Ingredients", "inventory": "Inventory",
+    "users": "Users", "settings": "Settings", "logout": "Log out", "menu": "Menu", "workspace": "Workspace"
+  },
+  "roles": { "admin": "Admin", "barista": "Barista" },
+  "login": { "username": "Username", "password": "Password", "submit": "Log in" },
+  "home": { "welcome": "Welcome, {{name}}", "baristaNote": "The point of sale arrives in the next release. You are logged in as a barista." },
+  "categories": { "new": "New category", "edit": "Edit category" },
+  "products": {
+    "new": "New product", "edit": "Edit product", "category": "Category", "sizes": "Sizes", "description": "Description",
+    "label": "Size", "sku": "SKU", "price": "Price", "addSize": "Add size", "saveFirst": "Save the product to add sizes and prices.",
+    "labelRequired": "Enter a size name.", "priceInvalid": "Enter a price like 65.00."
+  },
+  "ingredients": {
+    "new": "New ingredient", "edit": "Edit ingredient", "unit": "Unit", "threshold": "Low-stock threshold", "cost": "Reference unit cost",
+    "costHint": "Informational only.", "unitLocked": "The unit cannot change after creation.",
+    "note": "Stock quantities are changed only through opening balances and adjustments."
+  },
+  "inventory": {
+    "tabs": { "balances": "Balances", "movements": "Movements", "adjust": "Adjustment", "opening": "Opening balances" },
+    "qty": "Quantity", "low": "Low", "negative": "Negative", "adjust": "Adjust", "type": "Type", "delta": "Change",
+    "balanceAfter": "Balance after", "by": "By", "mode": "Mode", "modeDelta": "Add / remove quantity", "modeCount": "Physical count",
+    "deltaQty": "Quantity change", "countedQty": "Counted quantity", "deltaHint": "Use a negative number to remove stock.",
+    "countHint": "The system computes the difference from the current balance.", "reason": "Reason",
+    "reasonRequired": "A reason is required.", "pickIngredient": "Choose an ingredient.",
+    "adjusted": "Saved. Change {{delta}}, new balance {{balance}}.",
+    "openingNote": "Opening balances can be entered once per ingredient, before any other stock movement.",
+    "openingDone": "Opening balances saved.", "openingInvalid": "Quantities must be numbers greater than 0.",
+    "types": { "opening_balance": "Opening balance", "adjustment": "Adjustment", "sale": "Sale", "purchase": "Purchase" }
+  },
+  "users": {
+    "new": "New user", "username": "Username", "displayName": "Display name", "role": "Role", "language": "Language",
+    "deactivate": "Deactivate", "reactivate": "Reactivate", "resetPassword": "Reset password", "newPassword": "New password",
+    "resetNote": "The user will be logged out of all devices."
+  },
+  "settings": {
+    "business": "Business", "businessName": "Business name", "currency": "Currency", "timezone": "Time zone", "language": "Default language",
+    "receipt": "Receipt", "receiptHeader": "Receipt header", "receiptFooter": "Receipt footer", "paperWidth": "Paper width",
+    "invoicePrefix": "Invoice prefix", "tax": "Tax", "taxEnabled": "Enable tax", "taxRate": "Tax rate (%)", "taxLabel": "Tax label",
+    "taxNumber": "Tax registration number", "pricesIncludeTax": "Prices include tax", "saved": "Settings saved.",
+    "taxRateInvalid": "Tax rate must be a number between 0 and 100."
+  },
+  "errors": {
+    "UNKNOWN": "Something went wrong. Please try again.",
+    "VALIDATION_ERROR": "Please check the highlighted fields.",
+    "NOT_AUTHENTICATED": "Please log in.",
+    "INVALID_CREDENTIALS": "Wrong username or password.",
+    "PERMISSION_DENIED": "You do not have permission to do this.",
+    "NOT_FOUND": "Not found.",
+    "RATE_LIMITED": "Too many attempts. Wait a minute and try again.",
+    "LAST_ADMIN": "The last active admin cannot be deactivated or demoted.",
+    "CANNOT_DEACTIVATE_SELF": "You cannot deactivate your own account.",
+    "OPENING_BALANCE_EXISTS": "An ingredient already has stock movements, so an opening balance cannot be set."
+  }
 }

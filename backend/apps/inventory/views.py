@@ -1,3 +1,5 @@
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -67,6 +69,7 @@ class AdjustmentView(APIView):
     permission_classes = ADMIN_ONLY["permission_classes"]
     permissions_by_method = ADMIN_ONLY["permissions_by_method"]
 
+    @extend_schema(request=AdjustmentInputSerializer, responses={201: OpenApiTypes.OBJECT})
     def post(self, request):
         ser = AdjustmentInputSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -87,6 +90,7 @@ class OpeningBalancesView(APIView):
     permission_classes = ADMIN_ONLY["permission_classes"]
     permissions_by_method = ADMIN_ONLY["permissions_by_method"]
 
+    @extend_schema(request=OpeningBalancesSerializer, responses={201: OpenApiTypes.OBJECT})
     def post(self, request):
         ser = OpeningBalancesSerializer(data=request.data)
         ser.is_valid(raise_exception=True)

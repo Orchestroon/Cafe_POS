@@ -1,4 +1,5 @@
 from django.db.models import Prefetch
+from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -90,6 +91,7 @@ class ProductViewSet(
     def perform_update(self, serializer):
         services.update_obj(self.request.user, serializer, "product.updated")
 
+    @extend_schema(request=VariantSerializer, responses={201: VariantSerializer})
     @action(detail=True, methods=["post"], url_path="variants")
     def create_variant(self, request, pk=None):
         product = self.get_object()
@@ -100,6 +102,7 @@ class ProductViewSet(
         )
         return Response(VariantSerializer(variant, context={"request": request}).data, status=201)
 
+    @extend_schema(request=ModifierLinkSerializer(many=True), responses=ProductSerializer)
     @action(detail=True, methods=["put"], url_path="modifier-groups")
     def modifier_groups(self, request, pk=None):
         product = self.get_object()
