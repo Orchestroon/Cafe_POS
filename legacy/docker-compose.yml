@@ -1,0 +1,18 @@
+services:
+  drip-cafe-erp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: drip-cafe-erp
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/usr/share/nginx/html:ro
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:80/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3

@@ -1,18 +1,38 @@
+# Dev stack. `docker compose up` starts Postgres only; add `--profile backend` for Django too.
 services:
-  drip-cafe-erp:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: drip-cafe-erp
-    ports:
-      - "8080:80"
-    volumes:
-      - .:/usr/share/nginx/html:ro
-    restart: unless-stopped
+  db:
+    image: postgres:16
     environment:
-      - NODE_ENV=production
+      POSTGRES_DB: drip
+      POSTGRES_USER: drip
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-drip}
+    ports:
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:80/"]
-      interval: 30s
+      test: ["CMD-SHELL", "pg_isready -U drip -d drip"]
+      interval: 3s
       timeout: 3s
-      retries: 3
+      retries: 20
+
+  backend:
+    profiles: ["backend"]
+    build: ./backend
+    user: "${UID:-1000}:${GID:-1000}"
+    command: python manage.py runserver 0.0.0.0:8000
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+      SECRET_KEY: ${SECRET_KEY:-dev-only-insecure-key}
+      DATABASE_URL: postgres://drip:${POSTGRES_PASSWORD:-drip}@db:5432/drip
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
