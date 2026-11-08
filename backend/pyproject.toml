@@ -10,6 +10,7 @@ dependencies = [
   "drf-spectacular>=0.27",
   "psycopg[binary]>=3.2",
   "gunicorn>=22",
+  "tzdata",
 ]
 
 [project.optional-dependencies]
@@ -32,8 +33,9 @@ extend-exclude = ["**/migrations"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "DJ"]
+ignore = ["DJ008"]  # no Django admin, __str__ not needed
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.test"
 python_files = ["test_*.py"]
-addopts = "-q --tb=short --cov=apps --cov-report=term:skip-covered"
+addopts = "--ds=config.settings.test -q --tb=short --cov=apps --cov-report=term:skip-covered"

@@ -21,6 +21,10 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.tenancy",
     "apps.accounts",
+    "apps.audit",
+    "apps.catalog",
+    "apps.modifiers",
+    "apps.inventory",
 ]
 
 MIDDLEWARE = [
@@ -48,6 +52,15 @@ AUTH_PASSWORD_VALIDATORS = [
     )
 ]
 
+# Shared across gunicorn workers (login throttling). Table is created by core migration 0002.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "django_cache",
+    }
+}
+CSRF_FAILURE_VIEW = "apps.core.views.csrf_failure"
+
 LANGUAGE_CODE = "en"
 USE_TZ = True
 TIME_ZONE = "UTC"  # stored in UTC; the business timezone comes from OrganizationSettings
@@ -63,7 +76,13 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["apps.core.renderers.EnvelopeJSONRenderer"],
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
     "EXCEPTION_HANDLER": "apps.core.exceptions.exception_handler",
-    "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "apps.core.pagination.EnvelopePagination",
+    "DEFAULT_THROTTLE_RATES": {"login_ip": "10/min", "login_username": "10/min"},
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 

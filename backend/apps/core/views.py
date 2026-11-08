@@ -21,3 +21,8 @@ def health(request):
 def json_404(request, exception=None):
     body = {"error": {"code": "NOT_FOUND", "message": "Not found.", "details": {}}}
     return JsonResponse(body, status=404)
+
+
+def csrf_failure(request, reason=""):
+    body = {"error": {"code": "PERMISSION_DENIED", "message": "CSRF check failed.", "details": {}}}
+    return JsonResponse(body, status=403)
