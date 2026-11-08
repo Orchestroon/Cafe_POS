@@ -14,15 +14,15 @@ Read: CLAUDE.md, PROGRESS.md, sprint-0-report, spec §5–§9, §10.1/10.6, §11
 9. Out of Sprint 1: audit-log UI/endpoint, invoice-prefix "sales exist" warning (no sales yet), recipes, modifiers admin.
 
 ## Backend
-- [ ] 1 core: `TenantModel`, `AppendOnlyModel`, tenant mixin, pagination, strict serializers, decimal-string fields, policy, time utils
-- [ ] 2 audit app: `AuditEvent` (append-only) + `record()`
-- [ ] 3 core: idempotency module + unit tests
-- [ ] 4 tenancy: Settings/Branch/Location/Register, idempotent `seed_org`, `/settings`
-- [ ] 5 accounts: csrf/login(throttled, DatabaseCache)/logout/me, users CRUD, `LAST_ADMIN`, reset-password
-- [ ] 6 catalog + modifiers stubs: categories, products, variants, modifier-group links
-- [ ] 7 inventory: ingredients, balances, movements (append-only), adjustments, opening balances
-- [ ] 8 `seed_demo`
-- [ ] 9 tests: AT-01, parametrized permission test for every endpoint, tenancy isolation, auth/deactivation, ledger/stock, last admin
+- [x] 1 core: `TenantModel`, `AppendOnlyModel`, tenant mixin, pagination, strict serializers, decimal-string fields, policy, time utils
+- [x] 2 audit app: `AuditEvent` (append-only) + `record()`
+- [x] 3 core: idempotency module + unit tests
+- [x] 4 tenancy: Settings/Branch/Location/Register, idempotent `seed_org`, `/settings`
+- [x] 5 accounts: csrf/login(throttled, DatabaseCache)/logout/me, users CRUD, `LAST_ADMIN`, reset-password
+- [x] 6 catalog + modifiers stubs: categories, products, variants, modifier-group links
+- [x] 7 inventory: ingredients, balances, movements (append-only), adjustments, opening balances
+- [x] 8 `seed_demo`
+- [x] 9 tests: AT-01, parametrized permission test for every endpoint, tenancy isolation, auth/deactivation, ledger/stock, last admin
 ## Frontend
 - [ ] 10 theme + shell ported from legacy (logical CSS), i18n `dir`, API client (CSRF, 401, errors)
 - [ ] 11 login/logout, route guards, 403 page, responsive shell
