@@ -1,15 +1,15 @@
 # Progress
-Current sprint: 2 — End-to-end sale — status: awaiting owner test (report: `docs/sprints/sprint-2-report.md`; nothing committed yet)
+Current sprint: 2 — End-to-end sale — status: committed on branch `sprint-2-end-to-end-sale` (not merged); awaiting the owner's manual browser test (report: `docs/sprints/sprint-2-report.md`)
 
 ## Done
 - Sprint 0 (approved, `c1d9c10`): audit, restructure (`legacy/`, `backend/`, `frontend/`), Django bootstrap, Postgres compose, Vite + React + TS, CI workflow.
 - Sprint 1 (finalized 2026-11-08, approved incl. deviation 9, CI passing on `main` per owner): core (tenant base, append-only, policy, idempotency, audit, time utils), tenancy + settings, auth + users (LAST_ADMIN, session invalidation, DatabaseCache throttling), catalog, inventory ledger, `seed_demo`, frontend shell (legacy theme, logical CSS, i18n/RTL) and all Sprint 1 admin screens. 188 backend tests pass (incl. post-audit fixes: `NUM_PROXIES`, LAST_ADMIN lock order, locked audited updates, DB errors → 400); frontend typecheck/lint/build pass. Report: `docs/sprints/sprint-1-report.md`.
 
 ## In progress
-- Sprint 2 built, audited and fixed (see the audit section of `docs/sprints/sprint-2-report.md`). Waiting for the owner's local test. UI not browser-tested by the assistant.
+- Sprint 2 built, audited, fixed and committed on `sprint-2-end-to-end-sale` (incl. the second-audit follow-ups). 388 backend tests pass; frontend typecheck/lint/build pass. Waiting for the owner's manual browser test, then approval and merge. UI not browser-tested by the assistant.
 
 ## Next
-- (After Sprint 2 approval: commit the work in groups.) Sprint 2 — End-to-end sale (recipes, modifiers, shifts open/current, pricing + consumption engines, quote, checkout, orders, receipt, POS screen). Order unchanged (owner, 2026-11-08). Audit-log screen stays in Sprint 4.
+- After Sprint 2 approval: merge `sprint-2-end-to-end-sale` into `main`. Sprint 2 — End-to-end sale (recipes, modifiers, shifts open/current, pricing + consumption engines, quote, checkout, orders, receipt, POS screen). Order unchanged (owner, 2026-11-08). Audit-log screen stays in Sprint 4.
 
 ## Owner decisions (Sprint 2 kickoff, 2026-11-10)
 - Printer (D13) confirmed: browser print; paper widths 58/76/80/112 mm + A4 chosen per device; no auto-detection.
@@ -39,4 +39,5 @@ Current sprint: 2 — End-to-end sale — status: awaiting owner test (report: `
 - S1: Barista `/settings` omits only `invoice_prefix`.
 - S1: Login throttling cache = Django `DatabaseCache` (owner decision, 2026-11-08); Django pinned to 5.2 LTS (owner decision).
 - S1 (audit fix): Login throttle client IP = `REMOTE_ADDR` unless `NUM_PROXIES` is set (env, default 0).
+- S2: New error code `REGISTER_NOT_CONFIGURED` (422) when opening a shift and the café does not have exactly one default register (v1 is single-branch; users carry no branch yet).
 - S1 (audit fix): An admin's own password reset keeps their current session; other sessions end. Approved by the owner (2026-11-08).

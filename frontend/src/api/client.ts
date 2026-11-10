@@ -45,6 +45,7 @@ async function request<T>(method: string, path: string, body?: unknown, q?: Quer
   const ctl = opts.timeoutMs ? new AbortController() : undefined;
   const timer = ctl ? setTimeout(() => ctl.abort(), opts.timeoutMs) : undefined;
   let res: Response;
+  let json;
   try {
     res = await fetch(`/api/v1${path}${qs(q)}`, {
       method,
@@ -57,12 +58,14 @@ async function request<T>(method: string, path: string, body?: unknown, q?: Quer
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
+    // The timeout also covers the body. A body that is cut off or unreadable leaves the outcome
+    // unknown (a 201 may already be committed), so it counts as a network error: resend, same key.
+    json = res.status === 204 ? null : await res.json();
   } catch {
     throw new NetworkError("network");
   } finally {
     if (timer) clearTimeout(timer);
   }
-  const json = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) {
     const e = json?.error;
     const err = new ApiError(e?.code ?? "UNKNOWN", e?.message ?? res.statusText, res.status, e?.details ?? {});

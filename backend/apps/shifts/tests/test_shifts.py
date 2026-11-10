@@ -98,3 +98,18 @@ def test_anonymous_gets_401(anon):
     assert (
         anon.post("/api/v1/shifts/open", {"opening_cash": "1.00"}, format="json").status_code == 401
     )
+
+
+@pytest.mark.parametrize("extra_branches", [0, 1])
+def test_open_without_exactly_one_default_register_is_422_not_500(org, barista_c, extra_branches):
+    """No default register, or one per branch on a second branch: a clean 422, no shift."""
+    from apps.tenancy.models import Branch, Register
+
+    if extra_branches:
+        b2 = Branch.objects.create(organization=org, name="Second")
+        Register.objects.create(organization=org, branch=b2, name="R2", is_default=True)
+    else:
+        Register.objects.filter(organization=org).update(is_default=False)
+    r = barista_c.post("/api/v1/shifts/open", {"opening_cash": "0.00"}, format="json")
+    assert r.status_code == 422 and r.json()["error"]["code"] == "REGISTER_NOT_CONFIGURED"
+    assert CashierShift.objects.count() == 0

@@ -377,6 +377,65 @@ def test_at12_concurrent_checkouts_leave_the_exact_balance(org, shop):
 
 
 @pytest.mark.django_db(transaction=True)
+def test_at12_balance_row_lock_holds_against_a_concurrent_adjustment(org, admin, shop):
+    """Checkouts serialize on the invoice counter, but a stock adjustment does not take that lock,
+    so only the StockBalance row lock keeps these two writers from losing each other's update."""
+    cup = shop.ing["Cup"]
+    cashier = make_user(org, "lock_cashier", "barista")
+    open_shift(client_for(cashier))
+    rounds, start, errors = 15, threading.Barrier(2), []
+
+    def sell():
+        try:
+            c = client_for(cashier)
+            start.wait()
+            for _ in range(rounds):  # each sale: Cup -1
+                r = checkout(c, [item(shop.small)], [cash("65.00")], "65.00")
+                assert r.status_code == 201, r.content
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+        finally:
+            connection.close()
+
+    def adjust():
+        try:
+            c = client_for(admin)
+            start.wait()
+            for _ in range(rounds):  # each adjustment: Cup +1
+                r = c.post(
+                    "/api/v1/inventory/adjustments",
+                    {
+                        "ingredient_id": str(cup.id),
+                        "mode": "delta",
+                        "qty_delta": "1.000",
+                        "reason": "lock test",
+                    },
+                    format="json",
+                )
+                assert r.status_code == 201, r.content
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+        finally:
+            connection.close()
+
+    threads = [threading.Thread(target=sell), threading.Thread(target=adjust)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert not errors
+    assert balance(cup) == Decimal("100.000")  # 100 - 15 + 15: no lost update
+    moves = list(
+        StockMovement.objects.filter(ingredient=cup, movement_type__in=["sale", "adjustment"])
+        .order_by("created_at")
+        .values_list("qty_delta", "balance_after")
+    )
+    assert len(moves) == 2 * rounds
+    running = Decimal("100.000")
+    for delta, after in moves:  # every row saw the committed balance of the one before it
+        running += delta
+        assert after == running
+
+
+@pytest.mark.django_db(transaction=True)
 def test_at11_same_key_sent_concurrently_creates_one_order(org, shop):
     user = make_user(org, "dup", "barista")
     open_shift(client_for(user))

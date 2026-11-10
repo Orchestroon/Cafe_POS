@@ -1,6 +1,6 @@
 # Sprint 2 report — End-to-end sale
 
-Status: **built, awaiting owner testing** (2026-11-10). Nothing is committed (owner rule: commit only after local testing).
+Status: **built and committed on branch `sprint-2-end-to-end-sale`** (not merged), **awaiting the owner's manual browser test** (2026-11-10).
 
 ## What was built
 **Backend**
@@ -25,7 +25,7 @@ Status: **built, awaiting owner testing** (2026-11-10). Nothing is committed (ow
 |---|---|
 | `ruff check` / `ruff format --check` | pass |
 | `makemigrations --check --dry-run` | no changes |
-| `pytest` | **385 tests pass** (after the audit fixes), coverage 99% |
+| `pytest` | **388 tests pass** (after both audits' fixes), coverage 99% |
 | `spectacular --validate --fail-on-warn` | clean |
 | `tsc --noEmit`, `eslint src`, `vite build` | pass |
 | Live API smoke on the dev stack (seed_demo → shift → quote → checkout → replay → orders → shift totals) | pass: Large + Oat deducts no regular milk; replay returned `Idempotent-Replayed: true` |
@@ -34,13 +34,14 @@ Status: **built, awaiting owner testing** (2026-11-10). Nothing is committed (ow
 Acceptance tests covered: AT-02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 26, plus min/max, missing slot, option without effect for a size, payment errors leaving nothing behind, checkout without a shift, gapless invoices across a failed checkout, permission matrix and tenant isolation for every new route/model.
 
 ## Deviations from the spec / plan
-1. **Commits:** none during the sprint (owner rule), instead of spec 0.1 "commit after each task".
+1. **Commits:** none during the sprint (owner rule), instead of spec 0.1 "commit after each task"; the work was committed in groups after the build and audit, on branch `sprint-2-end-to-end-sale`.
 2. **Barista order detail/receipt** opens any order of the café by its id; the *list* stays today + exact invoice lookup. **Approved by the owner (2026-11-10)**; spec section 6 updated.
 3. **Duplicate option ids** in one cart line return `MODIFIER_SELECTION_INVALID` with `reason: duplicate_option` (the spec names no code for it).
 4. **Shift close, refunds, drawer expenses, promotions** are not in Sprint 2 (Sprint 3 / P1). The shift model already has all close fields.
-5. **Concurrency test (AT-12):** 5 real threads, each its own cashier, leave exact balances and gapless invoices. Because every checkout locks the invoice counter first (needed for gapless numbers), all checkouts of a café are serialized, so this test cannot prove the stock-balance lock *by itself* (removing only that lock would not fail it). The balance lock is still taken, in id order.
+5. **Concurrency test (AT-12):** 5 real threads, each its own cashier, leave exact balances and gapless invoices. Because every checkout locks the invoice counter first (needed for gapless numbers), all checkouts of a café are serialized, so this test cannot prove the stock-balance lock *by itself*. `test_at12_balance_row_lock_holds_against_a_concurrent_adjustment` closes that gap: a checkout thread and a stock-adjustment thread (which does not take the counter lock) hit the same ingredient 15 times each; the balance and every `balance_after` must be exact. Removing only the checkout balance lock fails it (lost updates: 92 instead of 100).
 6. Tax default changed to "on top" and paper widths widened (owner answers, 2026-11-10); spec updated.
 7. `GET /orders` ignores `from`/`to` for Baristas.
+8. New error code `REGISTER_NOT_CONFIGURED` (422): opening a shift when the café has no default register, or more than one (a second branch). v1 is single-branch and users carry no branch, so the server refuses instead of guessing.
 
 ## Audit (2026-11-10) and fixes
 A read-only review of Sprint 2 found 2 High, 4 Medium and 5 Low issues. All are fixed.
@@ -58,6 +59,15 @@ A read-only review of Sprint 2 found 2 High, 4 Medium and 5 Low issues. All are 
 | L3 | `shifts` imported `sales` models inside a function. | `sales.selectors.payment_totals(shift)` is the one entry point. | existing shift-total test |
 | L4 | `Pos.tsx` mixed the checkout state machine with the screen. | `pos/useCheckout.ts` hook. | tsc/lint/build |
 | L5 | Recipe editor compared waste % with a JS float. | Scaled-integer compare. | tsc/lint/build |
+
+**Second audit (2026-11-10), owner-requested fixes:**
+
+| # | Finding | Fix | Test |
+|---|---|---|---|
+| M5 | `docker-compose.yml` default `DB_PORT` had moved to 5432, which collides with a host Postgres. | Back to `${DB_PORT:-5433}`; README updated. | `docker compose up -d --wait db` |
+| M6 | The API client stopped the timeout before reading the body and turned an unreadable body into `null`, so a cut-off 201 looked like a success with no result. | Timeout covers the body; an unreadable non-204 body is a `NetworkError`, so checkout resends the same key. | tsc/lint/build |
+| M7 | AT-12 could not prove the stock-balance row lock. | New 2-thread checkout vs stock-adjustment test (see deviation 5). | `test_at12_balance_row_lock_holds_against_a_concurrent_adjustment` |
+| L6 | Opening a shift raised a 500 with no default register or with several. | 422 `REGISTER_NOT_CONFIGURED` (deviation 8). | `test_open_without_exactly_one_default_register_is_422_not_500` |
 
 ## Known issues / limits
 - UI not browser-tested (above).
