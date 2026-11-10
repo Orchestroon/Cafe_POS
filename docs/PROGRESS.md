@@ -1,21 +1,27 @@
 # Progress
-Current sprint: 2 — End-to-end sale — status: committed on branch `sprint-2-end-to-end-sale` (not merged); awaiting the owner's manual browser test (report: `docs/sprints/sprint-2-report.md`)
+Current sprint: 2 — End-to-end sale — status: finalized and approved by the owner (2026-11-10); ready to merge `sprint-2-end-to-end-sale` into `main` (report: `docs/sprints/sprint-2-report.md`)
 
 ## Done
 - Sprint 0 (approved, `c1d9c10`): audit, restructure (`legacy/`, `backend/`, `frontend/`), Django bootstrap, Postgres compose, Vite + React + TS, CI workflow.
+- Sprint 2 (finalized and approved by the owner 2026-11-10, branch `sprint-2-end-to-end-sale`, ready to merge): recipes, modifiers, shifts open/current, pricing + consumption engines, quote, idempotent checkout, orders, receipt, POS screen, plus both audits' fixes. 388 backend tests pass; frontend typecheck/lint/build pass; owner's manual browser test passed. Report: `docs/sprints/sprint-2-report.md`.
 - Sprint 1 (finalized 2026-11-08, approved incl. deviation 9, CI passing on `main` per owner): core (tenant base, append-only, policy, idempotency, audit, time utils), tenancy + settings, auth + users (LAST_ADMIN, session invalidation, DatabaseCache throttling), catalog, inventory ledger, `seed_demo`, frontend shell (legacy theme, logical CSS, i18n/RTL) and all Sprint 1 admin screens. 188 backend tests pass (incl. post-audit fixes: `NUM_PROXIES`, LAST_ADMIN lock order, locked audited updates, DB errors → 400); frontend typecheck/lint/build pass. Report: `docs/sprints/sprint-1-report.md`.
 
 ## In progress
-- Sprint 2 built, audited, fixed and committed on `sprint-2-end-to-end-sale` (incl. the second-audit follow-ups). 388 backend tests pass; frontend typecheck/lint/build pass. Waiting for the owner's manual browser test, then approval and merge. UI not browser-tested by the assistant.
+- Nothing. Sprint 2 is finalized; the branch awaits merge into `main`.
 
 ## Next
-- After Sprint 2 approval: merge `sprint-2-end-to-end-sale` into `main`. Sprint 2 — End-to-end sale (recipes, modifiers, shifts open/current, pricing + consumption engines, quote, checkout, orders, receipt, POS screen). Order unchanged (owner, 2026-11-08). Audit-log screen stays in Sprint 4.
+- Merge `sprint-2-end-to-end-sale` into `main`.
+- Sprint 3 (needs the owner's answer on returns D8/D9 first). Audit-log screen stays in Sprint 4.
 
 ## Owner decisions (Sprint 2 kickoff, 2026-11-10)
 - Printer (D13) confirmed: browser print; paper widths 58/76/80/112 mm + A4 chosen per device; no auto-detection.
 - Tax (D11): off until the Admin enables it and types the rate; when on, added on top.
 - Shifts (D7) confirmed. Returns (D8/D9): answer still needed before Sprint 3.
 - No git commits until the owner has tested locally (deviation from spec 0.1 "commit after each task"); includes the docker-compose change.
+
+## Owner approval (Sprint 2, 2026-11-10)
+- Confirmed the recorded decisions (D11 tax on top, D12, D13, D7, 0.00 order rule, Barista order detail by id).
+- Manual browser test passed; Sprint 2 approved and finalized.
 
 ## Owner decisions (Sprint 2 audit, 2026-11-10)
 - Fix every audit finding (H1–H2, M1–M4, L1–L5).

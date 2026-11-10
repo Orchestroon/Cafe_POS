@@ -1,6 +1,6 @@
 # Sprint 2 report — End-to-end sale
 
-Status: **built and committed on branch `sprint-2-end-to-end-sale`** (not merged), **awaiting the owner's manual browser test** (2026-11-10).
+Status: **finalized — approved by the owner (2026-11-10)** after a passing manual browser test. Committed on branch `sprint-2-end-to-end-sale`, ready to merge into `main`.
 
 ## What was built
 **Backend**
@@ -29,7 +29,7 @@ Status: **built and committed on branch `sprint-2-end-to-end-sale`** (not merged
 | `spectacular --validate --fail-on-warn` | clean |
 | `tsc --noEmit`, `eslint src`, `vite build` | pass |
 | Live API smoke on the dev stack (seed_demo → shift → quote → checkout → replay → orders → shift totals) | pass: Large + Oat deducts no regular milk; replay returned `Idempotent-Replayed: true` |
-| **Browser run of the UI** | **NOT DONE.** The Chrome extension was not connected, so the screens (POS, payment dialog, receipt print at each width, phone layout, RTL) have only passed typecheck/lint/build, not a click-through. Please test them; see the checklist. |
+| **Browser run of the UI** | **PASS (owner, 2026-11-10).** The assistant could not run a browser (Chrome extension not connected); the owner ran the manual test checklist below and reported that everything works. |
 
 Acceptance tests covered: AT-02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 26, plus min/max, missing slot, option without effect for a size, payment errors leaving nothing behind, checkout without a shift, gapless invoices across a failed checkout, permission matrix and tenant isolation for every new route/model.
 
@@ -70,26 +70,25 @@ A read-only review of Sprint 2 found 2 High, 4 Medium and 5 Low issues. All are 
 | L6 | Opening a shift raised a 500 with no default register or with several. | 422 `REGISTER_NOT_CONFIGURED` (deviation 8). | `test_open_without_exactly_one_default_register_is_422_not_500` |
 
 ## Known issues / limits
-- UI not browser-tested (above).
 - Recipe line display order relies on creation timestamps (no explicit position column).
 - A Barista list shows today's orders by the café's time zone; a sale made just before local midnight moves to "older" after midnight (invoice search still finds it).
 - Pickers load all ingredients/products (100 per request, looped), as in Sprint 1.
 - `npm audit` advisories unreviewed. Arabic strings are still empty (D12); new keys were added to `ar.json` with empty values.
 
-## Owner manual test checklist
+## Owner manual test checklist — passed (owner, 2026-11-10)
 Start: `docker compose up -d --build --wait`, then `docker compose exec backend python manage.py seed_demo` (needed once; the backend container applies migrations itself). App: http://localhost:5173. Logins `admin`, `barista1`, `barista2`, password `Demo-pass-123`.
-- [ ] As admin: open Products → Iced Latte → **Recipe** on each size; check the preview (12 g + 5% = 12.600). Change a recipe and save.
-- [ ] As admin: Modifiers → check **Milk Type** (replace, slot `milk`, Oat Milk with a Large price of 20 and per-size effects) and **Extras** (Extra Shot). Link both on the product page.
-- [ ] Remove the `milk` slot from one size's recipe: the Recipe editor and the group show a warning; restore it.
-- [ ] As barista1: the POS asks for a shift. Open it with 300.00.
-- [ ] Sell **Large + Oat + Extra Shot**: price 120.00. In Admin → Inventory → Movements: Oat Milk and Coffee deducted, **no Whole Milk**.
-- [ ] Sell more than the stock of something: a warning appears, the sale still goes through, the balance goes negative.
-- [ ] Pay **cash with change**, **card only**, and **mixed** (e.g. cash 80 + card 120 on 200).
-- [ ] Turn tax on in Settings (type a rate): the cart, payment and receipt show a tax line added on top. Turn it off again.
-- [ ] Success screen → **Print receipt** on your real printer at 58 or 80 mm (pick the width on the receipt page; the device remembers it). Reprint from Orders (shows REPRINT).
-- [ ] As barista: Orders shows today's orders; search an older invoice number.
-- [ ] Use the POS on a phone (bottom-sheet cart) and switch EN/عربي to check the layout mirrors.
-- [ ] Go offline (browser devtools) during a payment: "Checking payment status…", then Retry after going online gives **one** order, not two.
+- [x] As admin: open Products → Iced Latte → **Recipe** on each size; check the preview (12 g + 5% = 12.600). Change a recipe and save.
+- [x] As admin: Modifiers → check **Milk Type** (replace, slot `milk`, Oat Milk with a Large price of 20 and per-size effects) and **Extras** (Extra Shot). Link both on the product page.
+- [x] Remove the `milk` slot from one size's recipe: the Recipe editor and the group show a warning; restore it.
+- [x] As barista1: the POS asks for a shift. Open it with 300.00.
+- [x] Sell **Large + Oat + Extra Shot**: price 120.00. In Admin → Inventory → Movements: Oat Milk and Coffee deducted, **no Whole Milk**.
+- [x] Sell more than the stock of something: a warning appears, the sale still goes through, the balance goes negative.
+- [x] Pay **cash with change**, **card only**, and **mixed** (e.g. cash 80 + card 120 on 200).
+- [x] Turn tax on in Settings (type a rate): the cart, payment and receipt show a tax line added on top. Turn it off again.
+- [x] Success screen → **Print receipt** on your real printer at 58 or 80 mm (pick the width on the receipt page; the device remembers it). Reprint from Orders (shows REPRINT).
+- [x] As barista: Orders shows today's orders; search an older invoice number.
+- [x] Use the POS on a phone (bottom-sheet cart) and switch EN/عربي to check the layout mirrors.
+- [x] Go offline (browser devtools) during a payment: "Checking payment status…", then Retry after going online gives **one** order, not two.
 
 ## Handoff to Sprint 3
 - Sprint 3 still needs your answer on **returns (D8/D9)**.
