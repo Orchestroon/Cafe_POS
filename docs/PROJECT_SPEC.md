@@ -101,9 +101,9 @@ Drip Café needs a web-based **POS for day-to-day sales**, not a demo.
 | D8 | Refunds | Any Admin or Barista can refund any paid order. Full refunds only. Reason is mandatory. Fully audited (who, when, which invoice, why, amounts). No extra approval step. | Final |
 | D9 | Refund of mixed-payment orders | Refund is allocated back to the original payment methods and amounts automatically. | [DEFAULT — confirm] |
 | D10 | Drawer expenses | A Barista can record an expense paid from the drawer against their own open shift. Admins can record any expense. | [DEFAULT — confirm] |
-| D11 | Tax | Optional per organization: `tax_enabled`, `tax_rate`, `prices_include_tax`, `tax_label`, `tax_registration_number`. When enabled, the receipt shows the tax breakdown. Government e-receipt integration is out of scope. | Final |
+| D11 | Tax | Optional per organization: `tax_enabled`, `tax_rate`, `prices_include_tax`, `tax_label`, `tax_registration_number`. When enabled, the receipt shows the tax breakdown. Government e-receipt integration is out of scope. **Owner (2026-11-10): tax stays off until the Admin turns it on and types the rate; when on, it is added on top of menu prices (`prices_include_tax=False` by default).** | Final |
 | D12 | Language | English UI first. i18n infrastructure (translation keys) and RTL-ready CSS from day one. Arabic translation added later. | Final |
-| D13 | Printing | A Print button opens the browser print flow on any printer the device has (USB, Bluetooth or network, configured at OS level). Receipt layouts for 58 mm and 80 mm thermal paper plus A4 fallback. Silent printing not required. | Final |
+| D13 | Printing | A Print button opens the browser print flow on any printer the device has (USB, Bluetooth or network, configured at OS level). Receipt layouts for thermal paper widths **58, 76, 80 and 112 mm** plus A4. The width is chosen per device (each device remembers the width of its printer; Settings holds the default). The browser cannot detect the printer's paper, so there is no auto-detection. Silent printing not required. **Confirmed by the owner (2026-11-10).** | Final |
 | D14 | Stack | Frontend: the owner's **existing React UI** (reuse its design and components). Backend: **Django + Django REST Framework + PostgreSQL**. The old Node backend is replaced and not ported. | Final |
 | D15 | Opening stock | Entered as `opening_balance` stock movements, **not** as a purchase, so it never inflates expenses. | Final |
 | D16 | Modifier groups | Reusable across products (linked many-to-many), instead of being duplicated per product. | Final (design) |
@@ -339,6 +339,7 @@ If the existing frontend repo has a different shape, propose the move in the Spr
   - On a unique-violation race, re-read the committed record and return it.
   - Same key and same hash returns the stored status and body, plus the response header `Idempotent-Replayed: true`.
   - Same key and different hash returns 409 `IDEMPOTENCY_CONFLICT`.
+  - Same key sent by a **different user** also returns 409 `IDEMPOTENCY_CONFLICT` (a key belongs to the user who first sent it; Sprint 2 audit).
 
 ### 5.4 History is immutable
 
@@ -422,7 +423,7 @@ If the existing frontend repo has a different shape, propose the move in the Spr
 | Open own shift, view own current shift, close own shift | ✓ | ✓ |
 | Close **another** user's shift (e.g. forgotten) | ✓ | ✗ |
 | View all shifts and shift reports | ✓ | ✗ |
-| View orders | All | Today's orders (all cashiers) + exact invoice-number lookup for any date |
+| View orders | All | List: today's orders (all cashiers) + exact invoice-number lookup for any date. Detail/receipt: any order opened by its id (owner decision, 2026-11-10) |
 | View and print receipts for viewable orders | ✓ | ✓ |
 | Refund a paid order (full, with reason) | ✓ | ✓ |
 | Record drawer expense against own open shift [D10] | ✓ | ✓ |
@@ -451,7 +452,7 @@ Every model below except `Organization` inherits `TenantModel` (`id` UUID, `orga
 | Model | Fields | Constraints / notes |
 |---|---|---|
 | `Organization` (not tenant-owned) | id, name, slug, is_active, created_at | slug unique |
-| `OrganizationSettings` | organization (1:1); currency `EGP`; timezone `Africa/Cairo`; default_language `en`; business_name; receipt_header (text); receipt_footer (text); receipt_paper_width (`58mm`/`80mm`/`a4`, default `80mm`); invoice_prefix `POS-`; tax_enabled `False`; tax_rate `0.00`; prices_include_tax `True`; tax_label `VAT`; tax_registration_number (blank) | tax_rate 0–100 |
+| `OrganizationSettings` | organization (1:1); currency `EGP`; timezone `Africa/Cairo`; default_language `en`; business_name; receipt_header (text); receipt_footer (text); receipt_paper_width (`58mm`/`76mm`/`80mm`/`112mm`/`a4`, default `80mm`); invoice_prefix `POS-`; tax_enabled `False`; tax_rate `0.00`; prices_include_tax `False` (tax added on top); tax_label `VAT`; tax_registration_number (blank) | tax_rate 0–100 |
 | `Branch` | name, is_active | unique(org, name) |
 | `Location` | branch, name, is_default | one default per branch (partial unique) |
 | `Register` | branch, name, is_default | one default per branch; stored on shifts for future multi-register |
@@ -624,7 +625,8 @@ Everything below runs in one `transaction.atomic()`, inside the idempotency wrap
 3. Run the pricing and consumption engines with fresh DB data.
 4. Compare `expected_total` (from the client) with the server total. If they differ, return 409 `PRICE_CHANGED` with `details: {server_total, quote}`.
 5. **Validate payments:**
-   - 1–2 entries, at most one per method. Otherwise 422 `INVALID_PAYMENT`.
+   - **A 0.00 order takes no payment:** `payments` must be empty (otherwise 422 `INVALID_PAYMENT`). Owner decision, 2026-11-10.
+   - Otherwise 1–2 entries, at most one per method. Otherwise 422 `INVALID_PAYMENT`.
    - Each amount > 0.
    - `Σ amount == total`. Otherwise 422 `PAYMENT_MISMATCH`.
    - For cash: `cash_tendered` is optional and defaults to the amount, and must satisfy `cash_tendered ≥ amount`. Otherwise 422 `INVALID_PAYMENT`.
@@ -791,7 +793,7 @@ All reports are Admin-only and are derived from persisted records only. Period f
 | 401 | `INVALID_CREDENTIALS` | Bad login, or the user is inactive (same message, no account enumeration) |
 | 403 | `PERMISSION_DENIED` | Role not allowed |
 | 404 | `NOT_FOUND` | Missing, or belongs to another organization |
-| 409 | `IDEMPOTENCY_CONFLICT` | Same key, different payload |
+| 409 | `IDEMPOTENCY_CONFLICT` | Same key with a different payload, or sent by a different user |
 | 409 | `SHIFT_NOT_OPEN` | Checkout, cash refund or drawer expense without the user's open shift |
 | 409 | `SHIFT_ALREADY_OPEN` | Opening a second shift |
 | 409 | `SHIFT_ALREADY_CLOSED` | Closing twice |
@@ -1070,7 +1072,7 @@ As a Barista, source, method and shift are set by the server. As an Admin, you m
   - The confirm button is disabled until the amounts are valid.
 - **Checkout reliability:**
   1. Generate the idempotency key when the payment dialog is confirmed. Store `{key, payload}` in sessionStorage until a definitive response.
-  2. On a network failure or timeout, show "Checking payment status…" and retry the **same** request with the **same** key (up to 3 times with backoff). Then show "Could not confirm — check connection, then tap Retry". Retry reuses the same key.
+  2. On a network failure, a timeout or a 5xx answer, show "Checking payment status…" and retry the **same** request with the **same** key (up to 3 times with backoff). Then show "Could not confirm — check connection, then tap Retry". Retry reuses the same key.
   3. Never create a new key for an unresolved sale.
   4. On `PRICE_CHANGED`, show the old vs new total and require reconfirmation, which sends a new request with a new key.
 - **Success screen:**
@@ -1083,7 +1085,7 @@ As a Barista, source, method and shift are set by the server. As an Admin, you m
 
 - Dedicated print view rendered from the receipt endpoint.
 - `@media print` CSS; hide app chrome.
-- Paper width from settings, with a per-device override in localStorage (wrapped in try/catch). Options: 58mm, 80mm, A4.
+- Paper width = this device's choice (localStorage, wrapped in try/catch) else the Settings default. Options: 58mm, 76mm, 80mm, 112mm, A4. A width picker on the receipt screen sets it for the device.
 - Monospace-friendly layout: business header, invoice no and date (local timezone), cashier, items with modifiers indented, subtotal, discount, tax lines when enabled, total, payment breakdown, change.
 - Show a large **REFUNDED** banner and the refund date when refunded. Show **REPRINT** on reprints.
 - The Print button calls `window.print()`.
@@ -1450,7 +1452,7 @@ Any unresolved issue affecting payment collection, financial integrity, security
 | D9 Mixed-payment refund allocation | Back to the original methods and amounts | `sales/services.py::allocate_refund` |
 | D10 Barista drawer expenses | Allowed, forced to own open shift | `core/policy.py` + `expenses/services.py` |
 | D17 Card terminal reference | Optional | Serializer flag |
-| Tax-inclusive pricing default | `prices_include_tax=True`, tax disabled by default | `OrganizationSettings` |
+| Tax pricing default | **Owner (2026-11-10): tax added on top** (`prices_include_tax=False`), tax disabled until the Admin enables it and types the rate | `OrganizationSettings` |
 | Barista order visibility | Today's orders (all cashiers) + exact invoice lookup | `sales/selectors.py` |
 | Hosting / domain | Generic Linux VPS with Docker | Sprint 5 |
 
