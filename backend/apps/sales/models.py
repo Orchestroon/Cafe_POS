@@ -100,3 +100,43 @@ class Payment(TenantModel):
             models.UniqueConstraint(fields=["order", "method"], name="uniq_payment_method"),
             models.CheckConstraint(condition=Q(amount__gt=0), name="payment_amount_gt_0"),
         ]
+
+
+class Refund(TenantModel):
+    """Full refund of one order (spec 7.7, 8.6). Created only by the refund service."""
+
+    order = models.OneToOneField(Order, on_delete=models.PROTECT, related_name="refund")
+    actor = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="+")
+    # The refunding user's open shift: the cash leaves *their* expected cash.
+    shift = models.ForeignKey(
+        "shifts.CashierShift", null=True, blank=True, on_delete=models.PROTECT, related_name="+"
+    )
+    reason = models.CharField(max_length=300)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    idempotency_key = models.UUIDField()
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["organization", "created_at"])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "idempotency_key"], name="uniq_refund_idem_key"
+            ),
+            models.CheckConstraint(condition=Q(total_amount__gte=0), name="refund_total_gte_0"),
+        ]
+
+
+class RefundLine(TenantModel):
+    refund = models.ForeignKey(Refund, on_delete=models.PROTECT, related_name="lines")
+    original_payment = models.OneToOneField(
+        Payment, on_delete=models.PROTECT, related_name="refund_line"
+    )
+    method = models.CharField(max_length=4, choices=Payment.Method.choices)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    external_reference = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        constraints = [
+            models.CheckConstraint(condition=Q(amount__gt=0), name="refundline_amount_gt_0")
+        ]

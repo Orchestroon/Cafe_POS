@@ -44,3 +44,16 @@ td.num, th.num { text-align: end; font-variant-numeric: tabular-nums; }
 .breadcrumbs { display: flex; gap: 6px; align-items: center; }
 .sidebar .btn-outline { background: transparent; color: var(--text-sidebar-bright); border-color: var(--text-sidebar-muted); }
 .sidebar .btn-outline:hover { background: var(--bg-sidebar-hover); }
+
+.btn-danger { background: var(--status-alert-text); color: #fff; border: 1px solid var(--status-alert-text); }
+.btn-danger:hover { filter: brightness(.92); }
+.text-negative { color: var(--status-alert-text); font-weight: 700; }
+.row-voided td { color: var(--text-muted); text-decoration: line-through; }
+.report-nav { display: flex; gap: 4px; flex-wrap: wrap; margin-block-end: 14px; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-block-end: 16px; }
+
+@media print {
+  .sidebar, .top-bar, .mobile-bottom-nav, .sidebar-backdrop, .no-print, .view-header .view-actions { display: none !important; }
+  .main-content { margin: 0 !important; }
+}
+.section-title { font-size: 14px; font-weight: 700; color: var(--text-muted); margin-block: 4px 10px; text-transform: uppercase; letter-spacing: .04em; }

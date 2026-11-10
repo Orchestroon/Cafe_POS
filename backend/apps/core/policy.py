@@ -19,6 +19,15 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "users.manage": _ADMIN,
     "settings.view": _BOTH,
     "settings.manage": _ADMIN,
+    "shifts.manage": _ADMIN,
+    "refund.create": _BOTH,
+    "ledgers.view": _ADMIN,
+    "purchasing.manage": _ADMIN,
+    "expenses.create": _BOTH,
+    "expenses.view": _BOTH,
+    "expenses.void": _ADMIN,
+    "expenses.view_all": _ADMIN,
+    "reports.view": _ADMIN,
 }
 
 

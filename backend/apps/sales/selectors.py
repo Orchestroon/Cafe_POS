@@ -10,7 +10,7 @@ from apps.core.policy import has_perm
 from apps.core.timeutils import local_date_range, parse_local_date
 from apps.tenancy.models import OrganizationSettings
 
-from .models import Order, Payment
+from .models import Order, Payment, RefundLine
 
 
 def org_timezone(org) -> str:
@@ -28,16 +28,23 @@ def today_range(org):
 
 
 def payment_totals(shift) -> dict:
-    """Per-method payment sums and order count for one shift (used by the shifts app)."""
-    sums = {
-        row["method"]: row["total"]
-        for row in Payment.objects.filter(shift=shift)
+    """Per-method sales and refund sums and order count for one shift (used by the shifts app).
+    Refunds belong to the shift of the *refunding* user (spec 8.6), not the order's shift."""
+    sales = {
+        r["method"]: r["total"]
+        for r in Payment.objects.filter(shift=shift).values("method").annotate(total=Sum("amount"))
+    }
+    refunds = {
+        r["method"]: r["total"]
+        for r in RefundLine.objects.filter(refund__shift=shift)
         .values("method")
         .annotate(total=Sum("amount"))
     }
     return {
-        "cash": sums.get("cash"),
-        "card": sums.get("card"),
+        "cash": sales.get("cash"),
+        "card": sales.get("card"),
+        "cash_refunds": refunds.get("cash"),
+        "card_refunds": refunds.get("card"),
         "orders_count": Order.objects.filter(shift=shift).count(),
     }
 
@@ -78,7 +85,7 @@ def get_order(user, pk):
     orders through the invoice lookup, then opens them from there."""
     return (
         Order.objects.filter(organization=user.organization, pk=pk)
-        .select_related("cashier")
-        .prefetch_related("payments", "items")
+        .select_related("cashier", "refund__actor")
+        .prefetch_related("payments", "items", "refund__lines")
         .first()
     )

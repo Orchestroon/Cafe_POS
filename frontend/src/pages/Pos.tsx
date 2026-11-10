@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import type { Category, CheckoutResult, Product, Quote, Shift, StockWarning } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
@@ -187,6 +187,7 @@ function ShiftBar({ shift, tz, currency }: { shift: Shift | null; tz: string; cu
       <span>{t("pos.since", { time: formatDateTime(shift.opened_at, tz) })}</span>
       <span>{t("pos.orders", { count: shift.totals.orders_count })}</span>
       <span>{t("pos.expectedCash")}: {formatMoney(shift.totals.expected_cash, currency)}</span>
+      <Link to="/shift" style={{ marginInlineStart: "auto" }}>{t("pos.manageShift")}</Link>
     </div>
   );
 }

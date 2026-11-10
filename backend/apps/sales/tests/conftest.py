@@ -135,3 +135,30 @@ def card(amount, ref=None):
     if ref:
         p["external_reference"] = ref
     return p
+
+
+def refund(client, order_id, amount, reason="Wrong drink", key=None, **extra):
+    import uuid
+
+    body = {"reason": reason, "confirm_amount": amount, **extra}
+    return client.post(
+        f"/api/v1/orders/{order_id}/refunds",
+        body,
+        format="json",
+        headers={"Idempotency-Key": str(key or uuid.uuid4())},
+    )
+
+
+def close_shift(client, shift_id, actual, note=""):
+    return client.post(
+        f"/api/v1/shifts/{shift_id}/close",
+        {"actual_closing_cash": actual, "note": note},
+        format="json",
+    )
+
+
+def sell(client, shop, payments, total, qty=1, variant=None):
+    """One sale of `qty` of the variant (default Small = 65.00) -> order id."""
+    r = checkout(client, [item(variant or shop.small, qty)], payments, total)
+    assert r.status_code == 201, r.content
+    return r.json()["data"]["order_id"]

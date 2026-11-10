@@ -3,6 +3,8 @@ changes to products, prices, recipes or tax settings never change an old order o
 
 from apps.tenancy.models import OrganizationSettings
 
+from .models import Refund
+
 
 def _ts(dt):
     return dt.isoformat().replace("+00:00", "Z")
@@ -21,6 +23,31 @@ def payment_dict(p):
     else:
         out["external_reference"] = p.external_reference
     return out
+
+
+def refund_dict(order):
+    """The order's refund (or None). Needs `refund__actor` / `refund__lines` prefetched."""
+    try:
+        r = order.refund
+    except Refund.DoesNotExist:
+        return None
+    return {
+        "id": str(r.pk),
+        "created_at": _ts(r.created_at),
+        "actor": {"id": str(r.actor_id), "display_name": r.actor.display_name or r.actor.username},
+        "reason": r.reason,
+        "total_amount": str(r.total_amount),
+        "shift_id": str(r.shift_id) if r.shift_id else None,
+        "lines": [
+            {
+                "method": ln.method,
+                "amount": str(ln.amount),
+                "external_reference": ln.external_reference,
+            }
+            for ln in r.lines.all()
+        ],
+        "inventory_restored": False,
+    }
 
 
 def order_summary(order):
@@ -65,7 +92,7 @@ def order_detail(order, *, admin):
         "note": order.note,
         "items": items,
         "payments": [payment_dict(p) for p in order.payments.all()],
-        "refund": None,  # refunds arrive in Sprint 3
+        "refund": refund_dict(order),
     }
 
 
@@ -106,7 +133,44 @@ def receipt(order):
         },
         "total": str(order.total),
         "payments": [payment_dict(p) for p in order.payments.all()],
-        "refund": None,
+        "refund": refund_dict(order),
         "paper_width": s.receipt_paper_width,
         "currency": s.currency,
+    }
+
+
+def refund_row(r):
+    """One refunds-ledger row."""
+    return {
+        "id": str(r.pk),
+        "created_at": _ts(r.created_at),
+        "order_id": str(r.order_id),
+        "invoice_no": r.order.invoice_no,
+        "original_cashier": _cashier(r.order),
+        "actor": {"id": str(r.actor_id), "display_name": r.actor.display_name or r.actor.username},
+        "reason": r.reason,
+        "total_amount": str(r.total_amount),
+        "shift_id": str(r.shift_id) if r.shift_id else None,
+        "lines": [
+            {
+                "method": ln.method,
+                "amount": str(ln.amount),
+                "external_reference": ln.external_reference,
+            }
+            for ln in r.lines.all()
+        ],
+    }
+
+
+def payment_row(p):
+    """One payments-ledger row."""
+    return {
+        **payment_dict(p),
+        "id": str(p.pk),
+        "created_at": _ts(p.created_at),
+        "order_id": str(p.order_id),
+        "invoice_no": p.order.invoice_no,
+        "order_status": p.order.status,
+        "cashier": _cashier(p.order),
+        "shift_id": str(p.shift_id),
     }

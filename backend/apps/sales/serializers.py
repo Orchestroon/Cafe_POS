@@ -34,3 +34,11 @@ class CheckoutSerializer(StrictSerializerMixin, serializers.Serializer):
     payments = PaymentInputSerializer(many=True, allow_empty=True, max_length=10)
     expected_total = _StringDecimalField(max_digits=12, decimal_places=2)
     note = serializers.CharField(max_length=300, required=False, allow_blank=True, default="")
+
+
+class RefundSerializer(StrictSerializerMixin, serializers.Serializer):
+    reason = serializers.CharField(min_length=3, max_length=300)
+    confirm_amount = _StringDecimalField(max_digits=12, decimal_places=2)
+    card_external_reference = serializers.CharField(
+        max_length=100, required=False, allow_blank=True, allow_null=True
+    )

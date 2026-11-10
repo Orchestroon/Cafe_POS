@@ -98,16 +98,16 @@ Drip Café needs a web-based **POS for day-to-day sales**, not a demo.
 | D5 | Roles | Fixed roles `admin` and `barista`. No custom roles in v1. Permission checks go through one central policy layer so custom roles can be added later. | Final |
 | D6 | SaaS foundation | Add `Organization`, `Branch`, `Location`, `Register` and `OrganizationSettings` now, each seeded with one row. All tenant-owned tables carry `organization_id`. No onboarding, billing or subdomains in v1. | Final |
 | D7 | Shifts | **Per user.** Each barista opens and closes their own shift and is accountable for their own cash, even though the physical drawer is shared. One open shift per user at a time. Checkout requires the cashier's own open shift. | Final |
-| D8 | Refunds | Any Admin or Barista can refund any paid order. Full refunds only. Reason is mandatory. Fully audited (who, when, which invoice, why, amounts). No extra approval step. | Final |
-| D9 | Refund of mixed-payment orders | Refund is allocated back to the original payment methods and amounts automatically. | [DEFAULT — confirm] |
-| D10 | Drawer expenses | A Barista can record an expense paid from the drawer against their own open shift. Admins can record any expense. | [DEFAULT — confirm] |
+| D8 | Refunds | Any Admin or Barista can refund any paid order. Full refunds only. Reason is mandatory. Fully audited (who, when, which invoice, why, amounts). No extra approval step. **Confirmed by the owner (2026-11-10).** | Final |
+| D9 | Refund of mixed-payment orders | Refund is allocated back to the original payment methods and amounts automatically. **Confirmed by the owner (2026-11-10).** | Final |
+| D10 | Drawer expenses | A Barista can record an expense paid from the drawer against their own open shift. Admins can record any expense. **Confirmed by the owner (2026-11-10).** | Final |
 | D11 | Tax | Optional per organization: `tax_enabled`, `tax_rate`, `prices_include_tax`, `tax_label`, `tax_registration_number`. When enabled, the receipt shows the tax breakdown. Government e-receipt integration is out of scope. **Owner (2026-11-10): tax stays off until the Admin turns it on and types the rate; when on, it is added on top of menu prices (`prices_include_tax=False` by default).** | Final |
 | D12 | Language | English UI first. i18n infrastructure (translation keys) and RTL-ready CSS from day one. Arabic translation added later. | Final |
 | D13 | Printing | A Print button opens the browser print flow on any printer the device has (USB, Bluetooth or network, configured at OS level). Receipt layouts for thermal paper widths **58, 76, 80 and 112 mm** plus A4. The width is chosen per device (each device remembers the width of its printer; Settings holds the default). The browser cannot detect the printer's paper, so there is no auto-detection. Silent printing not required. **Confirmed by the owner (2026-11-10).** | Final |
 | D14 | Stack | Frontend: the owner's **existing React UI** (reuse its design and components). Backend: **Django + Django REST Framework + PostgreSQL**. The old Node backend is replaced and not ported. | Final |
 | D15 | Opening stock | Entered as `opening_balance` stock movements, **not** as a purchase, so it never inflates expenses. | Final |
 | D16 | Modifier groups | Reusable across products (linked many-to-many), instead of being duplicated per product. | Final (design) |
-| D17 | Card terminal reference | Optional on card payments and card refunds. | [DEFAULT — confirm] |
+| D17 | Card terminal reference | Optional on card payments and card refunds. **Confirmed by the owner (2026-11-10).** | Final |
 | D18 | Packaged goods (no recipe) | Modeled as an ingredient in `pcs` with a one-line recipe (qty 1, waste 0). No separate stock-item model. | Final (design) |
 
 ---
@@ -684,7 +684,7 @@ Rules:
    - If any cash line exists, the **refunding user** must have an open shift (otherwise 409 `SHIFT_NOT_OPEN`). `refund.shift` is that shift, so the cash leaves that user's expected cash.
    - For a card-only refund, `refund.shift` is the user's open shift if one exists, else null.
 7. Set `order.status = refunded`.
-8. **No stock restoration.** The response includes `inventory_restored: false`. If an unopened packaged item is returned to stock, the Admin uses a stock adjustment.
+8. **No stock restoration** (owner, 2026-11-10: the Admin adjusts stock manually if needed). The response includes `inventory_restored: false`. If an unopened packaged item is returned to stock, the Admin uses a stock adjustment.
 9. Record the audit event `refund.created` with invoice_no, actor, reason, lines and original cashier.
 10. The UI states that card refunds must be performed on the external terminal by staff.
 
@@ -696,7 +696,7 @@ Rules:
    - Creates **one** `Expense`:
      - `type = purchase`, `category = purchase`, `amount = total`.
      - `payment_method` and `source` come from the purchase.
-     - If `source = cash_drawer`, the poster's open shift is required (otherwise 409 `SHIFT_NOT_OPEN`).
+     - If `source = cash_drawer`, the poster's own open shift is required, **an Admin included** (owner, 2026-11-10; otherwise 409 `SHIFT_NOT_OPEN`). The expense is attached to that shift.
    - Sets `status = posted`, `posted_at`, `posted_by`.
    - Records an audit event.
 3. If the purchase is already posted and the call uses a different key, return 409 `PURCHASE_ALREADY_POSTED`.
@@ -709,6 +709,7 @@ Rules:
   - Category and description are required.
 - **Void:** `POST /expenses/{id}/void {reason}`, Admin only.
   - Purchase-type expenses cannot be voided this way (422 `EXPENSE_NOT_VOIDABLE`).
+  - A drawer expense whose shift is already **closed** cannot be voided either (422 `EXPENSE_NOT_VOIDABLE`, owner kickoff 2026-11-10), and neither can an already voided one. This keeps a closed shift's numbers true as well as frozen.
   - Voided expenses are excluded from reports and from open-shift expected cash.
   - Records an audit event.
 - Expenses are never edited.
@@ -768,6 +769,8 @@ All reports are Admin-only and are derived from persisted records only. Period f
 | `purchases-expenses` | From `Expense` only (status=posted), so no double counting: `purchase_total`, `general_expenses_total`, `cash_drawer_total`, `external_total`, `breakdown` by category |
 | `shifts` | `shifts_count`, `open_count`, `closed_count`, `expected_cash_total`, `actual_cash_total`, `total_difference`, `shifts[]` (user, opened_at, closed_at, opening_cash, expected, actual, difference, orders_count) |
 
+**Dates and filters (implemented in Sprint 3):** orders, their payments and their items are dated by the order's `created_at`; refunds and their lines by the refund's `created_at`; expenses by `paid_at`; stock movements by `occurred_at`; shifts by `opened_at`. Orders and payments share the order's date so the invariant below holds at any midnight boundary. `cashier_id` filters orders by their cashier and refunds by the **refunding** user; `shift_id` filters orders and payments by their shift and refunds by the refunding user's shift. With no dates a report covers the café's local today, and `meta.range` echoes the resolved range.
+
 **Reconciliation invariant (tested):** for any period, `cash_collected + card_collected == collected`, and `cash_refunded + card_refunded == refunds`.
 
 ---
@@ -810,7 +813,7 @@ All reports are Admin-only and are derived from persisted records only. Period f
 | 422 | `INVALID_PAYMENT` | Duplicate method, tendered < amount, amount ≤ 0 |
 | 422 | `PAYMENT_MISMATCH` | Σ payments ≠ total |
 | 422 | `PARTIAL_REFUND_NOT_SUPPORTED` | `confirm_amount` ≠ total |
-| 422 | `EXPENSE_NOT_VOIDABLE` | Voiding a purchase expense |
+| 422 | `EXPENSE_NOT_VOIDABLE` | Voiding a purchase expense, an already voided one, or a drawer expense of a closed shift |
 | 422 | `LAST_ADMIN` | Deactivating or demoting the last admin |
 | 422 | `INVALID_RECIPE` | Recipe validation failed |
 | 429 | `RATE_LIMITED` | Login throttled |
@@ -1286,7 +1289,7 @@ Days are guidance for a 14-day schedule. Each sprint ends with a STOP for owner 
 - Suppliers; purchases (draft, edit, delete draft, idempotent post creating movements and one expense).
 - Expenses (Admin and Barista rules, void).
 - All six reports.
-- Audit events endpoint.
+- ~~Audit events endpoint~~ — moved to Sprint 4 (owner, 2026-11-10).
 
 **Frontend:**
 - Shift page and close flow; admin shifts.
@@ -1295,7 +1298,7 @@ Days are guidance for a 14-day schedule. Each sprint ends with a STOP for owner 
 - Purchases with the pack helper.
 - Expenses.
 - Reports pages.
-- Audit log viewer.
+- ~~Audit log viewer~~ — moved to Sprint 4 (owner, 2026-11-10).
 - Dashboard.
 
 **Tests (minimum):**
@@ -1334,6 +1337,7 @@ Days are guidance for a 14-day schedule. Each sprint ends with a STOP for owner 
   - purchase post;
   - shift close;
   - a barista blocked from admin.
+- **Audit log:** `GET /audit-events` and the admin viewer (moved here from Sprint 3 by the owner, 2026-11-10).
 - **Permission sweep:** every endpoint × role. Confirm no admin data leaks in barista responses (e.g. ingredient costs).
 - **Network-failure UX (AT-20):**
   - simulate a timeout after the server commits;
@@ -1449,9 +1453,9 @@ Any unresolved issue affecting payment collection, financial integrity, security
 
 | Item | Default implemented | Where to change |
 |---|---|---|
-| D9 Mixed-payment refund allocation | Back to the original methods and amounts | `sales/services.py::allocate_refund` |
-| D10 Barista drawer expenses | Allowed, forced to own open shift | `core/policy.py` + `expenses/services.py` |
-| D17 Card terminal reference | Optional | Serializer flag |
+| D9 Mixed-payment refund allocation | **Confirmed (2026-11-10):** back to the original methods and amounts | `sales/services.py::allocate_refund` |
+| D10 Barista drawer expenses | **Confirmed (2026-11-10):** allowed, forced to own open shift | `core/policy.py` + `expenses/services.py` |
+| D17 Card terminal reference | **Confirmed (2026-11-10):** optional | Serializer flag |
 | Tax pricing default | **Owner (2026-11-10): tax added on top** (`prices_include_tax=False`), tax disabled until the Admin enables it and types the rate | `OrganizationSettings` |
 | Barista order visibility | Today's orders (all cashiers) + exact invoice lookup | `sales/selectors.py` |
 | Hosting / domain | Generic Linux VPS with Docker | Sprint 5 |

@@ -96,4 +96,5 @@ export const api = {
     (await request<T>("POST", path, body, undefined, { headers: { "Idempotency-Key": key }, timeoutMs })).data,
   patch: async <T>(path: string, body: unknown) => (await request<T>("PATCH", path, body)).data,
   put: async <T>(path: string, body: unknown) => (await request<T>("PUT", path, body)).data,
+  del: async (path: string) => { await request<null>("DELETE", path); },
 };
