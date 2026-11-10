@@ -6,7 +6,7 @@ Work one sprint at a time and stop for owner approval at the end of each sprint.
 ## Testing
 - Keep test output quiet: `pytest -q --tb=short` (already the default in `backend/pyproject.toml`).
 - Backend needs Python 3.12 and Postgres, so run it in Docker from the repo root:
-  `docker compose up -d --wait db` then `docker compose run --rm backend pytest`
+  `docker compose up -d --wait db` then `docker compose run --rm backend pytest` (`docker compose up -d --wait` starts the whole stack: db, backend, frontend)
   (also `ruff check .`, `ruff format --check .`, `python manage.py makemigrations --check --dry-run`).
 - Frontend (from `frontend/`): `npm run typecheck && npm run lint && npm run build`.
 
