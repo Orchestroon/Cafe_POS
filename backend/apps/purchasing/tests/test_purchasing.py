@@ -189,6 +189,8 @@ def test_at16_post_twice_adds_stock_and_cost_once(admin_c, admin, shop):
     assert mv.source_type == "purchase_item" and mv.created_by == admin
     d = data(first)
     assert d["status"] == "posted" and d["posted_by"]["id"] == str(admin.pk) and d["posted_at"]
+    # spec 9.4: the ids of what the post created
+    assert d["stock_movement_ids"] == [str(mv.pk)] and d["expense_id"] == str(exp.pk)
     assert AuditEvent.objects.filter(action="purchase.posted").count() == 1
     other = post_it(admin_c, pid)  # a different key
     assert other.status_code == 409 and other.json()["error"]["code"] == "PURCHASE_ALREADY_POSTED"
@@ -295,3 +297,14 @@ def test_patch_items_missing_fields_is_400_not_500(admin_c, shop, item):
     r = admin_c.patch(f"/api/v1/purchases/{pid}", {"items": [item]}, format="json")
     assert r.status_code == 400 and r.json()["error"]["code"] == "VALIDATION_ERROR"
     assert len(data(admin_c.get(f"/api/v1/purchases/{pid}"))["items"]) == 1  # untouched
+
+
+def test_post_creates_a_missing_balance_row_instead_of_a_500(admin_c, shop):
+    from apps.inventory.models import StockBalance
+
+    ing = shop.ing["Whole Milk"]
+    StockBalance.objects.filter(ingredient=ing).delete()
+    pid = data(draft(admin_c, shop))["id"]
+    r = post_it(admin_c, pid)
+    assert r.status_code == 200, r.content
+    assert balance(ing) == Decimal("12000.000")

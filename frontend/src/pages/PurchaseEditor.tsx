@@ -24,7 +24,9 @@ const derive = (r: Row) => {
   const qty = pack ? (isDecimal(r.pack_count, 3) && isDecimal(r.pack_size, 3) ? packQty(r.pack_count, r.pack_size) : "") : r.qty;
   const unit = pack ? (isDecimal(r.pack_cost, 4) && isDecimal(r.pack_size, 3) ? unitCostFromPack(r.pack_cost, r.pack_size) : "") : r.unit_cost;
   const total = isDecimal(qty, 3) && isDecimal(unit, 4) ? lineTotal(qty, unit) : "";
-  return { qty, unit, total };
+  // Packs x pack cost vs the stored line total: differs by cents when the 4-dp unit cost was rounded.
+  const packTotal = pack && isDecimal(r.pack_count, 3) && isDecimal(r.pack_cost, 4) ? lineTotal(r.pack_count, r.pack_cost) : "";
+  return { qty, unit, total, drift: packTotal && total && packTotal !== total ? packTotal : "" };
 };
 
 export function PurchaseEditor() {
@@ -194,7 +196,7 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
                     <td>{pack && <input aria-label={t("purchases.packCost")} className="form-input inline-input num" inputMode="decimal" value={r.pack_cost} onChange={(e) => setRow(r.key, { pack_cost: e.target.value })} />}</td>
                     <td className="num mono">{pack ? `${d.qty} ${unit}` : <input aria-label={t("inventory.qty")} className="form-input inline-input num" inputMode="decimal" value={r.qty} onChange={(e) => setRow(r.key, { qty: e.target.value })} />}</td>
                     <td className="num mono">{pack ? d.unit : <input aria-label={t("purchases.unitCost")} className="form-input inline-input num" inputMode="decimal" value={r.unit_cost} onChange={(e) => setRow(r.key, { unit_cost: e.target.value })} />}</td>
-                    <td className="num">{d.total}</td>
+                    <td className="num">{d.total}{d.drift && <div className="form-hint" role="note">{t("purchases.roundingHint", { packs: d.drift, stored: d.total })}</div>}</td>
                     <td><button className="icon-btn" aria-label={t("common.remove")} onClick={() => { setDirty(true); setRows(rows.filter((x) => x.key !== r.key)); }}>✕</button></td>
                   </tr>
                 );

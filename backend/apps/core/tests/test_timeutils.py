@@ -27,3 +27,20 @@ def test_parse_local_date():
     assert parse_local_date("2026-11-08") == date(2026, 11, 8)
     with pytest.raises(ValidationError):
         parse_local_date("08/11/2026")
+
+
+@pytest.mark.parametrize("bad", ["0001-01-01", "9999-12-31", "1999-12-31", "2101-01-01"])
+def test_parse_local_date_rejects_years_outside_the_window(bad):
+    with pytest.raises(ValidationError):
+        parse_local_date(bad)
+    assert parse_local_date("2000-01-01") and parse_local_date("2100-12-31")
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "path",
+    ["reports/sales-summary", "refunds", "payments", "expenses", "shifts", "orders"],
+)
+@pytest.mark.parametrize("q", ["from=0001-01-01", "to=9999-12-31"])
+def test_extreme_dates_are_400_not_500(admin_c, path, q):
+    assert admin_c.get(f"/api/v1/{path}?{q}").status_code == 400

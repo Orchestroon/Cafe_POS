@@ -8,9 +8,10 @@ from apps.audit.services import record
 from apps.core.exceptions import ApiError
 from apps.core.money import q_cost, q_money, q_qty
 from apps.expenses.services import create_purchase_expense
-from apps.inventory.models import Ingredient, StockMovement
+from apps.inventory.models import Ingredient, StockBalance, StockMovement
 from apps.inventory.services import lock_balances
 from apps.shifts import services as shift_services
+from apps.tenancy.seed import default_location
 
 from .models import Purchase, PurchaseItem, Supplier
 
@@ -184,13 +185,19 @@ def post_purchase(actor, pk, key) -> tuple[int, dict]:
         raise _bad("items", "A purchase needs at least one item.")
     if p.total <= 0:
         raise _bad("total", "The purchase total must be greater than zero.")
-    balances = lock_balances(org, sorted({i.ingredient_id for i in items}))
+    ids = sorted({i.ingredient_id for i in items})
+    balances = lock_balances(org, ids)
+    for missing in set(ids) - set(balances):  # same safeguard as checkout: never a KeyError/500
+        balances[missing] = StockBalance.objects.create(
+            organization=org, ingredient_id=missing, location=default_location(org)
+        )
     now = timezone.now()
+    movement_ids = []
     for item in items:
         bal = balances[item.ingredient_id]
         bal.qty = q_qty(bal.qty + item.qty)
         bal.save(update_fields=["qty", "updated_at"])
-        StockMovement.objects.create(
+        mv = StockMovement.objects.create(
             organization=org,
             ingredient_id=item.ingredient_id,
             location=bal.location,
@@ -202,6 +209,7 @@ def post_purchase(actor, pk, key) -> tuple[int, dict]:
             created_by=actor,
             occurred_at=now,
         )
+        movement_ids.append(str(mv.pk))
     expense = create_purchase_expense(actor, p, shift)
     p.status, p.posted_at, p.posted_by = Purchase.Status.POSTED, now, actor
     p.save()
@@ -218,4 +226,6 @@ def post_purchase(actor, pk, key) -> tuple[int, dict]:
             "shift_id": str(shift.pk) if shift else None,
         },
     )
-    return 200, purchase_dict(detail(org, p.pk))
+    # Spec 9.4: the purchase fields plus the ids of what the post created.
+    body = purchase_dict(detail(org, p.pk))
+    return 200, {**body, "stock_movement_ids": movement_ids, "expense_id": str(expense.pk)}

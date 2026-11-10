@@ -3,6 +3,8 @@
 Lock order: the refunding user's open shift -> the order row. A shift close takes the same shift
 lock first, so a refund can never slip into a shift that is being closed."""
 
+from django.db import IntegrityError, transaction
+
 from apps.audit.services import record
 from apps.core.exceptions import ApiError
 from apps.core.money import q_money
@@ -41,15 +43,23 @@ def refund_order(user, order_id, data, key) -> tuple[int, dict]:
             400,
             {"fields": {"card_external_reference": "The order has no card payment."}},
         )
-    refund = Refund.objects.create(
-        organization=org,
-        order=order,
-        actor=user,
-        shift=shift,
-        reason=data["reason"],
-        total_amount=order.total,
-        idempotency_key=key,
-    )
+    try:
+        with transaction.atomic():  # savepoint: a clash must not poison the outer transaction
+            refund = Refund.objects.create(
+                organization=org,
+                order=order,
+                actor=user,
+                shift=shift,
+                reason=data["reason"],
+                total_amount=order.total,
+                idempotency_key=key,
+            )
+    except IntegrityError:
+        # The idempotency scope is per order, so the same key sent for another order collides here
+        # (order is already locked and unrefunded, so this can only be the key).
+        raise ApiError(
+            "IDEMPOTENCY_CONFLICT", "This Idempotency-Key was used with a different request.", 409
+        ) from None
     lines = [  # D9: one line per original payment, same method and amount
         RefundLine.objects.create(
             organization=org,

@@ -53,6 +53,15 @@ def create_expense(actor, data) -> Expense:
         method = data.get("payment_method", Expense.Method.CASH)
     else:
         source, method = Expense.Source.CASH_DRAWER, Expense.Method.CASH
+    paid_at = data.get("paid_at") if has_perm(actor, "expenses.view_all") else None  # Admin only
+    if paid_at and source == Expense.Source.CASH_DRAWER:
+        # A drawer expense belongs to the open shift; back-dating would split it from reports.
+        raise ApiError(
+            "VALIDATION_ERROR",
+            "Validation failed.",
+            400,
+            {"fields": {"paid_at": "A drawer expense is paid now; paid_at is for external ones."}},
+        )
     shift = None
     if source == Expense.Source.CASH_DRAWER:
         if method != Expense.Method.CASH:
@@ -75,6 +84,7 @@ def create_expense(actor, data) -> Expense:
         source=source,
         shift=shift,
         created_by=actor,
+        **({"paid_at": paid_at} if paid_at else {}),
     )
     record(actor, "expense.created", exp, _audit_summary(exp))
     return exp

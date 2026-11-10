@@ -277,3 +277,13 @@ def test_closed_shift_cannot_take_a_refund(barista_c, shop, shift):
     r = refund(barista_c, oid, "65.00")
     assert r.status_code == 409 and r.json()["error"]["code"] == "SHIFT_NOT_OPEN"
     assert CashierShift.objects.get().status == "closed"
+
+
+def test_the_same_key_on_another_order_is_409_idempotency_conflict(barista_c, shop, shift):
+    o1 = sell(barista_c, shop, [cash("65.00")], "65.00")
+    o2 = sell(barista_c, shop, [cash("65.00")], "65.00")
+    key = uuid.uuid4()
+    assert refund(barista_c, o1, "65.00", key=key).status_code == 201
+    r = refund(barista_c, o2, "65.00", key=key)
+    assert r.status_code == 409 and r.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    assert Refund.objects.count() == 1 and Order.objects.get(pk=o2).status == "paid"

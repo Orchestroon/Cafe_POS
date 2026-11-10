@@ -456,7 +456,8 @@
     "postWarning": "Posting adds the stock and records an expense of {{total}}. It cannot be undone or edited.",
     "postUnsure": "We could not confirm the post. Tap Retry: it is safe, it will not post twice.",
     "editTitle": "Edit draft",
-    "newTitle": "New purchase"
+    "newTitle": "New purchase",
+    "roundingHint": "Packs × pack cost is {{packs}}, but the stored cost per unit is rounded to 4 decimals, so the line total is {{stored}}."
   },
   "reports": {
     "today": "Today",

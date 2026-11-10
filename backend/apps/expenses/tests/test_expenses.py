@@ -173,3 +173,41 @@ def test_expense_and_sales_combine_in_expected_cash(barista_c, shop, shift):
     post(barista_c, amount="12.50")
     d = data(close_shift(barista_c, shift["id"], "152.50"))
     assert d["expected_cash"] == "152.50" and d["difference"] == "0.00"
+
+
+def test_admin_can_back_date_an_external_expense_not_into_the_future(admin_c):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    past = (timezone.now() - timedelta(days=3)).replace(microsecond=0)
+    d = data(post(admin_c, paid_at=past.isoformat()))
+    assert Expense.objects.get().paid_at == past and d["paid_at"].startswith(
+        past.strftime("%Y-%m-%d")
+    )
+    future = (timezone.now() + timedelta(hours=1)).isoformat()
+    r = post(admin_c, paid_at=future)
+    assert r.status_code == 400 and Expense.objects.count() == 1
+    assert post(admin_c, paid_at="yesterday").status_code == 400
+
+
+def test_a_barista_paid_at_is_ignored(barista_c, shift):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    before = timezone.now()
+    post(barista_c, paid_at=(before - timedelta(days=5)).isoformat())
+    assert Expense.objects.get().paid_at >= before
+
+
+def test_admin_drawer_expense_cannot_be_back_dated(admin_c):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    open_shift(admin_c, "0.00")
+    r = post(
+        admin_c, source="cash_drawer", paid_at=(timezone.now() - timedelta(days=1)).isoformat()
+    )
+    assert r.status_code == 400 and Expense.objects.count() == 0

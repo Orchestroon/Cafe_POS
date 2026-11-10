@@ -21,7 +21,7 @@ Branch `sprint-3-operations-reports` (from `main` after the Sprint 2 merge). Not
 **Not built, by owner decision:** `GET /audit-events` and the Audit Log Viewer (Sprint 4).
 
 ## Checks (run in Docker, DB port 5433)
-- Backend: all tests pass (incl. the new refund, shift, expense, purchasing and report suites, the permission matrix extended to every new route, and real-thread races), `ruff check`, `ruff format --check`, `makemigrations --check`, `spectacular --validate --fail-on-warn` clean. Coverage 99%.
+- Backend: **571 passed** (`docker compose run --rm backend pytest --no-cov -v`; incl. the new refund, shift, expense, purchasing and report suites, the permission matrix extended to every new route, and real-thread races), `ruff check`, `ruff format --check`, `makemigrations --check`, `spectacular --validate --fail-on-warn` clean. Coverage 99%.
 - Frontend: `npm run typecheck`, `npm run lint`, `npm run build` pass.
 
 ## Tests mapped to the spec
@@ -43,6 +43,21 @@ AT-14, AT-15, mixed allocation, cash refund without shift (409), partial rejecte
 - Lock order checked: checkout `shift → counter → balances`; refund `shift → order`; close `shift`; drawer expense `shift`; void `shift → expense`; purchase post `shift → purchase → balances (id order)`. No cycles.
 - Tenant isolation: every queryset is filtered by organization; other-café ids return 404 or empty lists (tested per route).
 - Error handling: bad UUIDs, dates, enums and report params give 400; no 500 found in the new routes.
+
+## Independent audit (read-only) — findings fixed
+- **M1** `parse_local_date` accepts only years 2000–2100; `0001-01-01` / `9999-12-31` were a 500 (`OverflowError`), now 400 on every report/ledger/list that takes `from`/`to` (tests over 6 routes).
+- **M2** Dashboard "Open shifts" reads `GET /shifts?status=open&page_size=1` (counts shifts forgotten from earlier days).
+- **M3** `POST /purchases/{id}/post` keeps the purchase body and adds `stock_movement_ids` and `expense_id` (spec 9.4).
+- **M4** `POST /expenses` takes an optional `paid_at` for an Admin (not in the future); a Barista's is ignored; an Admin's *drawer* expense with `paid_at` is a 400 (it belongs to the open shift, back-dating would split it from the reports).
+- **L2** The same refund key on another order is now 409 `IDEMPOTENCY_CONFLICT` (was a generic 400).
+- **L3** The purchase editor shows a non-blocking hint when packs × pack cost differs from the stored line total because the unit cost is rounded to 4 decimals (`purchases.roundingHint`, empty in `ar.json`).
+- **L5** Purchase post creates a missing `StockBalance` row like checkout does (never a `KeyError` 500).
+- **L6** Real-thread races added: close vs cash refunds, close vs drawer expenses, close vs expense voids (each asserts the frozen snapshot equals what committed).
+
+## Audit items left as documented deviations (owner to confirm)
+- **L1** Field names differ from the §9.4 examples: the refund response has `status` (spec: `order_status`) and the shift close response nests the figures under `totals` (spec: flat).
+- **L4** `purchases-expenses` ignores `cashier_id`/`shift_id` (expenses have no cashier filter in §8.13), and `top-products` returns at most 100 rows.
+- The five deviations above (no migration for movement choices; Barista 404 on another user's shift; post returns 200; report date basis; closed-shift expense not voidable) were verified against the spec by the audit. The post body now also matches §9.4 for the ids.
 
 ## Known limits
 - The browser UI was **not** exercised by me (no Playwright until Sprint 4); only typecheck, lint, build and the API tests ran. Please run the checklist below.

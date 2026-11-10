@@ -3,6 +3,8 @@ from zoneinfo import ZoneInfo
 
 from rest_framework.exceptions import ValidationError
 
+MIN_YEAR, MAX_YEAR = 2000, 2100
+
 
 def local_date_range(date_from: date, date_to: date, tz_name: str):
     """Local dates [from, to] inclusive -> UTC range [from 00:00, to+1 00:00) (spec 5.7)."""
@@ -14,9 +16,13 @@ def local_date_range(date_from: date, date_to: date, tz_name: str):
 
 def parse_local_date(value: str, field: str = "date") -> date:
     try:
-        return date.fromisoformat(value)
+        d = date.fromisoformat(value)
     except (TypeError, ValueError):
         raise ValidationError({field: "Use YYYY-MM-DD."}) from None
+    # Outside this window the timezone conversion overflows (a 500), and no café data exists there.
+    if not MIN_YEAR <= d.year <= MAX_YEAR:
+        raise ValidationError({field: f"Year must be between {MIN_YEAR} and {MAX_YEAR}."})
+    return d
 
 
 def parse_range(params, tz_name: str, *, default_today: bool):

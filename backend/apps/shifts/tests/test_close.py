@@ -5,7 +5,8 @@ import pytest
 from django.db import connection
 
 from apps.audit.models import AuditEvent
-from apps.sales.models import Order
+from apps.expenses.models import Expense
+from apps.sales.models import Order, Refund
 from apps.sales.tests.conftest import (
     card,
     cash,
@@ -172,3 +173,91 @@ def test_close_racing_checkouts_never_loses_a_sale(org, shop):
     assert shift.totals_snapshot["cash_sales"] == f"{65 * sold}.00"
     assert str(shift.expected_cash) == f"{10 + 65 * sold}.00"
     assert all(x in (201, 409) for x in codes if isinstance(x, int))
+
+
+def _race(jobs):
+    """Run callables at the same instant; each returns a value; DB connections are closed."""
+    start, out = threading.Barrier(len(jobs)), []
+
+    def run(job):
+        try:
+            start.wait()
+            out.append(job())
+        finally:
+            connection.close()
+
+    ts = [threading.Thread(target=run, args=(j,)) for j in jobs]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    return out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_close_racing_cash_refunds_never_loses_a_refund(org, shop):
+    user = make_user(org, "racer", "barista")
+    c = client_for(user)
+    s = open_shift(c, "500.00")
+    orders = [sell(c, shop, [cash("65.00")], "65.00") for _ in range(4)]
+    jobs = [
+        lambda o=o: ("refund", refund(client_for(user), o, "65.00").status_code) for o in orders
+    ]
+    jobs.append(lambda: ("close", close_shift(client_for(user), s["id"], "0.00").status_code))
+    out = _race(jobs)
+    ok = sum(1 for k, code in out if k == "refund" and code == 201)
+    assert all(code in (201, 409) for k, code in out if k == "refund")
+    shift = CashierShift.objects.get()
+    assert shift.status == "closed" and ("close", 200) in out
+    # every committed refund is inside the frozen totals; every later one was refused
+    assert shift.totals_snapshot["cash_refunds"] == f"{65 * ok}.00"
+    assert str(shift.expected_cash) == f"{500 + 65 * 4 - 65 * ok}.00"
+    assert Refund.objects.filter(shift=shift).count() == ok
+
+
+@pytest.mark.django_db(transaction=True)
+def test_close_racing_drawer_expenses_never_loses_an_expense(org):
+    user = make_user(org, "racer", "barista")
+    c = client_for(user)
+    s = open_shift(c, "100.00")
+    body = {"category": "supplies", "description": "Ice", "amount": "10.00"}
+    jobs = [
+        lambda: ("exp", client_for(user).post("/api/v1/expenses", body, format="json").status_code)
+        for _ in range(5)
+    ]
+    jobs.append(lambda: ("close", close_shift(client_for(user), s["id"], "0.00").status_code))
+    out = _race(jobs)
+    ok = sum(1 for k, code in out if k == "exp" and code == 201)
+    assert all(code in (201, 409) for k, code in out if k == "exp")
+    shift = CashierShift.objects.get()
+    assert shift.status == "closed" and ("close", 200) in out
+    assert shift.totals_snapshot["drawer_expenses"] == f"{10 * ok}.00"
+    assert str(shift.expected_cash) == f"{100 - 10 * ok}.00"
+    assert Expense.objects.filter(shift=shift, status="posted").count() == ok
+
+
+@pytest.mark.django_db(transaction=True)
+def test_close_racing_expense_voids_keeps_the_snapshot_true(org, admin):
+    user = make_user(org, "racer", "barista")
+    c = client_for(user)
+    s = open_shift(c, "100.00")
+    body = {"category": "supplies", "description": "Ice", "amount": "10.00"}
+    ids = [c.post("/api/v1/expenses", body, format="json").json()["data"]["id"] for _ in range(4)]
+    jobs = [
+        lambda i=i: (
+            "void",
+            client_for(admin)
+            .post(f"/api/v1/expenses/{i}/void", {"reason": "entered twice"}, format="json")
+            .status_code,
+        )
+        for i in ids
+    ]
+    jobs.append(lambda: ("close", close_shift(client_for(user), s["id"], "0.00").status_code))
+    out = _race(jobs)
+    assert all(code in (200, 422) for k, code in out if k == "void")
+    shift = CashierShift.objects.get()
+    voided = Expense.objects.filter(shift=shift, status="voided").count()
+    assert shift.status == "closed" and ("close", 200) in out
+    assert voided == sum(1 for k, code in out if k == "void" and code == 200)
+    # the frozen figure equals what is still posted: a void is never half-applied to a closed shift
+    posted = Expense.objects.filter(shift=shift, status="posted").count()
+    assert shift.totals_snapshot["drawer_expenses"] == f"{10 * posted}.00"
+    assert str(shift.expected_cash) == f"{100 - 10 * posted}.00"
