@@ -1,17 +1,17 @@
 # Progress
-Current sprint: 3 — Daily operations — status: implemented on branch `sprint-3-operations-reports`, audit findings fixed (571 backend tests pass), waiting for the owner's review and manual test (report: `docs/sprints/sprint-3-report.md`). Not pushed, not merged.
+Current sprint: 4 — Stabilization — status: not started (waiting for the owner's kickoff). Sprint 3 is finalized and owner-approved (report: `docs/sprints/sprint-3-report.md`).
 
 ## Done
-- Sprint 3 (implemented, awaiting owner approval, branch `sprint-3-operations-reports`): shift close/list/detail, full refunds + refund/payment ledgers, suppliers/purchases (idempotent post), expenses (drawer rules, void), six reports, dashboard and all Sprint 3 screens. Audit log endpoint and viewer deferred to Sprint 4 by the owner. Report: `docs/sprints/sprint-3-report.md`. Independent audit M1–M4, L2, L3, L5, L6 fixed; L1 and L4 stay as deviations (below).
+- Sprint 3 (finalized and approved by the owner 2026-11-10 after the manual browser test, incl. the documented deviations; merged into `main` locally, not pushed; 571 backend tests pass): shift close/list/detail, full refunds + refund/payment ledgers, suppliers/purchases (idempotent post), expenses (drawer rules, void), six reports, dashboard and all Sprint 3 screens. Audit log endpoint and viewer deferred to Sprint 4 by the owner. Report: `docs/sprints/sprint-3-report.md`. Independent audit M1–M4, L2, L3, L5, L6 fixed; L1 and L4 stay as deviations (below).
 - Sprint 0 (approved, `c1d9c10`): audit, restructure (`legacy/`, `backend/`, `frontend/`), Django bootstrap, Postgres compose, Vite + React + TS, CI workflow.
 - Sprint 2 (finalized and approved by the owner 2026-11-10; merged into `main` via PR #1): recipes, modifiers, shifts open/current, pricing + consumption engines, quote, idempotent checkout, orders, receipt, POS screen, plus both audits' fixes. 388 backend tests pass; frontend typecheck/lint/build pass; owner's manual browser test passed. Report: `docs/sprints/sprint-2-report.md`.
 - Sprint 1 (finalized 2026-11-08, approved incl. deviation 9, CI passing on `main` per owner): core (tenant base, append-only, policy, idempotency, audit, time utils), tenancy + settings, auth + users (LAST_ADMIN, session invalidation, DatabaseCache throttling), catalog, inventory ledger, `seed_demo`, frontend shell (legacy theme, logical CSS, i18n/RTL) and all Sprint 1 admin screens. 188 backend tests pass (incl. post-audit fixes: `NUM_PROXIES`, LAST_ADMIN lock order, locked audited updates, DB errors → 400); frontend typecheck/lint/build pass. Report: `docs/sprints/sprint-1-report.md`.
 
 ## In progress
-- Nothing. Sprint 3 is waiting for the owner's manual test (checklist in the Sprint 3 report).
+- Nothing. Sprint 4 starts on the owner's go-ahead.
 
 ## Next
-- Owner reviews and tests Sprint 3; then merge `sprint-3-operations-reports`.
+- Push `main` when the owner says so.
 - Sprint 4 (stabilization): Playwright E2E, permission sweep, **audit log endpoint and viewer** (moved from Sprint 3), responsive/print QA, i18n coverage.
 
 ## Owner decisions (Sprint 3 kickoff, 2026-11-10)
@@ -22,6 +22,9 @@ Current sprint: 3 — Daily operations — status: implemented on branch `sprint
 - A drawer expense of a closed shift cannot be voided (`EXPENSE_NOT_VOIDABLE`).
 - Audit log endpoint and viewer stay in Sprint 4. D12: new i18n keys go in both `en.json` and `ar.json` (empty values in `ar.json`).
 - Commits are allowed again for Sprint 3 (Conventional Commits, no attribution trailers); the branch is not pushed or merged until the owner says so.
+
+## Owner approval (Sprint 3, 2026-11-10)
+- Manual browser test completed; Sprint 3 approved with the deviations listed in the Sprint 3 report and below (S3 entries).
 
 ## Owner decisions (Sprint 2 kickoff, 2026-11-10)
 - Printer (D13) confirmed: browser print; paper widths 58/76/80/112 mm + A4 chosen per device; no auto-detection.

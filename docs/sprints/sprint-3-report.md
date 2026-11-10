@@ -1,6 +1,6 @@
 # Sprint 3 — Daily operations: report
 
-Branch `sprint-3-operations-reports` (from `main` after the Sprint 2 merge). Not pushed, not merged: waiting for the owner.
+Branch `sprint-3-operations-reports` (from `main` after the Sprint 2 merge). **Status: finalized and approved by the owner (2026-11-10)** after the manual browser test, including the deviations below. Merged into `main` locally; not pushed.
 
 ## Delivered
 **Backend**
