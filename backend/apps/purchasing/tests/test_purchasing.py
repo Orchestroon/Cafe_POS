@@ -285,3 +285,13 @@ def test_racing_posts_with_different_keys_post_once(org, admin, shop):
     [t.join() for t in ts]
     assert sorted(codes) == [200, 409]
     assert balance(shop.ing["Whole Milk"]) == Decimal("17000.000") and Expense.objects.count() == 1
+
+
+@pytest.mark.parametrize(
+    "item", [{}, {"qty": "1.000"}, {"ingredient_id": "x", "qty": "1.000", "unit_cost": "1.0000"}]
+)
+def test_patch_items_missing_fields_is_400_not_500(admin_c, shop, item):
+    pid = data(draft(admin_c, shop))["id"]
+    r = admin_c.patch(f"/api/v1/purchases/{pid}", {"items": [item]}, format="json")
+    assert r.status_code == 400 and r.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert len(data(admin_c.get(f"/api/v1/purchases/{pid}"))["items"]) == 1  # untouched

@@ -33,6 +33,12 @@ class PurchaseItemInputSerializer(StrictSerializerMixin, serializers.Serializer)
     pack_size = QtyField(required=False, allow_null=True, min_value=Decimal("0.001"))
 
     def validate(self, attrs):
+        # On a PATCH the root is `partial`, which DRF also applies to these nested fields.
+        missing = {
+            f: "This field is required." for f in ("ingredient_id", "unit_cost") if f not in attrs
+        }
+        if missing:
+            raise serializers.ValidationError(missing)
         count, size, qty = attrs.get("pack_count"), attrs.get("pack_size"), attrs.get("qty")
         if (count is None) != (size is None):
             raise serializers.ValidationError("pack_count and pack_size go together.")

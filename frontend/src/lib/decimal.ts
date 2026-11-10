@@ -44,3 +44,26 @@ export function perUnitQty(baseQty: string, wastePct: string): string {
   const num = base * (10000n + waste);
   return fromUnits((num + 5000n) / 10000n, 3);
 }
+
+/** Pack helper (spec 10.6): cost per base unit (4 dp) = pack cost / pack size, half up. */
+export function unitCostFromPack(packCost: string, packSize: string): string {
+  const cost = toUnits(packCost, 4);
+  const size = toUnits(packSize, 3);
+  if (size === 0n) return "";
+  return fromUnits((cost * 1000n * 2n + size) / (size * 2n), 4);
+}
+
+/** Pack helper: qty (3 dp) = pack_count x pack_size, half up. */
+export function packQty(count: string, size: string): string {
+  return fromUnits((toUnits(count, 3) * toUnits(size, 3) + 500n) / 1000n, 3);
+}
+
+/** Line total preview (2 dp) = qty (3 dp) x unit cost (4 dp), half up. The server's figure is final. */
+export function lineTotal(qty: string, unitCost: string): string {
+  return fromUnits((toUnits(qty, 3) * toUnits(unitCost, 4) + 50000n) / 100000n, 2);
+}
+
+/** Pack cost (4 dp) = unit cost (4 dp) x pack size (3 dp); lets an existing draft show its pack price. */
+export function packCostFrom(unitCost: string, packSize: string): string {
+  return fromUnits((toUnits(unitCost, 4) * toUnits(packSize, 3) + 500n) / 1000n, 4);
+}
