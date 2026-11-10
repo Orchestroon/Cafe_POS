@@ -8,6 +8,7 @@ import "./i18n";
 import "./styles/theme.css";
 import "./styles/rtl.css";
 import "./styles/app.css";
+import "./styles/pos.css";
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } });
 

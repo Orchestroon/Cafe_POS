@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
-import type { Category, Product, Variant } from "../api/types";
+import type { Category, ModifierGroup, Product, Variant } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { Check, Field, fieldError, isDecimal, TextField } from "../components/Form";
 import { Modal } from "../components/Modal";
+import { RecipeEditor } from "../components/RecipeEditor";
 import { PageHeader } from "../components/PageHeader";
 import { ErrorBanner } from "../components/States";
 import { ListState, Pager, StatusBadge } from "../components/Table";
@@ -65,7 +66,7 @@ function ProductEditor({ id, categories, onClose }: { id: string | "new"; catego
   return (
     <Modal title={productId ? t("products.edit") : t("products.new")} onClose={onClose}>
       <ProductFields key={productId ?? "new"} product={existing.data} categories={categories} onSaved={(p) => { setProductId(p.id); void qc.invalidateQueries({ queryKey: ["products"] }); void qc.invalidateQueries({ queryKey: ["product", p.id] }); }} />
-      {productId ? <Variants productId={productId} /> : <p className="form-hint">{t("products.saveFirst")}</p>}
+      {productId ? <><Variants productId={productId} /><LinkedGroups productId={productId} /></> : <p className="form-hint">{t("products.saveFirst")}</p>}
     </Modal>
   );
 }
@@ -116,8 +117,8 @@ function Variants({ productId }: { productId: string }) {
         <table className="erp-table">
           <thead><tr><th>{t("products.label")}</th><th>{t("products.sku")}</th><th className="num">{t("products.price")}</th><th>{t("common.sort")}</th><th>{t("common.active")}</th><th /></tr></thead>
           <tbody>
-            {q.data?.variants.map((v) => <VariantRow key={`${v.id}:${v.price}:${v.label}:${v.is_active}`} productId={productId} v={v} />)}
-            <VariantRow key={`new:${q.data?.variants.length}`} productId={productId} v={blank} />
+            {q.data?.variants.map((v) => <VariantRow key={`${v.id}:${v.price}:${v.label}:${v.is_active}`} productId={productId} productName={q.data.name} v={v} />)}
+            <VariantRow key={`new:${q.data?.variants.length}`} productId={productId} productName={q.data?.name ?? ""} v={blank} />
           </tbody>
         </table>
       </div>
@@ -125,9 +126,10 @@ function Variants({ productId }: { productId: string }) {
   );
 }
 
-function VariantRow({ productId, v }: { productId: string; v: Variant }) {
+function VariantRow({ productId, productName, v }: { productId: string; productName: string; v: Variant }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const [recipeOpen, setRecipeOpen] = useState(false);
   const [f, setF] = useState({ label: v.label, sku: v.sku ?? "", price: v.price, sort_order: String(v.sort_order), is_active: v.is_active });
   const [clientErr, setClientErr] = useState("");
   const save = useMutation({
@@ -152,9 +154,37 @@ function VariantRow({ productId, v }: { productId: string; v: Variant }) {
         <td><input aria-label={t("products.price")} className="form-input inline-input num" inputMode="decimal" value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} /></td>
         <td><input aria-label={t("common.sort")} type="number" className="form-input inline-input" value={f.sort_order} onChange={(e) => setF({ ...f, sort_order: e.target.value })} /></td>
         <td><input aria-label={t("common.active")} type="checkbox" checked={f.is_active} onChange={(e) => setF({ ...f, is_active: e.target.checked })} /></td>
-        <td><button className="btn btn-outline btn-sm" disabled={save.isPending} onClick={submit}>{v.id ? t("common.save") : t("products.addSize")}</button></td>
+        <td>
+          <div className="row-actions">
+            <button className="btn btn-outline btn-sm" disabled={save.isPending} onClick={submit}>{v.id ? t("common.save") : t("products.addSize")}</button>
+            {v.id && <button className="btn btn-outline btn-sm" onClick={() => setRecipeOpen(true)}>{t("recipe.title")}</button>}
+          </div>
+          {recipeOpen && <RecipeEditor productName={productName} variant={v} onClose={() => setRecipeOpen(false)} />}
+        </td>
       </tr>
       {err && <tr><td colSpan={6}><div className="field-error" role="alert">{err}</div></td></tr>}
     </>
+  );
+}
+
+function LinkedGroups({ productId }: { productId: string }) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const product = useQuery({ queryKey: ["product", productId], queryFn: () => api.get<Product>(`/products/${productId}`) });
+  const groups = useQuery({ queryKey: ["modifier-groups"], queryFn: () => api.all<ModifierGroup>("/modifier-groups", { ordering: "sort_order" }) });
+  const linked = product.data?.modifier_groups ?? [];
+  const save = useMutation({
+    mutationFn: (ids: string[]) => api.put<Product>(`/products/${productId}/modifier-groups`, ids.map((group_id, i) => ({ group_id, sort_order: i }))),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["product", productId] }); void qc.invalidateQueries({ queryKey: ["products"] }); },
+  });
+  const ids = linked.map((l) => l.group_id);
+  const toggle = (id: string, on: boolean) => save.mutate(on ? [...ids, id] : ids.filter((x) => x !== id));
+  return (
+    <div style={{ marginTop: 20 }}>
+      <h4 style={{ marginBottom: 8 }}>{t("products.modifierGroups")}</h4>
+      <ErrorBanner error={save.error} />
+      {groups.data?.length === 0 && <p className="form-hint">{t("products.noGroups")}</p>}
+      {groups.data?.map((g) => <Check key={g.id} label={`${g.name} · ${t(`modifiers.modes.${g.mode}`)}${g.is_active ? "" : ` (${t("common.inactive")})`}`} checked={ids.includes(g.id)} onChange={(on) => toggle(g.id, on)} />)}
+    </div>
   );
 }

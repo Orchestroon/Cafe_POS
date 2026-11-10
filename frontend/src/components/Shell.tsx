@@ -16,6 +16,9 @@ const ICONS = {
   users: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
   gear: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z",
   menu: "M3 12h18M3 6h18M3 18h18",
+  pos: "M3 3h18v14H3zM8 21h8M12 17v4",
+  receipt: "M4 2v20l3-2 3 2 3-2 3 2 3-2V2l-3 2-3-2-3 2-3-2zM8 8h8M8 12h8",
+  sliders: "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
 };
 
 interface Item { to: string; label: string; icon: keyof typeof ICONS; admin?: boolean; mobile?: boolean }
@@ -29,8 +32,11 @@ export function Shell(): ReactNode {
   const isAdmin = me?.user.role === "admin";
 
   const items: Item[] = [
-    { to: "/", label: t("nav.home"), icon: "home", mobile: true },
+    { to: "/", label: t("nav.home"), icon: "home" },
+    { to: "/pos", label: t("nav.pos"), icon: "pos", mobile: true },
+    { to: "/orders", label: t("nav.orders"), icon: "receipt", mobile: true },
     { to: "/admin/products", label: t("nav.products"), icon: "cup", admin: true, mobile: true },
+    { to: "/admin/modifiers", label: t("nav.modifiers"), icon: "sliders", admin: true },
     { to: "/admin/categories", label: t("nav.categories"), icon: "tag", admin: true },
     { to: "/admin/ingredients", label: t("nav.ingredients"), icon: "doc", admin: true },
     { to: "/admin/inventory", label: t("nav.inventory"), icon: "box", admin: true, mobile: true },
