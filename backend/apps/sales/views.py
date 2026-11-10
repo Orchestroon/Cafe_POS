@@ -10,11 +10,13 @@ from apps.core import idempotency
 from apps.core.pagination import EnvelopePagination
 from apps.core.permissions import PolicyPermission
 from apps.core.policy import has_perm
+from apps.core.timeutils import parse_range
 
 from . import presenters, selectors, services
 from .checkout import place_order
-from .models import Order
-from .serializers import CheckoutSerializer, QuoteSerializer
+from .models import Order, Payment, Refund
+from .refunds import refund_order
+from .serializers import CheckoutSerializer, QuoteSerializer, RefundSerializer
 
 
 class QuoteView(APIView):
@@ -51,7 +53,7 @@ class CheckoutView(APIView):
 
 class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     permission_classes = [PolicyPermission]
-    permissions_by_method = {"GET": "orders.view"}
+    permissions_by_method = {"GET": "orders.view", "POST": "refund.create"}
     pagination_class = EnvelopePagination
     filter_backends = []
     queryset = (
@@ -81,3 +83,83 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Ge
     @action(detail=True, methods=["get"], url_path="receipt")
     def receipt(self, request, pk=None):
         return Response(presenters.receipt(self._order(pk)))
+
+    @extend_schema(request=RefundSerializer, responses={201: OpenApiTypes.OBJECT})
+    @action(detail=True, methods=["post"], url_path="refunds")
+    def refunds(self, request, pk=None):
+        key = idempotency.parse_key(request)
+        ser = RefundSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        result = idempotency.run_idempotent(
+            organization=request.user.organization,
+            user=request.user,
+            scope=f"refund:{pk}",
+            key=key,
+            payload=request.data,
+            handler=lambda: refund_order(request.user, pk, ser.validated_data, key),
+        )
+        return Response(result.body, status=result.status, headers=result.headers())
+
+
+class _Ledger(mixins.ListModelMixin, viewsets.GenericViewSet):
+    """Admin-only read ledgers. Filters `from`/`to` are café-local dates on the record's date."""
+
+    permission_classes = [PolicyPermission]
+    permissions_by_method = {"*": "ledgers.view"}
+    pagination_class = EnvelopePagination
+    filter_backends = []
+    date_field = "created_at"
+
+    def filtered(self, params):
+        raise NotImplementedError
+
+    def ledger(self, request):
+        org = request.user.organization
+        qs = self.filtered(request.query_params)
+        if rng := parse_range(
+            request.query_params, selectors.org_timezone(org), default_today=False
+        ):
+            qs = qs.filter(**{f"{self.date_field}__gte": rng[2], f"{self.date_field}__lt": rng[3]})
+        return self.paginate_queryset(qs)
+
+
+class RefundLedgerView(_Ledger):
+    queryset = Refund.objects.none()
+    date_field = "created_at"
+
+    def filtered(self, params):
+        qs = (
+            Refund.objects.filter(organization=self.request.user.organization)
+            .select_related("order", "actor", "order__cashier")
+            .prefetch_related("lines")
+        )
+        if actor := params.get("actor_id"):
+            qs = qs.filter(actor_id=actor)
+        if method := params.get("method"):
+            qs = qs.filter(lines__method=method).distinct()
+        return qs
+
+    @extend_schema(operation_id="refunds_list", responses=OpenApiTypes.OBJECT)
+    def list(self, request):
+        page = self.ledger(request)
+        return self.get_paginated_response([presenters.refund_row(r) for r in page])
+
+
+class PaymentLedgerView(_Ledger):
+    queryset = Payment.objects.none()
+    date_field = "created_at"
+
+    def filtered(self, params):
+        qs = Payment.objects.filter(organization=self.request.user.organization).select_related(
+            "order", "order__cashier"
+        )
+        if method := params.get("method"):
+            qs = qs.filter(method=method)
+        if shift := params.get("shift_id"):
+            qs = qs.filter(shift_id=shift)
+        return qs
+
+    @extend_schema(operation_id="payments_list", responses=OpenApiTypes.OBJECT)
+    def list(self, request):
+        page = self.ledger(request)
+        return self.get_paginated_response([presenters.payment_row(p) for p in page])

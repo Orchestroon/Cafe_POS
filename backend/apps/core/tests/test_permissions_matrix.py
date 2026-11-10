@@ -10,6 +10,7 @@ from apps.accounts.models import User
 from apps.audit.models import AuditEvent
 from apps.catalog.models import Category, Product, ProductVariant, RecipeLine
 from apps.core.models import IdempotencyRecord
+from apps.expenses.models import Expense
 from apps.inventory.models import Ingredient, StockAdjustment, StockBalance, StockMovement
 from apps.modifiers.models import (
     ModifierEffect,
@@ -17,7 +18,8 @@ from apps.modifiers.models import (
     ModifierOption,
     ModifierOptionPrice,
 )
-from apps.sales.models import Order, Payment
+from apps.purchasing.models import Purchase, PurchaseItem, Supplier
+from apps.sales.models import Order, Payment, Refund, RefundLine
 from apps.shifts.models import CashierShift
 
 pytestmark = pytest.mark.django_db
@@ -65,6 +67,30 @@ MATRIX = [
     ("POST", "orders/checkout", BOTH),
     ("GET", "shifts/current", BOTH),
     ("POST", "shifts/open", BOTH),
+    ("GET", "shifts", ADMIN),
+    ("GET", "shifts/{shift}", BOTH),
+    ("POST", "shifts/{shift}/close", BOTH),
+    ("POST", "orders/{order}/refunds", BOTH),
+    ("GET", "refunds", ADMIN),
+    ("GET", "payments", ADMIN),
+    ("GET", "suppliers", ADMIN),
+    ("POST", "suppliers", ADMIN),
+    ("PATCH", "suppliers/{supplier}", ADMIN),
+    ("GET", "purchases", ADMIN),
+    ("POST", "purchases", ADMIN),
+    ("GET", "purchases/{purchase}", ADMIN),
+    ("PATCH", "purchases/{purchase}", ADMIN),
+    ("DELETE", "purchases/{purchase}", ADMIN),
+    ("POST", "purchases/{purchase}/post", ADMIN),
+    ("GET", "expenses", BOTH),
+    ("POST", "expenses", BOTH),
+    ("POST", "expenses/{expense}/void", ADMIN),
+    ("GET", "reports/sales-summary", ADMIN),
+    ("GET", "reports/payment-breakdown", ADMIN),
+    ("GET", "reports/top-products", ADMIN),
+    ("GET", "reports/stock", ADMIN),
+    ("GET", "reports/purchases-expenses", ADMIN),
+    ("GET", "reports/shifts", ADMIN),
     ("GET", "ingredients", ADMIN),
     ("POST", "ingredients", ADMIN),
     ("GET", "ingredients/{ingredient}", ADMIN),
@@ -105,7 +131,25 @@ def ids(org, admin, barista):
         tax_snapshot={"enabled": False, "rate": "0.00", "inclusive": False, "label": "VAT"},
         idempotency_key="11111111-1111-1111-1111-111111111111",
     )
+    supplier = Supplier.objects.create(organization=org, name="Dairy Co")
+    purchase = Purchase.objects.create(
+        organization=org, purchased_on="2026-11-10", created_by=admin, total="0.00"
+    )
+    expense = Expense.objects.create(
+        organization=org,
+        category="supplies",
+        description="Ice",
+        amount="5.00",
+        payment_method="cash",
+        source="cash_drawer",
+        shift=shift,
+        created_by=barista,
+    )
     return {
+        "supplier": supplier.id,
+        "purchase": purchase.id,
+        "expense": expense.id,
+        "shift": shift.id,
         "order": order.id,
         "group": grp.id,
         "option": opt.id,
@@ -142,6 +186,12 @@ def snapshot():
             StockMovement,
             StockAdjustment,
             IdempotencyRecord,
+            Refund,
+            RefundLine,
+            Supplier,
+            Purchase,
+            PurchaseItem,
+            Expense,
         )
     }
 
