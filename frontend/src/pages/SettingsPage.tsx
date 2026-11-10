@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
-import type { Me, Settings } from "../api/types";
+import { PAPER_WIDTHS, paperLabel, type Me, type Settings } from "../api/types";
 import { Check, Field, fieldError, isDecimal, TextField } from "../components/Form";
 import { PageHeader } from "../components/PageHeader";
 import { ErrorBanner, Loading } from "../components/States";
@@ -58,7 +58,7 @@ function SettingsForm({ initial }: { initial: Settings }) {
         <Field label={t("settings.receiptFooter")}><textarea className="form-input" value={f.receipt_footer} onChange={(e) => set("receipt_footer", e.target.value)} /></Field>
         <div className="form-grid">
           <Field label={t("settings.paperWidth")} error={err("receipt_paper_width")}>
-            <select className="form-select" value={f.receipt_paper_width} onChange={(e) => set("receipt_paper_width", e.target.value as Settings["receipt_paper_width"])}><option value="58mm">58 mm</option><option value="80mm">80 mm</option><option value="a4">A4</option></select>
+            <select className="form-select" value={f.receipt_paper_width} onChange={(e) => set("receipt_paper_width", e.target.value as Settings["receipt_paper_width"])}>{PAPER_WIDTHS.map((w) => <option key={w} value={w}>{paperLabel(w)}</option>)}</select>
           </Field>
           <TextField label={t("settings.invoicePrefix")} value={f.invoice_prefix ?? ""} onChange={(e) => set("invoice_prefix", e.target.value)} error={err("invoice_prefix")} />
         </div>
@@ -72,6 +72,9 @@ function SettingsForm({ initial }: { initial: Settings }) {
           <TextField label={t("settings.taxNumber")} value={f.tax_registration_number} onChange={(e) => set("tax_registration_number", e.target.value)} error={err("tax_registration_number")} />
         </div>
         <Check label={t("settings.pricesIncludeTax")} checked={f.prices_include_tax} onChange={(v) => set("prices_include_tax", v)} />
+      </div>
+      <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
+        <button className="btn btn-primary" disabled={save.isPending} onClick={submit}>{t("common.save")}</button>
       </div>
     </>
   );

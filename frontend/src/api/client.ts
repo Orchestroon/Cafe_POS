@@ -1,5 +1,7 @@
-// API client: CSRF, {data, meta} unwrapping, {error} parsing, 401 handling.
-// Idempotency-Key generation arrives with Sprint 2 (checkout/refund/purchase post).
+// API client: CSRF, {data, meta} unwrapping, {error} parsing, 401 handling, Idempotency-Key.
+/** The request may or may not have reached the server (offline, timeout). Retry with the SAME key. */
+export class NetworkError extends Error {}
+
 export class ApiError extends Error {
   constructor(
     public code: string,
@@ -35,19 +37,35 @@ export const qs = (q?: Query) => {
   return s ? `?${s}` : "";
 };
 
-async function request<T>(method: string, path: string, body?: unknown, q?: Query): Promise<{ data: T; meta?: Page<T>["meta"] }> {
+interface Opts { headers?: Record<string, string>; timeoutMs?: number }
+
+async function request<T>(method: string, path: string, body?: unknown, q?: Query, opts: Opts = {}): Promise<{ data: T; meta?: Page<T>["meta"] }> {
   const unsafe = method !== "GET";
   if (unsafe && !cookie("csrftoken")) await fetch("/api/v1/auth/csrf", { credentials: "same-origin" });
-  const res = await fetch(`/api/v1${path}${qs(q)}`, {
-    method,
-    credentials: "same-origin",
-    headers: {
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...(unsafe ? { "X-CSRFToken": cookie("csrftoken") ?? "" } : {}),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const json = res.status === 204 ? null : await res.json().catch(() => null);
+  const ctl = opts.timeoutMs ? new AbortController() : undefined;
+  const timer = ctl ? setTimeout(() => ctl.abort(), opts.timeoutMs) : undefined;
+  let res: Response;
+  let json;
+  try {
+    res = await fetch(`/api/v1${path}${qs(q)}`, {
+      method,
+      credentials: "same-origin",
+      signal: ctl?.signal,
+      headers: {
+        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(unsafe ? { "X-CSRFToken": cookie("csrftoken") ?? "" } : {}),
+        ...opts.headers,
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    // The timeout also covers the body. A body that is cut off or unreadable leaves the outcome
+    // unknown (a 201 may already be committed), so it counts as a network error: resend, same key.
+    json = res.status === 204 ? null : await res.json();
+  } catch {
+    throw new NetworkError("network");
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   if (!res.ok) {
     const e = json?.error;
     const err = new ApiError(e?.code ?? "UNKNOWN", e?.message ?? res.statusText, res.status, e?.details ?? {});
@@ -72,7 +90,10 @@ export const api = {
       if (out.length >= r.meta.total_count || r.data.length === 0) return out;
     }
   },
-  post: async <T>(path: string, body?: unknown) => (await request<T>("POST", path, body ?? {})).data,
+  post: async <T>(path: string, body?: unknown, opts?: Opts) => (await request<T>("POST", path, body ?? {}, undefined, opts)).data,
+  /** For checkout / refund / purchase post: the same key must be reused until a definitive answer. */
+  postIdempotent: async <T>(path: string, body: unknown, key: string, timeoutMs = 20000) =>
+    (await request<T>("POST", path, body, undefined, { headers: { "Idempotency-Key": key }, timeoutMs })).data,
   patch: async <T>(path: string, body: unknown) => (await request<T>("PATCH", path, body)).data,
   put: async <T>(path: string, body: unknown) => (await request<T>("PUT", path, body)).data,
 };

@@ -1,13 +1,15 @@
 from django.db.models import Prefetch
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.core.audited import create_obj, update_obj
 from apps.core.mixins import TenantScopedViewSetMixin
 from apps.core.permissions import PolicyPermission
 from apps.core.policy import has_perm
-from apps.modifiers.models import ProductModifierGroup
+from apps.modifiers.models import ModifierOption, ProductModifierGroup
 
 from . import services
 from .models import Category, Product, ProductVariant
@@ -15,6 +17,7 @@ from .serializers import (
     CategorySerializer,
     ModifierLinkSerializer,
     ProductSerializer,
+    RecipeInputSerializer,
     VariantSerializer,
 )
 
@@ -50,10 +53,10 @@ class CategoryViewSet(
         return qs if self.is_admin else qs.filter(is_active=True)
 
     def perform_create(self, serializer):
-        services.create_obj(self.request.user, serializer, "category.created", CATEGORY_FIELDS)
+        create_obj(self.request.user, serializer, "category.created", CATEGORY_FIELDS)
 
     def perform_update(self, serializer):
-        services.update_obj(self.request.user, serializer, "category.updated")
+        update_obj(self.request.user, serializer, "category.updated")
 
 
 class ProductViewSet(
@@ -77,19 +80,22 @@ class ProductViewSet(
         cat = self.request.query_params.get("category_id")
         if cat:
             qs = qs.filter(category_id=cat)
+        links = ProductModifierGroup.objects.select_related("group")
+        options = ModifierOption.objects.prefetch_related("prices")
+        if not self.is_admin:
+            links = links.filter(group__is_active=True)
+            options = options.filter(is_active=True)
+        links = links.prefetch_related(Prefetch("group__options", queryset=options))
         return qs.prefetch_related(
             Prefetch("variants", queryset=variants),
-            Prefetch(
-                "modifier_links",
-                queryset=ProductModifierGroup.objects.select_related("group"),
-            ),
+            Prefetch("modifier_links", queryset=links),
         )
 
     def perform_create(self, serializer):
-        services.create_obj(self.request.user, serializer, "product.created", PRODUCT_FIELDS)
+        create_obj(self.request.user, serializer, "product.created", PRODUCT_FIELDS)
 
     def perform_update(self, serializer):
-        services.update_obj(self.request.user, serializer, "product.updated")
+        update_obj(self.request.user, serializer, "product.updated")
 
     @extend_schema(request=VariantSerializer, responses={201: VariantSerializer})
     @action(detail=True, methods=["post"], url_path="variants")
@@ -97,9 +103,7 @@ class ProductViewSet(
         product = self.get_object()
         ser = VariantSerializer(data=request.data, context={"request": request, "product": product})
         ser.is_valid(raise_exception=True)
-        variant = services.create_obj(
-            request.user, ser, "variant.created", VARIANT_FIELDS, product=product
-        )
+        variant = create_obj(request.user, ser, "variant.created", VARIANT_FIELDS, product=product)
         return Response(VariantSerializer(variant, context={"request": request}).data, status=201)
 
     @extend_schema(request=ModifierLinkSerializer(many=True), responses=ProductSerializer)
@@ -117,8 +121,23 @@ class VariantViewSet(TenantScopedViewSetMixin, mixins.UpdateModelMixin, viewsets
     queryset = ProductVariant.objects.select_related("product")
     serializer_class = VariantSerializer
     permission_classes = [PolicyPermission]
-    permissions_by_method = {"*": "catalog.manage"}
-    http_method_names = ["patch", "options"]
+    http_method_names = ["get", "patch", "put", "options"]
+
+    @property
+    def permissions_by_method(self):
+        if getattr(self, "action", None) == "recipe":
+            return {"*": "recipes.manage"}
+        return {"*": "catalog.manage"}
 
     def perform_update(self, serializer):
-        services.update_obj(self.request.user, serializer, "variant.updated")
+        update_obj(self.request.user, serializer, "variant.updated")
+
+    @extend_schema(request=RecipeInputSerializer, responses=OpenApiTypes.OBJECT)
+    @action(detail=True, methods=["get", "put"], url_path="recipe")
+    def recipe(self, request, pk=None):
+        variant = self.get_object()
+        if request.method == "PUT":
+            ser = RecipeInputSerializer(data=request.data)
+            ser.is_valid(raise_exception=True)
+            variant = services.replace_recipe(request.user, variant, ser.validated_data["lines"])
+        return Response(services.recipe_payload(variant))

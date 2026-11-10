@@ -41,11 +41,13 @@ def request_hash(payload, scope: str) -> str:
     return hashlib.sha256((canonical + scope).encode()).hexdigest()
 
 
-def _stored(org, scope, key, digest) -> IdempotentResult | None:
+def _stored(org, user, scope, key, digest) -> IdempotentResult | None:
     rec = IdempotencyRecord.objects.filter(organization=org, scope=scope, key=key).first()
     if rec is None:
         return None
-    if rec.request_hash != digest:
+    # A key belongs to the user who first sent it: another user (e.g. the next cashier on a shared
+    # tablet) must never replay or complete someone else's sale.
+    if rec.request_hash != digest or rec.user_id != user.pk:
         raise ApiError(
             "IDEMPOTENCY_CONFLICT", "This Idempotency-Key was used with a different request.", 409
         )
@@ -55,7 +57,7 @@ def _stored(org, scope, key, digest) -> IdempotentResult | None:
 def run_idempotent(*, organization, user, scope, key, payload, handler) -> IdempotentResult:
     """handler() runs inside the atomic block and returns (status, body_dict)."""
     digest = request_hash(payload, scope)
-    if (hit := _stored(organization, scope, key, digest)) is not None:
+    if (hit := _stored(organization, user, scope, key, digest)) is not None:
         return hit
     try:
         with transaction.atomic():
@@ -68,6 +70,6 @@ def run_idempotent(*, organization, user, scope, key, payload, handler) -> Idemp
             return IdempotentResult(status, body, False)
     except IntegrityError:
         # Lost a race against the same key: the winner has committed, so replay its response.
-        if (hit := _stored(organization, scope, key, digest)) is not None:
+        if (hit := _stored(organization, user, scope, key, digest)) is not None:
             return hit
         raise

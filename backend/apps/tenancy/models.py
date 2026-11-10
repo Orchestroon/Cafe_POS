@@ -20,7 +20,9 @@ class Organization(models.Model):
 class OrganizationSettings(TenantModel):
     class PaperWidth(models.TextChoices):
         MM58 = "58mm"
+        MM76 = "76mm"
         MM80 = "80mm"
+        MM112 = "112mm"
         A4 = "a4"
 
     currency = models.CharField(max_length=3, default="EGP")
@@ -30,12 +32,12 @@ class OrganizationSettings(TenantModel):
     receipt_header = models.TextField(blank=True)
     receipt_footer = models.TextField(blank=True)
     receipt_paper_width = models.CharField(
-        max_length=4, choices=PaperWidth.choices, default=PaperWidth.MM80
+        max_length=5, choices=PaperWidth.choices, default=PaperWidth.MM80
     )
     invoice_prefix = models.CharField(max_length=20, default="POS-")
     tax_enabled = models.BooleanField(default=False)
     tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    prices_include_tax = models.BooleanField(default=True)
+    prices_include_tax = models.BooleanField(default=False)  # owner: tax added on top
     tax_label = models.CharField(max_length=20, default="VAT")
     tax_registration_number = models.CharField(max_length=50, blank=True)
 

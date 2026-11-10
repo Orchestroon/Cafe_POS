@@ -1,15 +1,32 @@
 # Progress
-Current sprint: 1 — Foundation and master data — status: finalized and on `main` (2026-11-08); next: Sprint 2 (handed to another developer)
+Current sprint: 2 — End-to-end sale — status: finalized and approved by the owner (2026-11-10); ready to merge `sprint-2-end-to-end-sale` into `main` (report: `docs/sprints/sprint-2-report.md`)
 
 ## Done
 - Sprint 0 (approved, `c1d9c10`): audit, restructure (`legacy/`, `backend/`, `frontend/`), Django bootstrap, Postgres compose, Vite + React + TS, CI workflow.
+- Sprint 2 (finalized and approved by the owner 2026-11-10, branch `sprint-2-end-to-end-sale`, ready to merge): recipes, modifiers, shifts open/current, pricing + consumption engines, quote, idempotent checkout, orders, receipt, POS screen, plus both audits' fixes. 388 backend tests pass; frontend typecheck/lint/build pass; owner's manual browser test passed. Report: `docs/sprints/sprint-2-report.md`.
 - Sprint 1 (finalized 2026-11-08, approved incl. deviation 9, CI passing on `main` per owner): core (tenant base, append-only, policy, idempotency, audit, time utils), tenancy + settings, auth + users (LAST_ADMIN, session invalidation, DatabaseCache throttling), catalog, inventory ledger, `seed_demo`, frontend shell (legacy theme, logical CSS, i18n/RTL) and all Sprint 1 admin screens. 188 backend tests pass (incl. post-audit fixes: `NUM_PROXIES`, LAST_ADMIN lock order, locked audited updates, DB errors → 400); frontend typecheck/lint/build pass. Report: `docs/sprints/sprint-1-report.md`.
 
 ## In progress
-- Nothing. Sprint 2 not started; it will be done by another developer.
+- Nothing. Sprint 2 is finalized; the branch awaits merge into `main`.
 
 ## Next
-- Sprint 2 — End-to-end sale (recipes, modifiers, shifts open/current, pricing + consumption engines, quote, checkout, orders, receipt, POS screen). Order unchanged (owner, 2026-11-08). Audit-log screen stays in Sprint 4.
+- Merge `sprint-2-end-to-end-sale` into `main`.
+- Sprint 3 (needs the owner's answer on returns D8/D9 first). Audit-log screen stays in Sprint 4.
+
+## Owner decisions (Sprint 2 kickoff, 2026-11-10)
+- Printer (D13) confirmed: browser print; paper widths 58/76/80/112 mm + A4 chosen per device; no auto-detection.
+- Tax (D11): off until the Admin enables it and types the rate; when on, added on top.
+- Shifts (D7) confirmed. Returns (D8/D9): answer still needed before Sprint 3.
+- No git commits until the owner has tested locally (deviation from spec 0.1 "commit after each task"); includes the docker-compose change.
+
+## Owner approval (Sprint 2, 2026-11-10)
+- Confirmed the recorded decisions (D11 tax on top, D12, D13, D7, 0.00 order rule, Barista order detail by id).
+- Manual browser test passed; Sprint 2 approved and finalized.
+
+## Owner decisions (Sprint 2 audit, 2026-11-10)
+- Fix every audit finding (H1–H2, M1–M4, L1–L5).
+- A 0.00 order is sold with no payment (spec 8.4 updated).
+- A Barista may open any order by its id (detail/receipt); the list stays today + exact invoice lookup (spec 6 updated).
 
 ## Handoff notes for Sprint 2
 - **First:** confirm and update `docs/PROJECT_SPEC.md` with the owner's final business decisions (printer, taxes, shifts, returns) before writing Sprint 2 code.
@@ -17,7 +34,7 @@ Current sprint: 1 — Foundation and master data — status: finalized and on `m
 - Set `NUM_PROXIES` in production (login throttling by client IP).
 
 ## Open questions for owner
-- None. Sprint 1 decisions are in "Owner decisions" in `docs/sprints/sprint-1-report.md`.
+- Q4 returns (D8/D9): needed before Sprint 3. Answers to Q1–Q3 and Q5 are in `docs/sprints/sprint-2-plan.md`.
 
 ## Deviations from spec (cumulative)
 - S0: `tenancy.Organization` model created in Sprint 0 (needed by the custom User FK in the first migration).
@@ -28,4 +45,5 @@ Current sprint: 1 — Foundation and master data — status: finalized and on `m
 - S1: Barista `/settings` omits only `invoice_prefix`.
 - S1: Login throttling cache = Django `DatabaseCache` (owner decision, 2026-11-08); Django pinned to 5.2 LTS (owner decision).
 - S1 (audit fix): Login throttle client IP = `REMOTE_ADDR` unless `NUM_PROXIES` is set (env, default 0).
+- S2: New error code `REGISTER_NOT_CONFIGURED` (422) when opening a shift and the café does not have exactly one default register (v1 is single-branch; users carry no branch yet).
 - S1 (audit fix): An admin's own password reset keeps their current session; other sessions end. Approved by the owner (2026-11-08).

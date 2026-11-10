@@ -54,6 +54,11 @@ def _lock_balances(org, ingredient_ids):
     return {b.ingredient_id: b for b in rows}
 
 
+def lock_balances(org, ingredient_ids):
+    """Public wrapper: lock balances in ingredient_id order (deadlock-safe)."""
+    return _lock_balances(org, ingredient_ids)
+
+
 def _get_ingredient_balance(org, ingredient_id):
     bal = _lock_balances(org, [ingredient_id]).get(ingredient_id)
     if bal is None:

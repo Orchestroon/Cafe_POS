@@ -5,13 +5,14 @@ Spec: `docs/PROJECT_SPEC.md`. Status: `docs/PROGRESS.md`. `legacy/` is the old s
 
 ## Dev quick start
 ```bash
-docker compose up -d --wait db                         # Postgres 16 (host port 5433, override with DB_PORT)
-docker compose --profile backend up -d --wait backend  # Django on 127.0.0.1:8000 (override with BACKEND_PORT)
-docker compose exec backend sh -c "python manage.py migrate && python manage.py seed_demo"  # first run; dev only
-cd frontend && npm install && npm run dev              # http://localhost:5173, /api proxied to Django
+docker compose up -d --build --wait        # db + backend (auto-migrates) + frontend
+docker compose exec backend python manage.py seed_demo   # first run only; dev only
+# App: http://localhost:5173 (FRONTEND_PORT), API: 127.0.0.1:8000 (BACKEND_PORT), Postgres: 127.0.0.1:5433 (DB_PORT)
 # demo logins: admin / barista1 / barista2, password Demo-pass-123
+docker compose logs -f frontend            # first start runs `npm ci`, so give it a minute
+docker compose down                        # stop (add -v to also wipe the database)
 ```
-If you changed `BACKEND_PORT`, start Vite with `VITE_API_TARGET=http://localhost:<port>`.
+The frontend container proxies `/api` to the backend container, so nothing else needs configuring.
 
 ## Checks
 ```bash
