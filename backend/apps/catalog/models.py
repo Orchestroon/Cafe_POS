@@ -49,3 +49,35 @@ class ProductVariant(TenantModel):
             ),
             models.CheckConstraint(condition=Q(price__gte=0), name="variant_price_gte_0"),
         ]
+
+
+class RecipeLine(TenantModel):
+    """Replaced wholesale per variant (PUT). CASCADE is acceptable only because history lives in
+    order snapshots (spec 7.3)."""
+
+    variant = models.ForeignKey(
+        ProductVariant, on_delete=models.CASCADE, related_name="recipe_lines"
+    )
+    ingredient = models.ForeignKey(
+        "inventory.Ingredient", on_delete=models.PROTECT, related_name="recipe_lines"
+    )
+    base_qty = models.DecimalField(max_digits=14, decimal_places=3)
+    waste_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    slot_key = models.SlugField(max_length=50, null=True, blank=True)  # noqa: DJ001 (spec: nullable)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["variant", "ingredient"], name="uniq_recipe_ingredient"
+            ),
+            models.UniqueConstraint(
+                fields=["variant", "slot_key"],
+                condition=Q(slot_key__isnull=False),
+                name="uniq_recipe_slot",
+            ),
+            models.CheckConstraint(condition=Q(base_qty__gte=0), name="recipe_base_qty_gte_0"),
+            models.CheckConstraint(
+                condition=Q(waste_pct__gte=0, waste_pct__lte=100), name="recipe_waste_0_100"
+            ),
+        ]

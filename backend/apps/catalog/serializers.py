@@ -1,6 +1,8 @@
 from rest_framework import serializers
 
-from apps.core.serializers import MoneyField, StrictSerializerMixin
+from apps.core.policy import has_perm
+from apps.core.serializers import MoneyField, StrictSerializerMixin, _StringDecimalField
+from apps.modifiers.presenters import options_list
 
 from .models import Category, Product, ProductVariant
 
@@ -86,8 +88,18 @@ class ProductSerializer(StrictSerializerMixin, serializers.ModelSerializer):
             )
 
     def get_modifier_groups(self, obj) -> list[dict]:
+        admin = has_perm(self.context["request"].user, "catalog.manage")
         return [
-            {"group_id": link.group_id, "name": link.group.name, "sort_order": link.sort_order}
+            {
+                "group_id": link.group_id,
+                "name": link.group.name,
+                "sort_order": link.sort_order,
+                "mode": link.group.mode,
+                "min_select": link.group.min_select,
+                "max_select": link.group.max_select,
+                "is_active": link.group.is_active,
+                "options": options_list(link.group, include_inactive=admin),
+            }
             for link in obj.modifier_links.all()
         ]
 
@@ -104,3 +116,16 @@ class ProductSerializer(StrictSerializerMixin, serializers.ModelSerializer):
 class ModifierLinkSerializer(StrictSerializerMixin, serializers.Serializer):
     group_id = serializers.UUIDField()
     sort_order = serializers.IntegerField(default=0)
+
+
+class RecipeLineInputSerializer(StrictSerializerMixin, serializers.Serializer):
+    """Types only; ranges, ingredients and duplicates are checked in the service."""
+
+    ingredient_id = serializers.UUIDField()
+    base_qty = _StringDecimalField(max_digits=14, decimal_places=3)
+    waste_pct = _StringDecimalField(max_digits=5, decimal_places=2, default="0.00")
+    slot_key = serializers.SlugField(max_length=50, required=False, allow_null=True, default=None)
+
+
+class RecipeInputSerializer(StrictSerializerMixin, serializers.Serializer):
+    lines = RecipeLineInputSerializer(many=True, max_length=100)

@@ -28,7 +28,7 @@ def test_seed_is_idempotent_and_complete():
         "80mm",
         "POS-",
     )
-    assert s.tax_enabled is False and s.prices_include_tax is True
+    assert s.tax_enabled is False and s.prices_include_tax is False  # owner: tax on top
     assert Location.objects.get().is_default and Register.objects.get().is_default
 
 
@@ -234,3 +234,28 @@ def test_settings_and_audit_are_per_org(two_orgs, admin_c, admin2_c):
 
 def test_default_location_is_per_org(org, org2):
     assert default_location(org) != default_location(org2)
+
+
+@pytest.mark.parametrize("width", ["58mm", "76mm", "80mm", "112mm", "a4"])
+def test_all_market_paper_widths_accepted(admin_c, width):
+    r = admin_c.patch("/api/v1/settings", {"receipt_paper_width": width}, format="json")
+    assert r.status_code == 200 and data(r)["receipt_paper_width"] == width
+
+
+def test_tax_migration_sets_on_top_only_while_tax_disabled(org, org2):
+    import importlib
+
+    from django.apps import apps as django_apps
+
+    from apps.tenancy.models import OrganizationSettings
+
+    mig = importlib.import_module("apps.tenancy.migrations.0003_paper_widths_tax_on_top")
+    OrganizationSettings.objects.filter(organization=org).update(
+        tax_enabled=False, prices_include_tax=True
+    )
+    OrganizationSettings.objects.filter(organization=org2).update(
+        tax_enabled=True, prices_include_tax=True
+    )
+    mig.tax_on_top_while_disabled(django_apps, None)
+    assert OrganizationSettings.objects.get(organization=org).prices_include_tax is False
+    assert OrganizationSettings.objects.get(organization=org2).prices_include_tax is True

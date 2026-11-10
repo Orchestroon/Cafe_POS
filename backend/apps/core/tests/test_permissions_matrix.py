@@ -8,16 +8,25 @@ from django.urls import get_resolver
 
 from apps.accounts.models import User
 from apps.audit.models import AuditEvent
-from apps.catalog.models import Category, Product, ProductVariant
+from apps.catalog.models import Category, Product, ProductVariant, RecipeLine
 from apps.core.models import IdempotencyRecord
 from apps.inventory.models import Ingredient, StockAdjustment, StockBalance, StockMovement
+from apps.modifiers.models import (
+    ModifierEffect,
+    ModifierGroup,
+    ModifierOption,
+    ModifierOptionPrice,
+)
+from apps.sales.models import Order, Payment
+from apps.shifts.models import CashierShift
 
 pytestmark = pytest.mark.django_db
 
 ADMIN, BOTH, PUBLIC = "admin", "both", "public"
 Z = "00000000-0000-0000-0000-000000000000"
 
-# (method, route template, access). Placeholders: {user} {category} {product} {variant} {ingredient}
+# (method, route template, access). Placeholders: {user} {category} {product} {variant}
+# {ingredient} {group} {option} {order}
 MATRIX = [
     ("GET", "health", PUBLIC),
     ("GET", "auth/csrf", PUBLIC),
@@ -41,6 +50,21 @@ MATRIX = [
     ("POST", "products/{product}/variants", ADMIN),
     ("PUT", "products/{product}/modifier-groups", ADMIN),
     ("PATCH", "variants/{variant}", ADMIN),
+    ("GET", "variants/{variant}/recipe", ADMIN),
+    ("PUT", "variants/{variant}/recipe", ADMIN),
+    ("GET", "modifier-groups", BOTH),
+    ("POST", "modifier-groups", ADMIN),
+    ("GET", "modifier-groups/{group}", BOTH),
+    ("PATCH", "modifier-groups/{group}", ADMIN),
+    ("POST", "modifier-groups/{group}/options", ADMIN),
+    ("PATCH", "modifier-options/{option}", ADMIN),
+    ("GET", "orders", BOTH),
+    ("GET", "orders/{order}", BOTH),
+    ("GET", "orders/{order}/receipt", BOTH),
+    ("POST", "orders/quote", BOTH),
+    ("POST", "orders/checkout", BOTH),
+    ("GET", "shifts/current", BOTH),
+    ("POST", "shifts/open", BOTH),
     ("GET", "ingredients", ADMIN),
     ("POST", "ingredients", ADMIN),
     ("GET", "ingredients/{ingredient}", ADMIN),
@@ -61,7 +85,30 @@ def ids(org, admin, barista):
     from apps.tenancy.seed import default_location
 
     StockBalance.objects.create(organization=org, ingredient=ing, location=default_location(org))
+    grp = ModifierGroup.objects.create(organization=org, name="G", mode="add", max_select=2)
+    opt = ModifierOption.objects.create(organization=org, group=grp, label="O", price_delta="1.00")
+    from apps.tenancy.models import Register
+
+    reg = Register.objects.get(organization=org)
+    shift = CashierShift.objects.create(
+        organization=org, branch=reg.branch, register=reg, user=barista, opening_cash="0.00"
+    )
+    order = Order.objects.create(
+        organization=org,
+        branch=reg.branch,
+        shift=shift,
+        cashier=barista,
+        invoice_seq=1,
+        invoice_no="POS-0000001",
+        subtotal="1.00",
+        total="1.00",
+        tax_snapshot={"enabled": False, "rate": "0.00", "inclusive": False, "label": "VAT"},
+        idempotency_key="11111111-1111-1111-1111-111111111111",
+    )
     return {
+        "order": order.id,
+        "group": grp.id,
+        "option": opt.id,
         "user": barista.id,
         "category": cat.id,
         "product": prod.id,
@@ -83,6 +130,14 @@ def snapshot():
             Category,
             Product,
             ProductVariant,
+            RecipeLine,
+            CashierShift,
+            Order,
+            Payment,
+            ModifierGroup,
+            ModifierOption,
+            ModifierOptionPrice,
+            ModifierEffect,
             Ingredient,
             StockMovement,
             StockAdjustment,
