@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from apps.catalog.models import ProductVariant, RecipeLine
@@ -109,13 +111,13 @@ class EffectSerializer(StrictSerializerMixin, serializers.Serializer):
     ingredient_id = serializers.UUIDField()
     base_qty = _StringDecimalField(max_digits=14, decimal_places=3, min_value=0)
     waste_pct = _StringDecimalField(
-        max_digits=5, decimal_places=2, min_value=0, max_value=100, default="0.00"
+        max_digits=5, decimal_places=2, min_value=0, max_value=100, default=Decimal("0.00")
     )
 
 
 class OptionInputSerializer(StrictSerializerMixin, serializers.Serializer):
     label = serializers.CharField(max_length=100)
-    price_delta = MoneyField(default="0.00")
+    price_delta = MoneyField(default=Decimal("0.00"))
     sort_order = serializers.IntegerField(default=0)
     is_active = serializers.BooleanField(default=True)
     variant_prices = VariantPriceSerializer(many=True, required=False, max_length=50)

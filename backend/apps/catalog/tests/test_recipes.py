@@ -168,3 +168,11 @@ def test_barista_cannot_read_or_write_recipes(barista_c, latte):
     _, small, _ = latte
     assert barista_c.get(f"/api/v1/variants/{small.id}/recipe").status_code == 403
     assert put(barista_c, small, []).status_code == 403
+
+
+def test_recipe_line_without_waste_pct_defaults_to_zero_not_500(admin_c, latte, ings):
+    """Sprint 4 fix: an omitted waste_pct used to stay the string "0.00" and raise a 500."""
+    _, small, _ = latte
+    r = put(admin_c, small, [{"ingredient_id": str(ings["coffee"].id), "base_qty": "12"}])
+    assert r.status_code == 200, r.content
+    assert r.json()["data"]["lines"][0]["waste_pct"] == "0.00"

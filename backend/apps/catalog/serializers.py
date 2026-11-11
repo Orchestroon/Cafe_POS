@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from apps.core.policy import has_perm
@@ -123,7 +125,7 @@ class RecipeLineInputSerializer(StrictSerializerMixin, serializers.Serializer):
 
     ingredient_id = serializers.UUIDField()
     base_qty = _StringDecimalField(max_digits=14, decimal_places=3)
-    waste_pct = _StringDecimalField(max_digits=5, decimal_places=2, default="0.00")
+    waste_pct = _StringDecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))
     slot_key = serializers.SlugField(max_length=50, required=False, allow_null=True, default=None)
 
 
