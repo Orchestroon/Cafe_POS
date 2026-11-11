@@ -6,6 +6,7 @@ import type { Supplier } from "../api/types";
 import { Check, fieldError, TextField } from "../components/Form";
 import { Modal } from "../components/Modal";
 import { PageHeader } from "../components/PageHeader";
+import { Kbd } from "../components/ShortcutsHelp";
 import { ErrorBanner } from "../components/States";
 import { ListState, Pager, StatusBadge } from "../components/Table";
 
@@ -16,7 +17,7 @@ export function Suppliers() {
   const q = useQuery({ queryKey: ["suppliers", page], queryFn: () => api.list<Supplier>("/suppliers", { page }) });
   return (
     <>
-      <PageHeader title={t("nav.suppliers")} actions={<button className="btn btn-primary" onClick={() => setEdit("new")}>{t("common.new")}</button>} />
+      <PageHeader title={t("nav.suppliers")} actions={<button className="btn btn-primary" data-shortcut="new" onClick={() => setEdit("new")}>{t("common.new")}<Kbd k="N" /></button>} />
       <div className="card">
         <ListState loading={q.isLoading} error={q.error} empty={q.data?.data.length === 0}>
           <table className="erp-table">

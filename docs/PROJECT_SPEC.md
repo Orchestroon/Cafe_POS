@@ -102,13 +102,13 @@ Drip Café needs a web-based **POS for day-to-day sales**, not a demo.
 | D9 | Refund of mixed-payment orders | Refund is allocated back to the original payment methods and amounts automatically. **Confirmed by the owner (2026-11-10).** | Final |
 | D10 | Drawer expenses | A Barista can record an expense paid from the drawer against their own open shift. Admins can record any expense. **Confirmed by the owner (2026-11-10).** | Final |
 | D11 | Tax | Optional per organization: `tax_enabled`, `tax_rate`, `prices_include_tax`, `tax_label`, `tax_registration_number`. When enabled, the receipt shows the tax breakdown. Government e-receipt integration is out of scope. **Owner (2026-11-10): tax stays off until the Admin turns it on and types the rate; when on, it is added on top of menu prices (`prices_include_tax=False` by default).** | Final |
-| D12 | Language | English UI first. i18n infrastructure (translation keys) and RTL-ready CSS from day one. Arabic translation added later. | Final |
+| D12 | Language | English UI first. i18n infrastructure (translation keys) and RTL-ready CSS from day one. **Arabic translation written in Sprint 4 (owner, 2026-11-10); the owner reviews the wording.** `npm run i18n:check` fails on any missing or empty Arabic text. The Arabic UI uses the **Cairo** font (owner, 2026-11-11). | Final |
 | D13 | Printing | A Print button opens the browser print flow on any printer the device has (USB, Bluetooth or network, configured at OS level). Receipt layouts for thermal paper widths **58, 76, 80 and 112 mm** plus A4. The width is chosen per device (each device remembers the width of its printer; Settings holds the default). The browser cannot detect the printer's paper, so there is no auto-detection. Silent printing not required. **Confirmed by the owner (2026-11-10).** | Final |
 | D14 | Stack | Frontend: the owner's **existing React UI** (reuse its design and components). Backend: **Django + Django REST Framework + PostgreSQL**. The old Node backend is replaced and not ported. | Final |
 | D15 | Opening stock | Entered as `opening_balance` stock movements, **not** as a purchase, so it never inflates expenses. | Final |
 | D16 | Modifier groups | Reusable across products (linked many-to-many), instead of being duplicated per product. | Final (design) |
 | D17 | Card terminal reference | Optional on card payments and card refunds. **Confirmed by the owner (2026-11-10).** | Final |
-| D18 | Packaged goods (no recipe) | Modeled as an ingredient in `pcs` with a one-line recipe (qty 1, waste 0). No separate stock-item model. | Final (design) |
+| D18 | Packaged goods (no recipe) | Modeled as an ingredient in `pcs` with a one-line recipe (qty 1, waste 0). No separate stock-item model. A size that truly uses no stock (a service item) is marked "No stock tracking" (`track_stock = false`, Sprint 4 B3). | Final (design) |
 
 ---
 
@@ -475,10 +475,10 @@ Every model below except `Organization` inherits `TenantModel` (`id` UUID, `orga
 |---|---|---|
 | `Category` | name, sort_order, is_active | unique(org, name) |
 | `Product` | category, name, description (blank), sort_order, is_active | unique(org, name) |
-| `ProductVariant` | product, label, sku (nullable), price (money ≥ 0), sort_order, is_active | unique(product, label); unique(org, sku) where sku not null |
+| `ProductVariant` | product, label, sku (nullable), price (money ≥ 0), sort_order, is_active, **track_stock** (bool, default true) | unique(product, label); unique(org, sku) where sku not null. **B3 (owner, 2026-11-11):** `track_stock = true` → the size must have at least one recipe line to be sold; `false` ("No stock tracking") → it sells with no deduction and must keep an empty recipe. API adds read-only `has_recipe`. |
 | `RecipeLine` | variant (FK CASCADE is acceptable only because recipes are replaced wholesale and history lives in snapshots), ingredient, base_qty (qty ≥ 0), waste_pct (decimal 5,2 in 0–100), slot_key (slug, nullable) | unique(variant, ingredient); unique(variant, slot_key) where slot_key not null |
 
-A product is sellable only if it and its category are active and it has at least one active variant.
+A product is sellable only if it and its category are active and it has at least one active variant. A tracked variant with no recipe is not sellable (422 `RECIPE_MISSING`); the till greys it out.
 
 ### 7.4 modifiers
 
@@ -486,7 +486,7 @@ A product is sellable only if it and its category are active and it has at least
 |---|---|---|
 | `ModifierGroup` | name, mode (`add`/`replace`), replacement_slot (slug, nullable), min_select (≥ 0), max_select (≥ 1, ≥ min), sort_order, is_active | replacement_slot required iff mode=`replace`; unique(org, name) |
 | `ProductModifierGroup` | product, group, sort_order | unique(product, group); links reusable groups to products |
-| `ModifierOption` | group, label, price_delta (money ≥ 0), sort_order, is_active | unique(group, label) |
+| `ModifierOption` | group, label, price_delta (money ≥ 0), sort_order, is_active, **track_stock** (bool, default true) | unique(group, label). **R2 (owner, 2026-11-11):** `false` = "No stock effect" (e.g. No ice, No milk); such an option must keep no effects. |
 | `ModifierOptionPrice` | option, variant, price_delta | unique(option, variant). Optional per-size price override |
 | `ModifierEffect` | option, variant (**nullable** = applies to all variants), ingredient, base_qty (≥ 0), waste_pct (0–100) | unique(option, variant, ingredient) |
 
@@ -494,7 +494,8 @@ A product is sellable only if it and its category are active and it has at least
 1. If any effects exist with `variant = that variant`, use only those.
 2. Otherwise use the effects with `variant IS NULL`.
 3. If the option has effects but none apply to this variant, the selection is invalid: 422 `INVALID_MODIFIER`.
-4. An option with zero effects has no inventory impact. In `replace` mode, this means "remove the slot", e.g. "No milk".
+4. An option marked "No stock effect" (`track_stock = false`) has no inventory impact. In `replace` mode, this means "remove the slot", e.g. "No milk".
+5. **Sprint 4 R2:** a tracked option (`track_stock = true`) with **no effects at all** is invalid: 422 `INVALID_MODIFIER` (details `reason: no_effect`). Nothing is ever deducted silently.
 
 ### 7.5 inventory
 
@@ -591,6 +592,7 @@ Order level:
 
 For each item:
 
+0. **Recipe required (Sprint 4 B3):** if the variant has `track_stock = true` and no recipe lines, return 422 `RECIPE_MISSING` (details: `variant_id`, `product_name`, `variant_label`). Quote and checkout both run this, so the whole cart is refused and nothing is written.
 1. **Build the working lines.** Start from the variant's `RecipeLine`s, keyed by `slot_key`, or by `"ing:<ingredient_id>"` when there is no slot.
 2. **Apply selected options, grouped by group:**
    - **`replace` group:**
@@ -730,7 +732,8 @@ Rules:
 - the ingredients exist and are active;
 - `base_qty ≥ 0`;
 - waste is between 0 and 100;
-- there are no duplicate ingredients or slots.
+- there are no duplicate ingredients or slots;
+- **Sprint 4 B3:** a variant marked "No stock tracking" (`track_stock = false`) accepts only an empty recipe (422 `INVALID_RECIPE`, `reason: stock_not_tracked`), and `PATCH /variants/{id}` cannot set `track_stock = false` while the variant has recipe lines (400). Both take the variant row lock, so they never interleave.
 
 **Replace-group integrity:** if a product linked to a `replace` group has a variant whose recipe lacks that group's `replacement_slot`:
 - the recipe `PUT` still succeeds;
@@ -764,9 +767,9 @@ All reports are Admin-only and are derived from persisted records only. Period f
 |---|---|
 | `sales-summary` | `orders_count` (orders created in period, any status); `gross_sales` = Σ subtotal; `discounts` = Σ discount_total; `tax` = Σ tax_total; `collected` = Σ total; `refunds` = Σ refund total_amount with refund created in period; `net_sales` = collected − refunds; `refunded_orders_count` |
 | `payment-breakdown` | `cash_collected`, `card_collected` (Σ Payment.amount by method, payment date in period); `cash_refunded`, `card_refunded` (Σ RefundLine by method, refund date in period); `cash_net`, `card_net` |
-| `top-products` | Per variant from order-item snapshots, **excluding refunded orders**: `product_name_snapshot`, `variant_label_snapshot`, `qty_sold`, `net_revenue` (Σ line_total). Sort by `qty` or `revenue` (`ordering` param) |
+| `top-products` | Per variant from order-item snapshots, **excluding refunded orders**: `product_name_snapshot`, `variant_label_snapshot`, `qty_sold`, `net_revenue` (Σ line_total). Sort by `qty` or `revenue` (`ordering` param). **At most 100 rows**; `meta.limit` = 100 and `meta.truncated` = true when rows were cut (Q6 item 4A, owner 2026-11-11) |
 | `stock` | Per ingredient: unit, balance, threshold, is_low (balance ≤ threshold), is_negative, consumed_qty_period (Σ −qty_delta of `sale` movements in period) |
-| `purchases-expenses` | From `Expense` only (status=posted), so no double counting: `purchase_total`, `general_expenses_total`, `cash_drawer_total`, `external_total`, `breakdown` by category |
+| `purchases-expenses` | From `Expense` only (status=posted), so no double counting: `purchase_total`, `general_expenses_total`, `cash_drawer_total`, `external_total`, `breakdown` by category. **No `cashier_id` / `shift_id` filter:** sending either returns 400 (purchases and external expenses have no shift, so a filter would silently drop them — Q6 item 3A, owner 2026-11-11) |
 | `shifts` | `shifts_count`, `open_count`, `closed_count`, `expected_cash_total`, `actual_cash_total`, `total_difference`, `shifts[]` (user, opened_at, closed_at, opening_cash, expected, actual, difference, orders_count) |
 
 **Dates and filters (implemented in Sprint 3):** orders, their payments and their items are dated by the order's `created_at`; refunds and their lines by the refund's `created_at`; expenses by `paid_at`; stock movements by `occurred_at`; shifts by `opened_at`. Orders and payments share the order's date so the invariant below holds at any midnight boundary. `cashier_id` filters orders by their cashier and refunds by the **refunding** user; `shift_id` filters orders and payments by their shift and refunds by the refunding user's shift. With no dates a report covers the café's local today, and `meta.range` echoes the resolved range.
@@ -808,7 +811,9 @@ All reports are Admin-only and are derived from persisted records only. Period f
 | 422 | `EMPTY_CART` | No items |
 | 422 | `INVALID_QUANTITY` | Quantity outside 1–99 |
 | 422 | `ITEM_UNAVAILABLE` | Inactive variant, product or category |
-| 422 | `INVALID_MODIFIER` | Option is inactive, not linked, has a missing slot, or has no effect for the variant |
+| 422 | `INVALID_MODIFIER` | Option is inactive, not linked, has a missing slot, has no effect for the variant, or (Sprint 4 R2) is tracked but has no effects at all (`reason: no_effect`) |
+| 422 | `RECIPE_MISSING` | Sprint 4 B3: a tracked variant (`track_stock = true`) has no recipe lines |
+| 422 | `REGISTER_NOT_CONFIGURED` | Sprint 2: opening a shift when the café has no single default register |
 | 422 | `MODIFIER_SELECTION_INVALID` | min/max violated |
 | 422 | `INVALID_PAYMENT` | Duplicate method, tendered < amount, amount ≤ 0 |
 | 422 | `PAYMENT_MISMATCH` | Σ payments ≠ total |
@@ -858,7 +863,7 @@ Insufficient stock is **not** an error: it returns 200/201 with `stock_warnings`
 | POST | `/purchases/{id}/post` | A | Idempotent post |
 | GET, POST | `/expenses` | GET A (B: own only), POST A/B | Section 8.8 |
 | POST | `/expenses/{id}/void` | A | Void with reason |
-| GET | `/shifts/current` | A/B | Own open shift + live totals, or null |
+| GET | `/shifts/current` | A/B | Own open shift + live totals, or null (+ `meta.last_closed`, C2) |
 | POST | `/shifts/open` | A/B | `{opening_cash}` |
 | POST | `/shifts/{id}/close` | Owner or A | `{actual_closing_cash, note}` |
 | GET | `/shifts` | A | Filters `user_id`, `status`, `from`, `to` |
@@ -877,7 +882,7 @@ Insufficient stock is **not** an error: it returns 200/201 with `stock_warnings`
 | GET | `/reports/stock` | A | |
 | GET | `/reports/purchases-expenses` | A | |
 | GET | `/reports/shifts` | A | |
-| GET | `/audit-events` | A | Filters `action`, `actor_id`, `entity_type`, `entity_id`, `from`, `to` |
+| GET | `/audit-events` | A | Filters `action`, `actor_id`, `entity_type`, `entity_id`, `from`, `to` (café-local dates). Newest first, paginated. Rows: `id, created_at, action, entity_type, entity_id, entity_label, actor{id,username,display_name}|null, summary`. `entity_label` is the record's readable name (invoice no, product and size, ingredient, user…); `meta.names` maps every id inside the page's summaries to a readable name (this café only). `meta.actions` / `meta.entity_types` list the values that exist (for the viewer's filters). Read-only (Sprint 4) |
 | GET, POST | `/promotions` | GET A/B, POST A | P1 |
 | PATCH | `/promotions/{id}` | A | P1 |
 
@@ -972,10 +977,14 @@ POST /orders/{id}/refunds
 ```
 
 ```json
-{"data":{"refund_id":"…","order_status":"refunded","total_amount":"115.00",
- "lines":[{"method":"cash","amount":"55.00"},{"method":"card","amount":"60.00","external_reference":"rf-778"}],
- "inventory_restored":false}}
+{"data":{"refund_id":"…","order_id":"…","invoice_no":"POS-0000012","status":"refunded","order_status":"refunded",
+ "total_amount":"115.00",
+ "lines":[{"method":"cash","amount":"55.00","external_reference":""},
+          {"method":"card","amount":"60.00","external_reference":"rf-778"}],
+ "shift_id":"…","inventory_restored":false}}
 ```
+
+`order_status` and `status` carry the same value (Q6 item 1B, owner 2026-11-11: the spec name is sent and `status` is kept for the screens). `shift_id` is the refunding user's shift the refund was recorded on.
 
 **Shift**
 
@@ -989,12 +998,17 @@ POST /shifts/{id}/close
 {"actual_closing_cash":"1290.00","note":"End of shift"}
 ```
 
-Close response:
+Close response — the same shift object as `GET /shifts/current` and `GET /shifts/{id}` (Q6 item 2A, owner 2026-11-11). For a closed shift `totals` is the snapshot frozen at close:
 
 ```json
-{"data":{"status":"closed","opening_cash":"300.00","cash_sales":"1250.00","cash_refunds":"50.00",
- "drawer_expenses":"200.00","expected_cash":"1300.00","actual_cash":"1290.00","difference":"-10.00"}}
+{"data":{"id":"…","status":"closed","opening_cash":"300.00","opened_at":"…","closed_at":"…",
+ "closed_by":{"id":"…","display_name":"…"},"user":{"id":"…","display_name":"…"},"register":"Main",
+ "expected_cash":"1300.00","actual_cash":"1290.00","difference":"-10.00","close_note":"End of shift",
+ "totals":{"cash_sales":"1250.00","card_sales":"400.00","cash_refunds":"50.00","card_refunds":"0.00",
+           "drawer_expenses":"200.00","orders_count":42,"expected_cash":"1300.00"}}}
 ```
+
+`GET /shifts/current` with no open shift returns `{"data": null, "meta": {"last_closed": {"id","closed_at","actual_cash"} | null}}` — the user's own last close, shown as information on the open-shift popup (C2, owner 2026-11-11).
 
 **Purchase**
 
@@ -1052,6 +1066,7 @@ As a Barista, source, method and shift are set by the server. As an Admin, you m
   - Handles CSRF, envelope unwrapping and error parsing.
   - 401 redirects to login.
   - Generates and attaches `Idempotency-Key` where required.
+- **Keyboard shortcuts (Sprint 4 B2, owner request):** one list in `frontend/src/lib/shortcuts.ts`, shown by `?`. Keys match the physical key (same with the Arabic layout), do not fire while typing (except Esc, Ctrl+Enter, F-keys), and only the top popup's shortcuts fire. Browser-reserved keys (Alt+D, F1, F3, F5–F7, F10–F12, Ctrl/Alt+digits) are not used.
 
 ### 10.2 POS screen (`/pos`) — the most important screen
 
@@ -1059,7 +1074,7 @@ As a Barista, source, method and shift are set by the server. As an Admin, you m
   - Tablet and desktop: product area on the left, cart panel on the right (logical start/end so RTL flips it).
   - Phone: full-screen products, cart as a bottom sheet with a sticky total and checkout button.
 - **Top bar:** search, category tabs, current shift badge, user menu.
-- **Shift gate:** if `GET /shifts/current` is null, show an "Open shift" dialog with opening cash. Selling is disabled until a shift is open.
+- **Shift gate:** if `GET /shifts/current` is null, show an "Open shift" dialog with opening cash. Selling is disabled until a shift is open. **Sprint 4 B1 (owner):** the dialog can be closed (✕, Esc, Cancel); the POS then stays visible but locked (products greyed, cart and Pay disabled) and the shift bar has an "Open shift" button that reopens it.
 - **Adding items:**
   - Tapping a product opens a sheet with a variant picker (sizes with prices) and modifier groups (radio for max=1, checkboxes otherwise, min/max enforced in the UI too).
   - Quantity stepper. Add to cart.
@@ -1135,7 +1150,7 @@ As a Barista, source, method and shift are set by the server. As an Admin, you m
 - **Expenses:** list, create, void.
 - **Users:** list, create, deactivate/reactivate, reset password, change role.
 - **Reports:** one page per report with a date-range picker (local dates), totals cards and tables.
-- **Audit log:** filterable table, expandable summary JSON.
+- **Audit log:** readable for non-technical users (owner, 2026-11-11): each event is a translated sentence (When · Who · What happened · Details); opening a row shows labelled details and Before → After changes. No JSON, no technical action names, no bare ids. Filters: What happened (grouped by area), Who, dates. Record pages link to it ("History").
 - **Settings:** business name, receipt header/footer, paper width, invoice prefix (warn if sales already exist), tax settings.
 
 ### 10.7 Existing frontend reuse

@@ -89,6 +89,12 @@ def payment_breakdown(org, lo, hi, p) -> dict:
     }
 
 
+TOP_PRODUCTS_LIMIT = 100
+# Expenses have no cashier, and purchases/external expenses no shift, so these filters would
+# silently drop rows (spec 8.13, Q6 item 3A): the report refuses them instead.
+NO_PERSON_FILTER = {"purchases-expenses"}
+
+
 def top_products(org, lo, hi, p) -> dict:
     qs = (
         OrderItem.objects.filter(order__in=_orders(org, lo, hi, p), order__status="paid")
@@ -101,8 +107,11 @@ def top_products(org, lo, hi, p) -> dict:
         )
     )
     key = "qty_sold" if p.get("ordering") == "qty" else "net_revenue"
-    rows = qs.order_by(f"-{key}", "product_name_snapshot")[:100]
+    rows = list(qs.order_by(f"-{key}", "product_name_snapshot")[: TOP_PRODUCTS_LIMIT + 1])
+    truncated = len(rows) > TOP_PRODUCTS_LIMIT
+    rows = rows[:TOP_PRODUCTS_LIMIT]
     return {
+        "truncated": truncated,
         "products": [
             {
                 "variant_id": str(r["variant_id"]),
@@ -112,7 +121,7 @@ def top_products(org, lo, hi, p) -> dict:
                 "net_revenue": S(r["net_revenue"]),
             }
             for r in rows
-        ]
+        ],
     }
 
 

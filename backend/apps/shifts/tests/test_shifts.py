@@ -12,7 +12,19 @@ pytestmark = pytest.mark.django_db
 
 def test_current_is_null_before_opening(barista_c):
     r = barista_c.get("/api/v1/shifts/current")
-    assert r.status_code == 200 and r.json() == {"data": None, "meta": {}}
+    assert r.status_code == 200 and r.json() == {"data": None, "meta": {"last_closed": None}}
+
+
+def test_c2_current_shows_own_last_close_only_when_no_shift_is_open(barista_c, admin_c, org):
+    """C2 (owner, 2026-11-11): information only; another user's close is never shown."""
+    for who, amount in [(barista_c, "100.00"), (barista_c, "250.00"), (admin_c, "999.00")]:
+        sid = data(who.post("/api/v1/shifts/open", {"opening_cash": "10.00"}, format="json"))["id"]
+        r = who.post(f"/api/v1/shifts/{sid}/close", {"actual_closing_cash": amount}, format="json")
+        assert r.status_code == 200, r.content
+    meta = barista_c.get("/api/v1/shifts/current").json()["meta"]
+    assert meta["last_closed"]["actual_cash"] == "250.00" and meta["last_closed"]["closed_at"]
+    barista_c.post("/api/v1/shifts/open", {"opening_cash": "250.00"}, format="json")
+    assert barista_c.get("/api/v1/shifts/current").json()["meta"] == {}
 
 
 def test_open_then_current_returns_live_totals(barista_c, barista):

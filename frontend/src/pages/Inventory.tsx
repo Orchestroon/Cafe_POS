@@ -46,7 +46,7 @@ function Balances({ onAdjust }: { onAdjust: (id: string) => void }) {
   return (
     <div className="card">
       <div className="toolbar">
-        <div className="form-group"><label className="form-label">{t("common.search")}</label><input className="form-input" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>
+        <div className="form-group"><label className="form-label">{t("common.search")}</label><input data-shortcut="search" className="form-input" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>
         <div className="form-group"><label className="form-label">{t("common.status")}</label>
           <select className="form-select" value={flag} onChange={(e) => { setFlag(e.target.value); setPage(1); }}>
             <option value="">{t("common.all")}</option><option value="low">{t("inventory.low")}</option><option value="negative">{t("inventory.negative")}</option>

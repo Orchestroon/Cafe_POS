@@ -24,6 +24,8 @@ services:
     working_dir: /app
     volumes:
       - ./backend:/app
+      # Read-only: lets the backend test check every audit action has an English/Arabic text.
+      - ./frontend/src/i18n:/frontend/src/i18n:ro
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.dev
       SECRET_KEY: ${SECRET_KEY:-dev-only-insecure-key}

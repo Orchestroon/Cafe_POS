@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { RequireAdmin, RequireAuth } from "./auth/guards";
 import { Shell } from "./components/Shell";
+import { AuditLog } from "./pages/AuditLog";
 import { AdminShifts } from "./pages/AdminShifts";
 import { Categories } from "./pages/Categories";
 import { Expenses } from "./pages/Expenses";
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="reports" element={<Navigate to="/admin/reports/sales-summary" replace />} />
             <Route path="reports/:name" element={<Reports />} />
             <Route path="users" element={<Users />} />
+            <Route path="audit" element={<AuditLog />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
         </Route>

@@ -93,6 +93,7 @@ def refund_order(user, order_id, data, key) -> tuple[int, dict]:
         "order_id": str(order.pk),
         "invoice_no": order.invoice_no,
         "status": order.status,
+        "order_status": order.status,  # spec 9.4 name; `status` kept for the screens (Q6 1B)
         "total_amount": str(refund.total_amount),
         "lines": [
             {**ln, "external_reference": ref if ln["method"] == "card" else ""}

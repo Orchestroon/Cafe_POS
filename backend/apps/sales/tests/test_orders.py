@@ -5,6 +5,7 @@ import pytest
 from django.utils import timezone
 
 from apps.sales.models import Order
+from apps.sales.selectors import local_today, org_timezone
 from apps.tenancy.models import OrganizationSettings
 from conftest import client_for, data, make_user
 
@@ -80,9 +81,11 @@ def test_admin_filters(admin_c, sold, shop):
         "POS-0000001",
     ]
     Order.objects.filter(pk=a_id.pk).update(created_at=timezone.now() - timedelta(days=10))
-    today = timezone.localdate().isoformat()
+    # The café's local dates, not UTC: between 22:00 and 24:00 UTC Cairo is already on the next day.
+    tz = org_timezone(a_id.organization)
+    today = local_today(tz).isoformat()
     assert ids(admin_c.get("/api/v1/orders", {"from": today, "to": today})) == ["POS-0000002"]
-    old_day = (timezone.now() - timedelta(days=10)).date().isoformat()
+    old_day = (local_today(tz) - timedelta(days=10)).isoformat()
     assert "POS-0000001" in ids(admin_c.get("/api/v1/orders", {"from": old_day, "to": old_day}))
     assert admin_c.get("/api/v1/orders", {"from": "garbage"}).status_code == 400
     assert admin_c.get("/api/v1/orders", {"cashier_id": "abc"}).status_code == 400

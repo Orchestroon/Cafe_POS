@@ -37,10 +37,17 @@ def _invalid(message, **details):
 
 
 def resolve_effects(option: OptionData, variant_id) -> list[EffectData]:
-    """Spec 7.4: size-specific effects win; else "all sizes"; an option that has effects but none
-    for this size is invalid; an option with no effects at all has no inventory impact."""
-    if not option.effects:
+    """Spec 7.4: size-specific effects win; else "all sizes". An option marked "No stock effect"
+    (track_stock False) has no inventory impact; any other option with no effect for this size is
+    invalid (R2, owner 2026-11-11: never deduct nothing silently)."""
+    if not option.track_stock:
         return []
+    if not option.effects:
+        raise _invalid(
+            "This option has no ingredient set up. Ask an Admin.",
+            option_id=str(option.id),
+            reason="no_effect",
+        )
     specific = [e for e in option.effects if e.variant_id == variant_id]
     if specific:
         return specific
@@ -86,6 +93,17 @@ def per_unit_qty(line: WorkingLine) -> Decimal:
 
 def consume_item(priced: PricedItem) -> ItemConsumption:
     variant = priced.variant
+    if variant.track_stock and not variant.recipe:  # B3: never sell a tracked size silently
+        raise ApiError(
+            "RECIPE_MISSING",
+            f"{variant.product_name} ({variant.label}) has no recipe. Ask an Admin.",
+            422,
+            {
+                "variant_id": str(variant.id),
+                "product_name": variant.product_name,
+                "variant_label": variant.label,
+            },
+        )
     working = [_from_recipe(r) for r in variant.recipe]
     groups = {g.id: g for g in variant.linked_groups}
     by_group: dict = {}

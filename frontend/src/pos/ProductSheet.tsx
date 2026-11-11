@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { LinkedGroup, Product } from "../api/types";
+import { needsRecipe, type LinkedGroup, type Product } from "../api/types";
 import { Modal } from "../components/Modal";
+import { Kbd } from "../components/ShortcutsHelp";
+import { digitIndex } from "../lib/shortcuts";
 import { formatMoney } from "../i18n/format";
 import { newKey } from "../lib/uuid";
 import { optionPrice, type CartLine } from "./cart";
@@ -10,10 +12,10 @@ export function ProductSheet({ product, line, currency, onAdd, onClose }: { prod
   const { t } = useTranslation();
   const variants = product.variants.filter((v) => v.is_active);
   const groups = product.modifier_groups.filter((g) => g.is_active && g.options.some((o) => o.is_active));
-  const [variantId, setVariantId] = useState(line?.variantId ?? variants[0]?.id ?? "");
+  const [variantId, setVariantId] = useState(line?.variantId ?? variants.find((v) => !needsRecipe(v))?.id ?? "");
   const [chosen, setChosen] = useState<string[]>(line?.optionIds ?? []);
   const [qty, setQty] = useState(line?.quantity ?? 1);
-  const variant = variants.find((v) => v.id === variantId);
+  const variant = variants.find((v) => v.id === variantId && !needsRecipe(v));
 
   const countIn = (g: LinkedGroup) => g.options.filter((o) => chosen.includes(o.id)).length;
   const toggle = (g: LinkedGroup, id: string) => {
@@ -32,14 +34,22 @@ export function ProductSheet({ product, line, currency, onAdd, onClose }: { prod
     onAdd({ id: line?.id ?? newKey(), variantId: variant.id, productId: product.id, productName: product.name, variantLabel: variant.label, quantity: qty, optionIds });
   };
 
+  const shortcuts = {
+    size: (e: KeyboardEvent) => {
+      const v = variants[digitIndex(e)];
+      if (!v || needsRecipe(v)) return false;
+      setVariantId(v.id);
+    },
+    addToCart: () => (variant && !missing ? add() : false), // Space still toggles a focused option
+  };
   return (
-    <Modal title={product.name} onClose={onClose} footer={<><button className="btn btn-outline" onClick={onClose}>{t("common.cancel")}</button><button className="btn btn-primary" disabled={!variant || !!missing} onClick={add}>{line ? t("pos.update") : t("pos.addToCart")}</button></>}>
+    <Modal title={product.name} onClose={onClose} shortcuts={shortcuts} footer={<><button className="btn btn-outline" onClick={onClose}>{t("common.cancel")}</button><button className="btn btn-primary" disabled={!variant || !!missing} onClick={add}>{line ? t("pos.update") : t("pos.addToCart")}<Kbd k="Enter" /></button></>}>
       <div className="sheet-section">
         <div className="sheet-title">{t("pos.size")}</div>
         <div className="choice-grid" role="radiogroup" aria-label={t("pos.size")}>
           {variants.map((v) => (
-            <button key={v.id} role="radio" aria-checked={v.id === variantId} className={`choice${v.id === variantId ? " selected" : ""}`} onClick={() => setVariantId(v.id)}>
-              <span>{v.label}</span><span className="choice-price">{formatMoney(v.price, currency)}</span>
+            <button key={v.id} role="radio" aria-checked={v.id === variantId} disabled={needsRecipe(v)} title={needsRecipe(v) ? t("pos.noRecipe") : undefined} className={`choice${v.id === variantId ? " selected" : ""}`} onClick={() => setVariantId(v.id)}>
+              <span>{v.label}</span><span className="choice-price">{needsRecipe(v) ? t("pos.noRecipe") : formatMoney(v.price, currency)}</span>
             </button>
           ))}
         </div>

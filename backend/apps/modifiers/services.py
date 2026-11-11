@@ -21,6 +21,7 @@ def snapshot(option):
         "price_delta": str(option.price_delta),
         "sort_order": option.sort_order,
         "is_active": option.is_active,
+        "track_stock": option.track_stock,
         "variant_prices": sorted(
             ({"variant_id": str(p.variant_id), "price_delta": str(p.price_delta)})
             for p in option.prices.all()
@@ -105,6 +106,12 @@ def _check_label(group, label, exclude=None):
         _bad("label", "An option with this label already exists in the group.")
 
 
+def _check_tracking(option):
+    """R2: "No stock effect" (track_stock False) means the option keeps no effects."""
+    if not option.track_stock and option.effects.exists():
+        _bad("track_stock", "Remove the ingredient effects before turning stock effect off.")
+
+
 @transaction.atomic
 def create_option(actor, group, data):
     org = actor.organization
@@ -117,9 +124,11 @@ def create_option(actor, group, data):
         price_delta=data["price_delta"],
         sort_order=data["sort_order"],
         is_active=data["is_active"],
+        track_stock=data["track_stock"],
     )
     _set_prices(org, option, data.get("variant_prices", []))
     _set_effects(org, option, data.get("effects", []))
+    _check_tracking(option)
     record(
         actor,
         "modifier_option.created",
@@ -136,7 +145,7 @@ def update_option(actor, option, data):
     before = snapshot(option)
     if "label" in data:
         _check_label(option.group, data["label"], exclude=option)
-    for field in ("label", "price_delta", "sort_order", "is_active"):
+    for field in ("label", "price_delta", "sort_order", "is_active", "track_stock"):
         if field in data:
             setattr(option, field, data[field])
     option.save()
@@ -144,6 +153,7 @@ def update_option(actor, option, data):
         _set_prices(org, option, data["variant_prices"])
     if "effects" in data:
         _set_effects(org, option, data["effects"])
+    _check_tracking(option)
     option = ModifierOption.objects.get(pk=option.pk)
     after = snapshot(option)
     if before != after:

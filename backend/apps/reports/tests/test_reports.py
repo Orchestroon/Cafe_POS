@@ -181,6 +181,26 @@ def test_top_products_ordering(admin_c, barista_c, shop):
     assert [r["variant_label_snapshot"] for r in by_qty] == ["Small", "Large"]
     by_rev2 = report(admin_c, "top-products")["data"]["products"]
     assert by_rev2 == by_rev
+    meta = report(admin_c, "top-products")["meta"]
+    assert meta["limit"] == 100 and meta["truncated"] is False
+
+
+def test_q6_4a_top_products_says_when_rows_were_cut(admin_c, barista_c, shop, monkeypatch):
+    from apps.reports import services, views
+
+    monkeypatch.setattr(services, "TOP_PRODUCTS_LIMIT", 1)
+    monkeypatch.setattr(views, "TOP_PRODUCTS_LIMIT", 1)
+    open_shift(barista_c, "0.00")
+    sell(barista_c, shop, [cash("65.00")], "65.00")
+    sell(barista_c, shop, [cash("80.00")], "80.00", variant=shop.large)
+    body = report(admin_c, "top-products")
+    assert len(body["data"]["products"]) == 1 and body["meta"]["truncated"] is True
+
+
+def test_q6_3a_purchases_expenses_refuses_cashier_and_shift_filters(admin_c, admin):
+    for k in ("cashier_id", "shift_id"):
+        r = admin_c.get("/api/v1/reports/purchases-expenses", {k: str(admin.pk)})
+        assert r.status_code == 400 and k in r.json()["error"]["details"]["fields"]
 
 
 def test_cairo_date_boundaries(admin_c, barista_c, shop):

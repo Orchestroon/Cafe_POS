@@ -1,6 +1,7 @@
 from django.db import transaction
 
 from apps.audit.services import record
+from apps.core.audited import update_obj
 from apps.core.exceptions import ApiError
 from apps.core.money import q_qty
 from apps.inventory.models import Ingredient
@@ -95,6 +96,21 @@ def recipe_payload(variant):
     }
 
 
+@transaction.atomic
+def update_variant(actor, serializer):
+    """B3: "No stock tracking" (track_stock False) needs an empty recipe. The variant row is locked
+    first, as a recipe replace locks it, so the two can never interleave."""
+    variant = ProductVariant.objects.select_for_update().get(pk=serializer.instance.pk)
+    if serializer.validated_data.get("track_stock") is False and variant.recipe_lines.exists():
+        raise ApiError(
+            "VALIDATION_ERROR",
+            "Validation failed.",
+            400,
+            {"fields": {"track_stock": "Remove the recipe before turning stock tracking off."}},
+        )
+    return update_obj(actor, serializer, "variant.updated")
+
+
 def _invalid_recipe(errors):
     raise ApiError("INVALID_RECIPE", "Recipe validation failed.", 422, {"lines": errors})
 
@@ -103,6 +119,13 @@ def _invalid_recipe(errors):
 def replace_recipe(actor, variant, lines):
     variant = ProductVariant.objects.select_for_update().get(pk=variant.pk)  # serialize replaces
     org = actor.organization
+    if lines and not variant.track_stock:  # B3: an untracked size keeps an empty recipe
+        raise ApiError(
+            "INVALID_RECIPE",
+            "This size is set to no stock tracking. Turn tracking on to add a recipe.",
+            422,
+            {"lines": [], "reason": "stock_not_tracked"},
+        )
     errors, seen_ing, seen_slot = [], set(), set()
     ings = {
         i.pk: i

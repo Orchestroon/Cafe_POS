@@ -6,6 +6,7 @@ import type { Ingredient, Unit } from "../api/types";
 import { Check, Field, fieldError, isDecimal, TextField } from "../components/Form";
 import { Modal } from "../components/Modal";
 import { PageHeader } from "../components/PageHeader";
+import { Kbd } from "../components/ShortcutsHelp";
 import { ErrorBanner } from "../components/States";
 import { ListState, Pager, StatusBadge } from "../components/Table";
 
@@ -17,9 +18,9 @@ export function Ingredients() {
   const q = useQuery({ queryKey: ["ingredients", page, search], queryFn: () => api.list<Ingredient>("/ingredients", { page, search }) });
   return (
     <>
-      <PageHeader title={t("nav.ingredients")} subtitle={t("ingredients.note")} actions={<button className="btn btn-primary" onClick={() => setEditing({ base_unit: "g", is_active: true })}>{t("common.new")}</button>} />
+      <PageHeader title={t("nav.ingredients")} subtitle={t("ingredients.note")} actions={<button className="btn btn-primary" data-shortcut="new" onClick={() => setEditing({ base_unit: "g", is_active: true })}>{t("common.new")}<Kbd k="N" /></button>} />
       <div className="card">
-        <div className="toolbar"><div className="form-group"><label className="form-label">{t("common.search")}</label><input className="form-input" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div></div>
+        <div className="toolbar"><div className="form-group"><label className="form-label">{t("common.search")}</label><input data-shortcut="search" className="form-input" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div></div>
         <ListState loading={q.isLoading} error={q.error} empty={q.data?.data.length === 0}>
           <table className="erp-table">
             <thead><tr><th>{t("common.name")}</th><th>{t("ingredients.unit")}</th><th className="num">{t("ingredients.threshold")}</th><th className="num">{t("ingredients.cost")}</th><th>{t("common.status")}</th><th /></tr></thead>
@@ -75,7 +76,7 @@ function IngredientForm({ initial, onClose }: { initial: Partial<Ingredient>; on
       <TextField label={t("common.name")} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} error={fieldError(save.error, "name")} autoFocus />
       <Field label={t("ingredients.unit")} hint={initial.id ? t("ingredients.unitLocked") : undefined} error={fieldError(save.error, "base_unit")}>
         <select className="form-select" value={f.base_unit} disabled={!!initial.id} onChange={(e) => setF({ ...f, base_unit: e.target.value as Unit })}>
-          <option value="g">g</option><option value="ml">ml</option><option value="pcs">pcs</option>
+          {(["g", "ml", "pcs"] as const).map((u) => <option key={u} value={u}>{t(`units.${u}`)}</option>)}
         </select>
       </Field>
       <div className="form-grid">

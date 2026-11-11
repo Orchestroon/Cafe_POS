@@ -37,6 +37,9 @@ class ProductVariant(TenantModel):
     price = models.DecimalField(max_digits=12, decimal_places=2)
     sort_order = models.IntegerField(default=0)
     is_active = models.BooleanField(default=True)
+    # B3: True = the size must have a recipe to be sold. False ("No stock tracking", e.g. a service
+    # item) = it sells with no stock deduction and must keep an empty recipe.
+    track_stock = models.BooleanField(default=True)
 
     class Meta:
         ordering = ["sort_order", "price"]

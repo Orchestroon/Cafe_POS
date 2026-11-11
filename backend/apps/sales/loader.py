@@ -79,6 +79,7 @@ def load(org, requests):
             category_is_active=v.product.category.is_active,
             linked_groups=tuple(groups[v.product_id]),
             recipe=tuple(recipes[v.pk]),
+            track_stock=v.track_stock,
         )
         for v in rows
     }
@@ -105,6 +106,7 @@ def load(org, requests):
                 )
                 for e in o.effects.all()
             ),
+            track_stock=o.track_stock,
         )
         for o in opts
     }

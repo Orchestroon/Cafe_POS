@@ -7,6 +7,7 @@ import type { OrderDetail } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { RefundDialog } from "../components/RefundDialog";
 import { PageHeader } from "../components/PageHeader";
+import { HistoryLink } from "./AuditLog";
 import { ErrorBanner, Loading } from "../components/States";
 import { formatDateTime, formatMoney } from "../i18n/format";
 
@@ -25,6 +26,7 @@ export function OrderDetailPage() {
     <>
       <PageHeader title={o.invoice_no} subtitle={`${formatDateTime(o.created_at, tz)} · ${o.cashier.display_name}`} actions={<>
         <Link className="btn btn-outline" to="/orders">{t("orders.back")}</Link>
+        <HistoryLink entityType="sales.order" entityId={o.id} />
         {o.status === "paid" && <button className="btn btn-danger" onClick={() => setRefunding(true)}>{t("orders.refund")}</button>}
         <Link className="btn btn-primary" to={`/orders/${o.id}/receipt?reprint=1`}>{t("orders.reprint")}</Link>
       </>} />

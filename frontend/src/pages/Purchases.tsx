@@ -6,6 +6,7 @@ import { api } from "../api/client";
 import type { Purchase } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { PageHeader } from "../components/PageHeader";
+import { Kbd } from "../components/ShortcutsHelp";
 import { ListState, Pager } from "../components/Table";
 import { formatMoney } from "../i18n/format";
 
@@ -18,7 +19,7 @@ export function Purchases() {
   const cur = me?.settings.currency ?? "";
   return (
     <>
-      <PageHeader title={t("nav.purchases")} actions={<Link className="btn btn-primary" to="/admin/purchases/new">{t("common.new")}</Link>} />
+      <PageHeader title={t("nav.purchases")} actions={<Link className="btn btn-primary" data-shortcut="new" to="/admin/purchases/new">{t("common.new")}<Kbd k="N" /></Link>} />
       <div className="card">
         <div className="toolbar">
           <div className="form-group"><label className="form-label">{t("common.status")}

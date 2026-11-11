@@ -479,7 +479,12 @@ def free_water(org, shop):
     from apps.catalog.models import ProductVariant
 
     return ProductVariant.objects.create(
-        organization=org, product=shop.small.product, label="Water", price="0.00", sort_order=9
+        organization=org,
+        product=shop.small.product,
+        label="Water",
+        price="0.00",
+        sort_order=9,
+        track_stock=False,  # B3: a free item with no recipe must be marked untracked
     )
 
 

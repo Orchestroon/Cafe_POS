@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { setLang } from "../i18n";
+import { moveFocus, useShortcuts } from "../lib/shortcuts";
+import { ShortcutsHelp } from "./ShortcutsHelp";
 
 const icon = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d={d} /></svg>
@@ -51,12 +53,43 @@ export function Shell(): ReactNode {
     { to: "/admin/purchases", label: t("nav.purchases"), icon: "cart", admin: true },
     { to: "/admin/shifts", label: t("nav.shifts"), icon: "clock", admin: true },
     { to: "/admin/reports", label: t("nav.reports"), icon: "chart", admin: true },
+    { to: "/admin/audit", label: t("nav.audit"), icon: "doc", admin: true },
     { to: "/admin/users", label: t("nav.users"), icon: "users", admin: true },
     { to: "/admin/settings", label: t("nav.settings"), icon: "gear", admin: true },
   ].filter((i) => !i.admin || isAdmin) as Item[];
   const current = items.find((i) => (i.to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(i.to)));
   const initials = (me?.user.display_name || me?.user.username || "?").slice(0, 2).toUpperCase();
   const go = () => setOpen(false);
+  const [help, setHelp] = useState(false);
+
+  // B2: shortcuts that work on every page (the page's own ones are registered by the page).
+  const click = (sel: string) => {
+    const el = document.querySelector<HTMLElement>(`.view-container ${sel}`);
+    if (!el || (el as HTMLButtonElement).disabled) return false;
+    el.click();
+  };
+  useShortcuts({
+    help: () => setHelp(true),
+    goPos: () => nav("/pos"),
+    goOrders: () => nav("/orders"),
+    goShift: () => nav("/shift"),
+    goHome: () => (isAdmin ? nav("/") : false),
+    search: () => {
+      const el = document.querySelector<HTMLInputElement>('.view-container [data-shortcut="search"]');
+      if (!el) return false;
+      el.focus();
+      el.select();
+    },
+    new: () => click('[data-shortcut="new"]'),
+    rows: (e) => {
+      // Lists with focusable rows (Orders, Audit log): ↓ starts, ↑/↓ move, Enter opens.
+      const rows = [...document.querySelectorAll<HTMLElement>(".view-container tbody tr[tabindex]")];
+      const active = document.activeElement;
+      if (rows.length === 0) return false;
+      if (!rows.includes(active as HTMLElement) && !(active === document.body && e.code === "ArrowDown")) return false;
+      moveFocus(rows, active, e.code);
+    },
+  });
 
   return (
     <div id="app" className={open ? "sidebar-open" : ""}>
@@ -102,10 +135,12 @@ export function Shell(): ReactNode {
             <div className="breadcrumbs"><span>{t("nav.workspace")}</span><span>/</span><span className="current">{current?.label}</span></div>
           </div>
           <div className="top-bar-right">
+            <button className="lang-btn kbd-btn" onClick={() => setHelp(true)} aria-label={t("shortcuts.title")} title={t("shortcuts.hint")}>?</button>
             <button className="lang-btn" onClick={() => setLang(i18n.language === "ar" ? "en" : "ar")}>{i18n.language === "ar" ? "EN" : "عربي"}</button>
           </div>
         </header>
         <section className="view-container"><Outlet /></section>
+        {help && <ShortcutsHelp onClose={() => setHelp(false)} />}
       </main>
       <nav className="mobile-bottom-nav">
         {items.filter((i) => i.mobile).map((i) => (

@@ -40,6 +40,7 @@ def test_at14_cash_refund_keeps_the_invoice_and_audits_the_reason(barista_c, sho
     assert r.status_code == 201, r.content
     d = data(r)
     assert d["status"] == "refunded" and d["total_amount"] == "65.00"
+    assert d["order_status"] == "refunded"  # Q6 1B: the spec 9.4 name is sent too
     assert d["lines"] == [{"method": "cash", "amount": "65.00", "external_reference": ""}]
     assert d["inventory_restored"] is False and d["shift_id"] == shift["id"]
     after = barista_c.get(f"/api/v1/orders/{oid}").json()["data"]

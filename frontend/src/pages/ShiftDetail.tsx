@@ -6,6 +6,7 @@ import { api } from "../api/client";
 import type { Shift } from "../api/types";
 import { CloseShiftDialog } from "../components/CloseShiftDialog";
 import { PageHeader } from "../components/PageHeader";
+import { HistoryLink } from "./AuditLog";
 import { ShiftSummary } from "../components/ShiftSummary";
 import { ErrorBanner, Loading } from "../components/States";
 
@@ -23,6 +24,7 @@ export function ShiftDetailPage() {
     <>
       <PageHeader title={t("shift.report")} actions={<>
         <Link className="btn btn-outline no-print" to="/shift">{t("orders.back")}</Link>
+        <span className="no-print"><HistoryLink entityType="shifts.cashiershift" entityId={s.id} /></span>
         <button className="btn btn-outline no-print" onClick={() => window.print()}>{t("receipt.print")}</button>
         {s.status === "open" && <button className="btn btn-primary no-print" onClick={() => setClosing(true)}>{t("shift.closeShift")}</button>}
       </>} />

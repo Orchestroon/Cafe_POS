@@ -67,11 +67,14 @@
 .receipt-page { min-height: 100vh; background: var(--bg-app); padding: 12px; }
 .receipt-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; margin-block-end: 14px; }
 .receipt { margin: 0 auto; background: #fff; color: #000; padding: 10px; font-family: var(--font-mono); font-size: 12px; line-height: 1.35; box-shadow: var(--shadow-md); }
-.receipt[data-width="58mm"] { width: 58mm; font-size: 11px; }
-.receipt[data-width="76mm"] { width: 76mm; }
-.receipt[data-width="80mm"] { width: 80mm; }
-.receipt[data-width="112mm"] { width: 112mm; font-size: 13px; }
-.receipt[data-width="a4"] { width: 190mm; font-size: 14px; padding: 16px; }
+/* Width = paper minus the @page margins (2 mm each side; A4 12 mm), so nothing is cut or shrunk
+   when printed (Sprint 4 print QA). border-box keeps the padding inside that width. */
+.receipt { box-sizing: border-box; overflow-wrap: anywhere; }
+.receipt[data-width="58mm"] { width: 54mm; font-size: 11px; padding: 4px; }
+.receipt[data-width="76mm"] { width: 72mm; padding: 6px; }
+.receipt[data-width="80mm"] { width: 76mm; padding: 6px; }
+.receipt[data-width="112mm"] { width: 108mm; font-size: 13px; }
+.receipt[data-width="a4"] { width: 186mm; font-size: 14px; padding: 16px; }
 .receipt-center { text-align: center; }
 .receipt-title { font-size: 1.25em; display: block; }
 .receipt-pre { white-space: pre-wrap; }

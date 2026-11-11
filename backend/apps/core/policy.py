@@ -28,6 +28,7 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "expenses.void": _ADMIN,
     "expenses.view_all": _ADMIN,
     "reports.view": _ADMIN,
+    "audit.view": _ADMIN,
 }
 
 

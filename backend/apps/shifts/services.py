@@ -56,6 +56,23 @@ def current_shift(user):
     )
 
 
+def last_closed(user):
+    """The user's own most recent closed shift as {id, closed_at, actual_cash}, or None (C2)."""
+    s = (
+        CashierShift.objects.filter(user=user, status=CashierShift.Status.CLOSED)
+        .order_by("-closed_at")
+        .only("pk", "closed_at", "actual_cash")
+        .first()
+    )
+    if s is None:
+        return None
+    return {
+        "id": str(s.pk),
+        "closed_at": s.closed_at.isoformat().replace("+00:00", "Z"),
+        "actual_cash": str(s.actual_cash),
+    }
+
+
 def lock_open_shift(user):
     """The user's open shift with its row locked until commit, or None. Every writer that must not
     interleave with a close (checkout, refund, drawer expense, drawer purchase) takes this first."""
