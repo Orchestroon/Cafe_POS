@@ -91,6 +91,7 @@ MATRIX = [
     ("GET", "reports/stock", ADMIN),
     ("GET", "reports/purchases-expenses", ADMIN),
     ("GET", "reports/shifts", ADMIN),
+    ("GET", "audit-events", ADMIN),
     ("GET", "ingredients", ADMIN),
     ("POST", "ingredients", ADMIN),
     ("GET", "ingredients/{ingredient}", ADMIN),

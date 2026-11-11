@@ -22,8 +22,11 @@ def effect(ing, qty, waste="0", variant_id=None):
     return EffectData(variant_id, ing["id"], ing["name"], ing["unit"], D(qty), D(waste))
 
 
-def option(grp, label="Opt", price="0", effects=(), prices=None, active=True):
-    return OptionData(uuid4(), label, grp.id, active, D(price), prices or {}, tuple(effects))
+def option(grp, label="Opt", price="0", effects=(), prices=None, active=True, track=None):
+    """`track` defaults to "has effects": an option built without effects is a "No stock effect"
+    option unless the test says otherwise (R2)."""
+    track = bool(effects) if track is None else track
+    return OptionData(uuid4(), label, grp.id, active, D(price), prices or {}, tuple(effects), track)
 
 
 def ingredient(name, unit="g"):
@@ -42,7 +45,10 @@ def variant(
     active=True,
     product_active=True,
     category_active=True,
+    track=None,
 ):
+    """`track` defaults to "has a recipe" (B3), so engine tests that only price need no recipe."""
+    track = bool(recipe) if track is None else track
     return VariantData(
         uuid4(),
         label,
@@ -54,4 +60,5 @@ def variant(
         category_active,
         tuple(groups),
         tuple(recipe),
+        track,
     )

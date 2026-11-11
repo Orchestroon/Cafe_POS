@@ -23,7 +23,10 @@ class CurrentShiftView(APIView):
     @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         shift = services.current_shift(request.user)
-        return Response({"data": shift_payload(shift) if shift else None, "meta": {}})
+        if shift:
+            return Response({"data": shift_payload(shift), "meta": {}})
+        # C2 (owner, 2026-11-11): with no open shift, show the user's last close as information.
+        return Response({"data": None, "meta": {"last_closed": services.last_closed(request.user)}})
 
 
 class OpenShiftView(APIView):

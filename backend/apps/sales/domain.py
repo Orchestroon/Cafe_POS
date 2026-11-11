@@ -36,6 +36,7 @@ class OptionData:
     price_delta: Decimal
     variant_prices: dict[UUID, Decimal] = field(default_factory=dict)
     effects: tuple[EffectData, ...] = ()
+    track_stock: bool = True
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,7 @@ class VariantData:
     category_is_active: bool
     linked_groups: tuple[GroupData, ...] = ()  # in display order
     recipe: tuple[RecipeLineData, ...] = ()
+    track_stock: bool = True
 
     @property
     def sellable(self) -> bool:

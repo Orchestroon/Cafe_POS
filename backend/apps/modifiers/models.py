@@ -57,6 +57,9 @@ class ModifierOption(TenantModel):
     price_delta = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     sort_order = models.IntegerField(default=0)
     is_active = models.BooleanField(default=True)
+    # R2: True = the option must have an ingredient effect for the size sold. False ("No stock
+    # effect", e.g. "No ice") = it deducts nothing and must keep no effects.
+    track_stock = models.BooleanField(default=True)
 
     class Meta:
         ordering = ["sort_order", "label"]

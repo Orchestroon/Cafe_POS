@@ -9,6 +9,7 @@ def option_dict(opt, *, effects=False):
         "price_delta": str(opt.price_delta),
         "sort_order": opt.sort_order,
         "is_active": opt.is_active,
+        "track_stock": opt.track_stock,
         "variant_prices": [
             {"variant_id": str(p.variant_id), "price_delta": str(p.price_delta)}
             for p in opt.prices.all()

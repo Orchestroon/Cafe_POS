@@ -77,6 +77,11 @@ async function request<T>(method: string, path: string, body?: unknown, q?: Quer
 
 export const api = {
   get: async <T>(path: string, q?: Query) => (await request<T>("GET", path, undefined, q)).data,
+  /** A GET whose `meta` carries more than pagination (e.g. /shifts/current, /audit-events). */
+  getWithMeta: async <T, M>(path: string, q?: Query) => {
+    const r = await request<T>("GET", path, undefined, q);
+    return { data: r.data, meta: (r.meta ?? {}) as M };
+  },
   list: async <T>(path: string, q?: Query) => {
     const r = await request<T[]>("GET", path, undefined, q);
     return { data: r.data, meta: r.meta! } as Page<T>;

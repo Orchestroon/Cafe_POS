@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Modal } from "../components/Modal";
+import { Kbd } from "../components/ShortcutsHelp";
 import { formatMoney } from "../i18n/format";
 import { cmpMoney, isDec, normMoney, roundUpTo, subMoney } from "../lib/decimal";
 
@@ -36,13 +37,24 @@ export function PaymentDialog({ total, currency, onConfirm, onClose }: { total: 
   const payments = build();
   const changeFor = (due: string) => (isDec(tendered, 2) && cmpMoney(tendered, due) >= 0 ? subMoney(tendered, due) : "0.00");
   const switchTab = (k: Tab) => { setTab(k); setTendered(""); };
+  const TABS: Tab[] = ["cash", "card", "mixed"];
+  const shortcuts = {
+    nextMethod: () => (free ? false : switchTab(TABS[(TABS.indexOf(tab) + 1) % TABS.length])),
+    // Enter confirms, except on a focused button (a quick amount or a tab), which keeps its click.
+    confirmPay: () => {
+      const a = document.activeElement as HTMLElement | null;
+      if (a?.tagName === "BUTTON" || !payments) return false;
+      onConfirm(payments);
+    },
+  };
 
   return (
-    <Modal title={t("pos.payment")} onClose={onClose} footer={<><button className="btn btn-outline" onClick={onClose}>{t("common.cancel")}</button><button className="btn btn-primary" disabled={!payments} onClick={() => payments && onConfirm(payments)}>{t("pos.confirmPayment")}</button></>}>
+    <Modal title={t("pos.payment")} onClose={onClose} shortcuts={shortcuts} footer={<><button className="btn btn-outline" onClick={onClose}>{t("common.cancel")}</button><button className="btn btn-primary" disabled={!payments} onClick={() => payments && onConfirm(payments)}>{t("pos.confirmPayment")}<Kbd k="Enter" /></button></>}>
       <div className="pay-total"><span>{t("pos.total")}</span><strong>{formatMoney(total, currency)}</strong></div>
       {free ? <div className="alert-banner alert-neutral">{t("pos.noPaymentNeeded")}</div> : <>
       <div className="tabs" role="tablist">
         {(["cash", "card", "mixed"] as Tab[]).map((k) => <button key={k} role="tab" aria-selected={tab === k} className={`tab${tab === k ? " active" : ""}`} onClick={() => switchTab(k)}>{t(`pos.tabs.${k}`)}</button>)}
+        <Kbd k="F8" />
       </div>
 
       {tab === "cash" && (

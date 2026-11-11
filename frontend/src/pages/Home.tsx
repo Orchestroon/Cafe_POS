@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link, Navigate } from "react-router-dom";
 import { api } from "../api/client";
-import type { PaymentBreakdown, SalesSummary } from "../api/types";
+import { needsRecipe, type ModifierGroup, type PaymentBreakdown, type Product, type SalesSummary } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { PageHeader } from "../components/PageHeader";
 import { Stat } from "../components/Stat";
@@ -33,6 +33,11 @@ function Dashboard() {
   const open = useQuery({ queryKey: ["shifts", "count", "open"], queryFn: () => api.list("/shifts", { status: "open", page_size: 1 }), refetchInterval: 60000 });
   const low = useQuery({ queryKey: ["balances", "count", "low"], queryFn: () => api.list("/inventory/balances", { is_low: true, page_size: 1 }) });
   const neg = useQuery({ queryKey: ["balances", "count", "negative"], queryFn: () => api.list("/inventory/balances", { is_negative: true, page_size: 1 }) });
+  // B3/R2: setup that blocks selling (sizes with no recipe, options with no ingredient).
+  const products = useQuery({ queryKey: ["products", "all"], queryFn: () => api.all<Product>("/products") });
+  const groups = useQuery({ queryKey: ["modifier-groups"], queryFn: () => api.all<ModifierGroup>("/modifier-groups", { ordering: "sort_order" }) });
+  const missing = (products.data ?? []).filter((x) => x.is_active).flatMap((x) => x.variants.filter((v) => v.is_active && needsRecipe(v)).map((v) => `${x.name} · ${v.label}`));
+  const bareOptions = (groups.data ?? []).filter((g) => g.is_active).flatMap((g) => g.options.filter((o) => o.is_active && o.track_stock && (o.effects?.length ?? 0) === 0));
   const s = sales.data;
   const p = pay.data;
   return (
@@ -45,6 +50,10 @@ function Dashboard() {
         <Stat title={t("home.cashNet")} value={p ? m(p.cash_net) : "…"} />
         <Stat title={t("home.cardNet")} value={p ? m(p.card_net) : "…"} />
         <Stat title={t("home.openShifts")} value={open.data ? open.data.meta.total_count : "…"} />
+        <Link to="/admin/products" style={{ textDecoration: "none" }} title={missing.join(", ")}>
+          <Stat title={t("home.noRecipe")} value={products.data ? missing.length : "…"} alert={missing.length > 0 || bareOptions.length > 0}
+            meta={bareOptions.length > 0 ? t("home.optionsNoIngredient", { count: bareOptions.length }) : missing.length > 0 ? t("home.noRecipeMeta") : undefined} />
+        </Link>
         <Stat title={t("home.lowStock")} value={low.data ? low.data.meta.total_count : "…"} alert={!!low.data && low.data.meta.total_count > 0} meta={neg.data ? t("home.negativeCount", { count: neg.data.meta.total_count }) : undefined} />
       </div>
       <h3 className="section-title" style={{ marginTop: 20 }}>{t("home.shortcuts")}</h3>
@@ -52,7 +61,7 @@ function Dashboard() {
         {(["pos", "orders", "shift", "expenses"] as const).map((k) => (
           <Link key={k} to={`/${k}`} className="metric-card" style={{ textDecoration: "none" }}><div className="metric-title">{t(`nav.${k}`)}</div></Link>
         ))}
-        {(["products", "modifiers", "categories", "ingredients", "inventory", "suppliers", "purchases", "shifts", "users", "settings"] as const).map((k) => (
+        {(["products", "modifiers", "categories", "ingredients", "inventory", "suppliers", "purchases", "shifts", "audit", "users", "settings"] as const).map((k) => (
           <Link key={k} to={`/admin/${k}`} className="metric-card" style={{ textDecoration: "none" }}><div className="metric-title">{t(`nav.${k}`)}</div></Link>
         ))}
         <Link to="/admin/reports/sales-summary" className="metric-card" style={{ textDecoration: "none" }}><div className="metric-title">{t("nav.reports")}</div></Link>

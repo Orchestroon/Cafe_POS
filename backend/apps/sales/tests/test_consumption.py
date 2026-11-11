@@ -130,8 +130,26 @@ def test_zero_quantity_lines_are_omitted_from_consumption():
     assert totals(consume(v)) == {"Cup": ("1.000", "1.000")}
 
 
-def test_empty_recipe_consumes_nothing():
-    assert consume(variant()).per_ingredient == ()
+def test_untracked_size_with_empty_recipe_consumes_nothing():
+    assert consume(variant(track=False)).per_ingredient == ()
+
+
+def test_b3_tracked_size_without_recipe_is_refused():
+    with pytest.raises(ApiError) as e:
+        consume(variant(label="Water", track=True))
+    assert e.value.code == "RECIPE_MISSING" and e.value.status == 422
+    assert e.value.details["variant_label"] == "Water"
+
+
+def test_r2_tracked_option_without_effects_is_refused_untracked_deducts_nothing():
+    g = group("Extras", "add", lo=0, hi=3)
+    v = variant(groups=[g], recipe=[line(COFFEE, "10")])
+    bare = option(g, "Caramel", track=True)
+    with pytest.raises(ApiError) as e:
+        consume(v, 1, [bare])
+    assert e.value.code == "INVALID_MODIFIER" and e.value.details["reason"] == "no_effect"
+    no_ice = option(g, "No ice", track=False)
+    assert totals(consume(v, 1, [no_ice])) == {"Coffee": ("10.000", "10.000")}
 
 
 def test_aggregate_across_items_and_warnings_never_block():

@@ -120,6 +120,7 @@ class OptionInputSerializer(StrictSerializerMixin, serializers.Serializer):
     price_delta = MoneyField(default=Decimal("0.00"))
     sort_order = serializers.IntegerField(default=0)
     is_active = serializers.BooleanField(default=True)
+    track_stock = serializers.BooleanField(default=True)
     variant_prices = VariantPriceSerializer(many=True, required=False, max_length=50)
     effects = EffectSerializer(many=True, required=False, max_length=100)
 

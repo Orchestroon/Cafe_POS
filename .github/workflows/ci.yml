@@ -27,6 +27,8 @@ jobs:
       - run: python manage.py makemigrations --check --dry-run
         env: { DJANGO_SETTINGS_MODULE: config.settings.test }
       - run: pytest
+      - run: python manage.py spectacular --validate --fail-on-warn --file /dev/null
+        env: { DJANGO_SETTINGS_MODULE: config.settings.test }
 
   frontend:
     runs-on: ubuntu-latest
@@ -38,4 +40,23 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm run i18n:check
+      - run: npm test
       - run: npm run build
+
+  # Sprint 4: Playwright end-to-end flows on the isolated e2e stack (docker-compose.e2e.yml).
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose -f docker-compose.e2e.yml run --rm e2e
+        env: { CI: "1" }
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: frontend/e2e/artifacts
+          retention-days: 14
+      - if: always()
+        run: docker compose -f docker-compose.e2e.yml down -v

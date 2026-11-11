@@ -8,6 +8,7 @@ import { useAuth } from "../auth/AuthContext";
 import { Field, fieldError, isDecimal, TextField } from "../components/Form";
 import { Modal } from "../components/Modal";
 import { PageHeader } from "../components/PageHeader";
+import { HistoryLink } from "./AuditLog";
 import { ErrorBanner, Loading } from "../components/States";
 import { addMoney, lineTotal, packCostFrom, packQty, unitCostFromPack } from "../lib/decimal";
 import { formatDateTime, formatMoney } from "../i18n/format";
@@ -117,7 +118,7 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
   if (posted) {
     return (
       <>
-        <PageHeader title={t("purchases.viewTitle")} subtitle={`${purchase.purchased_on} · ${purchase.supplier?.name ?? "—"}`} actions={<Link className="btn btn-outline" to="/admin/purchases">{t("orders.back")}</Link>} />
+        <PageHeader title={t("purchases.viewTitle")} subtitle={`${purchase.purchased_on} · ${purchase.supplier?.name ?? "—"}`} actions={<><Link className="btn btn-outline" to="/admin/purchases">{t("orders.back")}</Link><HistoryLink entityType="purchasing.purchase" entityId={purchase.id} /></>} />
         <div className="card">
           <div className="alert-banner alert-success" style={{ marginBottom: 12 }}>{t("purchases.postedNote", { time: purchase.posted_at ? formatDateTime(purchase.posted_at, tz) : "", by: purchase.posted_by?.display_name ?? "" })}</div>
           <table className="erp-table">
@@ -142,6 +143,7 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
     <>
       <PageHeader title={purchase ? t("purchases.editTitle") : t("purchases.newTitle")} actions={<>
         <Link className="btn btn-outline" to="/admin/purchases">{t("orders.back")}</Link>
+        {purchase && <HistoryLink entityType="purchasing.purchase" entityId={purchase.id} />}
         {purchase && <button className="btn btn-outline" disabled={del.isPending} onClick={() => window.confirm(t("purchases.deleteConfirm")) && del.mutate()}>{t("purchases.delete")}</button>}
         <button className="btn btn-outline" disabled={save.isPending || !dirty} onClick={submit}>{t("common.save")}</button>
         {purchase && <button className="btn btn-primary" disabled={dirty || save.isPending} onClick={() => setConfirmPost(true)}>{t("purchases.post")}</button>}

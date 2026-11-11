@@ -29,12 +29,27 @@ class CategorySerializer(StrictSerializerMixin, serializers.ModelSerializer):
 class VariantSerializer(StrictSerializerMixin, serializers.ModelSerializer):
     price = MoneyField()
     sku = serializers.CharField(max_length=50, required=False, allow_null=True, allow_blank=True)
+    has_recipe = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductVariant
-        fields = ["id", "product_id", "label", "sku", "price", "sort_order", "is_active"]
-        read_only_fields = ["id", "product_id"]
+        fields = [
+            "id",
+            "product_id",
+            "label",
+            "sku",
+            "price",
+            "sort_order",
+            "is_active",
+            "track_stock",
+            "has_recipe",
+        ]
+        read_only_fields = ["id", "product_id", "has_recipe"]
         extra_kwargs = {"label": {"validators": []}}
+
+    def get_has_recipe(self, obj) -> bool:
+        annotated = getattr(obj, "has_recipe", None)  # set by the products list prefetch
+        return obj.recipe_lines.exists() if annotated is None else bool(annotated)
 
     def validate_sku(self, value):
         return value or None  # blank means "no SKU" so the partial unique index ignores it

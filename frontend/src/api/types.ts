@@ -11,11 +11,13 @@ export interface Settings {
 }
 export interface Me { user: User; organization: { id: string; name: string }; settings: Settings; }
 export interface Category { id: string; name: string; sort_order: number; is_active: boolean; }
-export interface Variant { id: string; label: string; sku: string | null; price: string; sort_order: number; is_active: boolean; }
+export interface Variant { id: string; label: string; sku: string | null; price: string; sort_order: number; is_active: boolean; track_stock: boolean; has_recipe: boolean; }
+/** B3: a size that must have a recipe but has none cannot be sold. */
+export const needsRecipe = (v: Pick<Variant, "track_stock" | "has_recipe">) => v.track_stock && !v.has_recipe;
 export interface Product { id: string; category_id: string; name: string; description: string; sort_order: number; is_active: boolean; variants: Variant[]; modifier_groups: LinkedGroup[]; }
 export interface VariantPrice { variant_id: string; price_delta: string; }
 export interface OptionEffect { variant_id: string | null; ingredient_id: string; ingredient_name?: string; unit?: Unit; base_qty: string; waste_pct: string; }
-export interface ModifierOption { id: string; label: string; price_delta: string; sort_order: number; is_active: boolean; variant_prices: VariantPrice[]; effects?: OptionEffect[]; }
+export interface ModifierOption { id: string; label: string; price_delta: string; sort_order: number; is_active: boolean; track_stock: boolean; variant_prices: VariantPrice[]; effects?: OptionEffect[]; }
 export interface LinkedGroup { group_id: string; name: string; sort_order: number; mode: "add" | "replace"; min_select: number; max_select: number; is_active: boolean; options: ModifierOption[]; }
 export interface ModifierGroup { id: string; name: string; mode: "add" | "replace"; replacement_slot?: string | null; min_select: number; max_select: number; sort_order: number; is_active: boolean; options: ModifierOption[]; slot_warnings?: { product_name: string; variant_label: string }[]; }
 export interface RecipeLine { ingredient_id: string; ingredient_name?: string; unit?: Unit; base_qty: string; waste_pct: string; slot_key: string | null; }
@@ -27,6 +29,9 @@ export interface Shift {
   id: string; status: "open" | "closed"; opening_cash: string; opened_at: string; closed_at: string | null; closed_by: Person | null;
   user: Person; register: string; expected_cash: string | null; actual_cash: string | null; difference: string | null; close_note: string; totals: ShiftTotals;
 }
+export interface LastClosed { id: string; closed_at: string; actual_cash: string; }
+export interface AuditEvent { id: string; created_at: string; action: string; entity_type: string; entity_id: string; entity_label: string | null; actor: { id: string; username: string; display_name: string } | null; summary: Record<string, unknown>; }
+export interface AuditMeta { page: number; page_size: number; total_count: number; actions: string[]; entity_types: string[]; names: Record<string, string>; }
 export interface StockWarning { ingredient_id: string; ingredient_name: string; unit: Unit; available: string; required: string; projected_balance: string; }
 export interface QuoteItem { variant_id: string; product_name: string; variant_label: string; quantity: number; unit_price: string; unit_discount: string; line_total: string; modifiers: { option_id: string; label: string; price_delta: string }[]; }
 export interface Quote { subtotal: string; discount_total: string; tax_total: string; total: string; tax: { enabled: boolean; rate: string; inclusive: boolean; label: string }; items: QuoteItem[]; stock_warnings: StockWarning[]; }

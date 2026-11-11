@@ -1,4 +1,4 @@
-from django.db.models import Prefetch
+from django.db.models import Exists, OuterRef, Prefetch
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
@@ -12,7 +12,7 @@ from apps.core.policy import has_perm
 from apps.modifiers.models import ModifierOption, ProductModifierGroup
 
 from . import services
-from .models import Category, Product, ProductVariant
+from .models import Category, Product, ProductVariant, RecipeLine
 from .serializers import (
     CategorySerializer,
     ModifierLinkSerializer,
@@ -23,7 +23,7 @@ from .serializers import (
 
 CATEGORY_FIELDS = ["name", "sort_order", "is_active"]
 PRODUCT_FIELDS = ["category_id", "name", "description", "sort_order", "is_active"]
-VARIANT_FIELDS = ["label", "sku", "price", "sort_order", "is_active"]
+VARIANT_FIELDS = ["label", "sku", "price", "sort_order", "is_active", "track_stock"]
 
 
 class _CatalogBase(TenantScopedViewSetMixin, viewsets.GenericViewSet):
@@ -73,7 +73,9 @@ class ProductViewSet(
 
     def get_queryset(self):
         qs = super().get_queryset()
-        variants = ProductVariant.objects.all()
+        variants = ProductVariant.objects.annotate(
+            has_recipe=Exists(RecipeLine.objects.filter(variant=OuterRef("pk")))
+        )
         if not self.is_admin:  # Barista: only what can be sold
             qs = qs.filter(is_active=True, category__is_active=True)
             variants = variants.filter(is_active=True)
@@ -130,7 +132,7 @@ class VariantViewSet(TenantScopedViewSetMixin, mixins.UpdateModelMixin, viewsets
         return {"*": "catalog.manage"}
 
     def perform_update(self, serializer):
-        update_obj(self.request.user, serializer, "variant.updated")
+        services.update_variant(self.request.user, serializer)
 
     @extend_schema(request=RecipeInputSerializer, responses=OpenApiTypes.OBJECT)
     @action(detail=True, methods=["get", "put"], url_path="recipe")

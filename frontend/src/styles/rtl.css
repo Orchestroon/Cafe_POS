@@ -11,3 +11,16 @@
     transform: translateX(0) !important;
   }
 }
+
+/* Arabic font (owner, 2026-11-11): Instrument Sans has no Arabic letters, so the browser used a
+   random system font. In Arabic the whole UI uses Cairo (its Latin letters and digits match),
+   numbers and invoice codes keep the mono font with Cairo as the Arabic fallback. Cairo is taller
+   than Instrument Sans, so tight line heights are opened up to avoid clipped letters. */
+:root[lang="ar"] {
+  --font-sans: 'Cairo', 'Instrument Sans', -apple-system, 'Segoe UI', Tahoma, sans-serif;
+  --font-serif: 'Cairo', 'Instrument Sans', -apple-system, 'Segoe UI', Tahoma, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cairo', Consolas, monospace;
+}
+:root[lang="ar"] body { line-height: 1.6; }
+:root[lang="ar"] :is(h1, h2, h3, h4, .metric-value, .brand-text, .product-name, .pay-total, .receipt-title) { line-height: 1.4; }
+:root[lang="ar"] .receipt { font-family: var(--font-sans); }

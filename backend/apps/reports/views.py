@@ -8,7 +8,7 @@ from apps.core.permissions import PolicyPermission
 from apps.core.timeutils import parse_range
 from apps.sales.selectors import org_timezone
 
-from .services import REPORTS
+from .services import NO_PERSON_FILTER, REPORTS, TOP_PRODUCTS_LIMIT
 
 
 def _uuid_param(params, name):
@@ -34,6 +34,14 @@ class ReportView(APIView):
         org, p = request.user.organization, request.query_params
         _uuid_param(p, "cashier_id")
         _uuid_param(p, "shift_id")
+        if self.report in NO_PERSON_FILTER:  # Q6 item 3A (owner, 2026-11-11)
+            bad = {
+                k: "This report has no cashier or shift filter."
+                for k in ("cashier_id", "shift_id")
+                if p.get(k)
+            }
+            if bad:
+                raise ValidationError(bad)
         if p.get("ordering") not in (None, "", "qty", "revenue"):
             raise ValidationError({"ordering": "Use qty or revenue."})
         tz = org_timezone(org)
@@ -47,7 +55,11 @@ class ReportView(APIView):
                 "end_utc": hi.isoformat().replace("+00:00", "Z"),
             }
         }
-        return Response({"data": fn(org, lo, hi, p), "meta": meta})
+        data = fn(org, lo, hi, p)
+        if self.report == "top-products":  # Q6 item 4A: say when rows were cut
+            meta["limit"] = TOP_PRODUCTS_LIMIT
+            meta["truncated"] = data.pop("truncated")
+        return Response({"data": data, "meta": meta})
 
 
 def _view(name):

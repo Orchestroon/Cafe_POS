@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import SimpleRouter
 
 from apps.accounts.views import UserViewSet
+from apps.audit.views import AuditEventViewSet
 from apps.catalog.views import CategoryViewSet, ProductViewSet, VariantViewSet
 from apps.expenses.views import ExpenseViewSet
 from apps.inventory import views as inv
@@ -16,6 +17,7 @@ from . import views
 
 router = SimpleRouter(trailing_slash=False)
 router.register("users", UserViewSet, basename="user")
+router.register("audit-events", AuditEventViewSet, basename="audit-event")
 router.register("categories", CategoryViewSet, basename="category")
 router.register("products", ProductViewSet, basename="product")
 router.register("variants", VariantViewSet, basename="variant")

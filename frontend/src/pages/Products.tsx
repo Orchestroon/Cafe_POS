@@ -2,12 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
-import type { Category, ModifierGroup, Product, Variant } from "../api/types";
+import { needsRecipe, type Category, type ModifierGroup, type Product, type Variant } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { Check, Field, fieldError, isDecimal, TextField } from "../components/Form";
 import { Modal } from "../components/Modal";
 import { RecipeEditor } from "../components/RecipeEditor";
+import { HistoryLink } from "./AuditLog";
 import { PageHeader } from "../components/PageHeader";
+import { Kbd } from "../components/ShortcutsHelp";
 import { ErrorBanner } from "../components/States";
 import { ListState, Pager, StatusBadge } from "../components/Table";
 import { formatMoney } from "../i18n/format";
@@ -25,10 +27,10 @@ export function Products() {
   const cur = me?.settings.currency ?? "";
   return (
     <>
-      <PageHeader title={t("nav.products")} actions={<button className="btn btn-primary" onClick={() => setEditId("new")}>{t("common.new")}</button>} />
+      <PageHeader title={t("nav.products")} actions={<button className="btn btn-primary" data-shortcut="new" onClick={() => setEditId("new")}>{t("common.new")}<Kbd k="N" /></button>} />
       <div className="card">
         <div className="toolbar">
-          <div className="form-group"><label className="form-label">{t("common.search")}</label><input className="form-input" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>
+          <div className="form-group"><label className="form-label">{t("common.search")}</label><input data-shortcut="search" className="form-input" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>
           <div className="form-group"><label className="form-label">{t("products.category")}</label>
             <select className="form-select" value={cat} onChange={(e) => { setCat(e.target.value); setPage(1); }}>
               <option value="">{t("common.all")}</option>
@@ -42,7 +44,11 @@ export function Products() {
               {q.data?.data.map((p) => (
                 <tr key={p.id}>
                   <td>{p.name}</td><td>{catName(p.category_id)}</td>
-                  <td>{p.variants.map((v) => <span key={v.id} className={`badge ${v.is_active ? "badge-active" : "badge-off"}`} style={{ marginInlineEnd: 4 }}>{v.label} · {formatMoney(v.price, cur)}</span>)}</td>
+                  <td>{p.variants.map((v) => (
+                    <span key={v.id} className={`badge ${needsRecipe(v) ? "badge-danger" : v.is_active ? "badge-active" : "badge-off"}`} style={{ marginInlineEnd: 4 }} title={needsRecipe(v) ? t("products.noRecipeHint") : undefined}>
+                      {v.label} · {formatMoney(v.price, cur)}{needsRecipe(v) ? ` · ${t("products.noRecipe")}` : ""}
+                    </span>
+                  ))}</td>
                   <td><StatusBadge active={p.is_active} /></td>
                   <td><div className="row-actions"><button className="btn btn-outline btn-sm" onClick={() => setEditId(p.id)}>{t("common.edit")}</button></div></td>
                 </tr>
@@ -66,7 +72,7 @@ function ProductEditor({ id, categories, onClose }: { id: string | "new"; catego
   return (
     <Modal title={productId ? t("products.edit") : t("products.new")} onClose={onClose}>
       <ProductFields key={productId ?? "new"} product={existing.data} categories={categories} onSaved={(p) => { setProductId(p.id); void qc.invalidateQueries({ queryKey: ["products"] }); void qc.invalidateQueries({ queryKey: ["product", p.id] }); }} />
-      {productId ? <><Variants productId={productId} /><LinkedGroups productId={productId} /></> : <p className="form-hint">{t("products.saveFirst")}</p>}
+      {productId ? <><Variants productId={productId} /><LinkedGroups productId={productId} /><div style={{ marginTop: 16 }}><HistoryLink entityType="catalog.product" entityId={productId} /></div></> : <p className="form-hint">{t("products.saveFirst")}</p>}
     </Modal>
   );
 }
@@ -109,15 +115,15 @@ function ProductFields({ product, categories, onSaved }: { product?: Product; ca
 function Variants({ productId }: { productId: string }) {
   const { t } = useTranslation();
   const q = useQuery({ queryKey: ["product", productId], queryFn: () => api.get<Product>(`/products/${productId}`) });
-  const blank: Variant = { id: "", label: "", sku: "", price: "", sort_order: 0, is_active: true };
+  const blank: Variant = { id: "", label: "", sku: "", price: "", sort_order: 0, is_active: true, track_stock: true, has_recipe: false };
   return (
     <div style={{ marginTop: 20 }}>
       <h4 style={{ marginBottom: 8 }}>{t("products.sizes")}</h4>
       <div className="table-scroll">
         <table className="erp-table">
-          <thead><tr><th>{t("products.label")}</th><th>{t("products.sku")}</th><th className="num">{t("products.price")}</th><th>{t("common.sort")}</th><th>{t("common.active")}</th><th /></tr></thead>
+          <thead><tr><th>{t("products.label")}</th><th>{t("products.sku")}</th><th className="num">{t("products.price")}</th><th>{t("common.sort")}</th><th>{t("common.active")}</th><th>{t("products.trackStock")}</th><th /></tr></thead>
           <tbody>
-            {q.data?.variants.map((v) => <VariantRow key={`${v.id}:${v.price}:${v.label}:${v.is_active}`} productId={productId} productName={q.data.name} v={v} />)}
+            {q.data?.variants.map((v) => <VariantRow key={`${v.id}:${v.price}:${v.label}:${v.is_active}:${v.track_stock}`} productId={productId} productName={q.data.name} v={v} />)}
             <VariantRow key={`new:${q.data?.variants.length}`} productId={productId} productName={q.data?.name ?? ""} v={blank} />
           </tbody>
         </table>
@@ -130,7 +136,7 @@ function VariantRow({ productId, productName, v }: { productId: string; productN
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [recipeOpen, setRecipeOpen] = useState(false);
-  const [f, setF] = useState({ label: v.label, sku: v.sku ?? "", price: v.price, sort_order: String(v.sort_order), is_active: v.is_active });
+  const [f, setF] = useState({ label: v.label, sku: v.sku ?? "", price: v.price, sort_order: String(v.sort_order), is_active: v.is_active, track_stock: v.track_stock });
   const [clientErr, setClientErr] = useState("");
   const save = useMutation({
     mutationFn: () => {
@@ -145,7 +151,7 @@ function VariantRow({ productId, productName, v }: { productId: string; productN
     setClientErr("");
     save.mutate();
   };
-  const err = clientErr || (save.error ? (fieldError(save.error, "label") ?? fieldError(save.error, "price") ?? fieldError(save.error, "sku") ?? (save.error as Error).message) : "");
+  const err = clientErr || (save.error ? (fieldError(save.error, "label") ?? fieldError(save.error, "price") ?? fieldError(save.error, "sku") ?? fieldError(save.error, "track_stock") ?? (save.error as Error).message) : "");
   return (
     <>
       <tr>
@@ -154,15 +160,18 @@ function VariantRow({ productId, productName, v }: { productId: string; productN
         <td><input aria-label={t("products.price")} className="form-input inline-input num" inputMode="decimal" value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} /></td>
         <td><input aria-label={t("common.sort")} type="number" className="form-input inline-input" value={f.sort_order} onChange={(e) => setF({ ...f, sort_order: e.target.value })} /></td>
         <td><input aria-label={t("common.active")} type="checkbox" checked={f.is_active} onChange={(e) => setF({ ...f, is_active: e.target.checked })} /></td>
+        <td><input aria-label={t("products.trackStock")} type="checkbox" checked={f.track_stock} onChange={(e) => setF({ ...f, track_stock: e.target.checked })} /></td>
         <td>
           <div className="row-actions">
             <button className="btn btn-outline btn-sm" disabled={save.isPending} onClick={submit}>{v.id ? t("common.save") : t("products.addSize")}</button>
-            {v.id && <button className="btn btn-outline btn-sm" onClick={() => setRecipeOpen(true)}>{t("recipe.title")}</button>}
+            {v.id && v.track_stock && <button className="btn btn-outline btn-sm" onClick={() => setRecipeOpen(true)}>{t("recipe.title")}</button>}
+            {v.id && needsRecipe(v) && <span className="badge badge-danger" title={t("products.noRecipeHint")}>{t("products.noRecipe")}</span>}
+            {v.id && !v.track_stock && <span className="badge badge-off">{t("products.notTracked")}</span>}
           </div>
-          {recipeOpen && <RecipeEditor productName={productName} variant={v} onClose={() => setRecipeOpen(false)} />}
+          {recipeOpen && <RecipeEditor productName={productName} variant={v} onClose={() => { setRecipeOpen(false); void qc.invalidateQueries({ queryKey: ["product", productId] }); void qc.invalidateQueries({ queryKey: ["products"] }); }} />}
         </td>
       </tr>
-      {err && <tr><td colSpan={6}><div className="field-error" role="alert">{err}</div></td></tr>}
+      {err && <tr><td colSpan={7}><div className="field-error" role="alert">{err}</div></td></tr>}
     </>
   );
 }

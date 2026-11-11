@@ -7,9 +7,13 @@ import { useAuth } from "../auth/AuthContext";
 import { Check, Field, fieldError, isDecimal, TextField } from "../components/Form";
 import { Modal } from "../components/Modal";
 import { PageHeader } from "../components/PageHeader";
+import { Kbd } from "../components/ShortcutsHelp";
 import { ErrorBanner, Loading } from "../components/States";
 import { ListState, StatusBadge } from "../components/Table";
 import { formatMoney } from "../i18n/format";
+
+/** R2: a tracked option with no ingredient effect cannot be sold. */
+const noIngredient = (o: ModifierOption) => o.track_stock && (o.effects?.length ?? 0) === 0;
 
 export function Modifiers() {
   const { t } = useTranslation();
@@ -17,7 +21,7 @@ export function Modifiers() {
   const q = useQuery({ queryKey: ["modifier-groups"], queryFn: () => api.all<ModifierGroup>("/modifier-groups", { ordering: "sort_order" }) });
   return (
     <>
-      <PageHeader title={t("nav.modifiers")} subtitle={t("modifiers.help")} actions={<button className="btn btn-primary" onClick={() => setEditId("new")}>{t("common.new")}</button>} />
+      <PageHeader title={t("nav.modifiers")} subtitle={t("modifiers.help")} actions={<button className="btn btn-primary" data-shortcut="new" onClick={() => setEditId("new")}>{t("common.new")}<Kbd k="N" /></button>} />
       <div className="card">
         <ListState loading={q.isLoading} error={q.error} empty={q.data?.length === 0}>
           <table className="erp-table">
@@ -27,7 +31,7 @@ export function Modifiers() {
                 <tr key={g.id}>
                   <td>{g.name}</td>
                   <td>{t(`modifiers.modes.${g.mode}`)}{g.replacement_slot ? ` (${g.replacement_slot})` : ""} · {g.min_select}–{g.max_select}</td>
-                  <td>{g.options.map((o) => <span key={o.id} className={`badge ${o.is_active ? "badge-active" : "badge-off"}`} style={{ marginInlineEnd: 4 }}>{o.label}</span>)}</td>
+                  <td>{g.options.map((o) => <span key={o.id} className={`badge ${noIngredient(o) ? "badge-danger" : o.is_active ? "badge-active" : "badge-off"}`} title={noIngredient(o) ? t("modifiers.noIngredientHint") : undefined} style={{ marginInlineEnd: 4 }}>{o.label}{noIngredient(o) ? ` · ${t("modifiers.noIngredient")}` : ""}</span>)}</td>
                   <td>{g.slot_warnings && g.slot_warnings.length > 0 ? <span className="badge badge-danger">{t("modifiers.slotWarnings", { count: g.slot_warnings.length })}</span> : "—"}</td>
                   <td><StatusBadge active={g.is_active} /></td>
                   <td><div className="row-actions"><button className="btn btn-outline btn-sm" onClick={() => setEditId(g.id)}>{t("common.edit")}</button></div></td>
@@ -113,7 +117,11 @@ function Options({ groupId }: { groupId: string }) {
             {q.data?.options.map((o) => (
               <tr key={o.id}>
                 <td>{o.label}</td><td className="num">{formatMoney(o.price_delta, cur)}{o.variant_prices.length > 0 ? ` (+${o.variant_prices.length})` : ""}</td>
-                <td>{o.effects?.length ?? 0}</td><td><StatusBadge active={o.is_active} /></td>
+                <td>
+                  {!o.track_stock ? <span className="badge badge-off">{t("modifiers.noStockEffectBadge")}</span>
+                    : noIngredient(o) ? <span className="badge badge-danger" title={t("modifiers.noIngredientHint")}>{t("modifiers.noIngredient")}</span>
+                    : o.effects?.length ?? 0}
+                </td><td><StatusBadge active={o.is_active} /></td>
                 <td><button className="btn btn-outline btn-sm" onClick={() => setEdit(o)}>{t("common.edit")}</button></td>
               </tr>
             ))}
@@ -135,16 +143,16 @@ function OptionEditor({ groupId, option, onClose }: { groupId: string; option?: 
   const products = useQuery({ queryKey: ["products", "all-variants"], queryFn: () => api.all<Product>("/products", { ordering: "name" }) });
   const ings = useQuery({ queryKey: ["ingredients", "active"], queryFn: () => api.all<Ingredient>("/ingredients", { is_active: true, ordering: "name" }) });
   const sizes = (products.data ?? []).flatMap((p) => p.variants.map((v) => ({ id: v.id, label: `${p.name} · ${v.label}` })));
-  const [f, setF] = useState({ label: option?.label ?? "", price_delta: option?.price_delta ?? "0.00", sort_order: String(option?.sort_order ?? 0), is_active: option?.is_active ?? true });
+  const [f, setF] = useState({ label: option?.label ?? "", price_delta: option?.price_delta ?? "0.00", sort_order: String(option?.sort_order ?? 0), is_active: option?.is_active ?? true, track_stock: option?.track_stock ?? true });
   const [prices, setPrices] = useState<PriceRow[]>((option?.variant_prices ?? []).map((p) => ({ key: ++seq, ...p })));
   const [effects, setEffects] = useState<EffRow[]>((option?.effects ?? []).map((e: OptionEffect) => ({ key: ++seq, variant_id: e.variant_id ?? "", ingredient_id: e.ingredient_id, base_qty: e.base_qty, waste_pct: e.waste_pct })));
   const [clientErr, setClientErr] = useState("");
   const save = useMutation({
     mutationFn: () => {
       const body = {
-        label: f.label.trim(), price_delta: f.price_delta.trim(), sort_order: Number(f.sort_order) || 0, is_active: f.is_active,
+        label: f.label.trim(), price_delta: f.price_delta.trim(), sort_order: Number(f.sort_order) || 0, is_active: f.is_active, track_stock: f.track_stock,
         variant_prices: prices.map((p) => ({ variant_id: p.variant_id, price_delta: p.price_delta.trim() })),
-        effects: effects.map((e) => ({ variant_id: e.variant_id || null, ingredient_id: e.ingredient_id, base_qty: e.base_qty.trim(), waste_pct: e.waste_pct.trim() || "0.00" })),
+        effects: (f.track_stock ? effects : []).map((e) => ({ variant_id: e.variant_id || null, ingredient_id: e.ingredient_id, base_qty: e.base_qty.trim(), waste_pct: e.waste_pct.trim() || "0.00" })),
       };
       return option ? api.patch(`/modifier-options/${option.id}`, body) : api.post(`/modifier-groups/${groupId}/options`, body);
     },
@@ -153,7 +161,8 @@ function OptionEditor({ groupId, option, onClose }: { groupId: string; option?: 
   const submit = () => {
     if (!f.label.trim()) return setClientErr(t("modifiers.labelRequired"));
     if (!isDecimal(f.price_delta, 2) || prices.some((p) => !p.variant_id || !isDecimal(p.price_delta, 2))) return setClientErr(t("products.priceInvalid"));
-    if (effects.some((e) => !e.ingredient_id || !isDecimal(e.base_qty, 3) || !isDecimal(e.waste_pct || "0", 2))) return setClientErr(t("recipe.qtyInvalid"));
+    if (f.track_stock && effects.length === 0) return setClientErr(t("modifiers.effectRequired"));
+    if (f.track_stock && effects.some((e) => !e.ingredient_id || !isDecimal(e.base_qty, 3) || !isDecimal(e.waste_pct || "0", 2))) return setClientErr(t("recipe.qtyInvalid"));
     setClientErr("");
     save.mutate();
   };
@@ -169,6 +178,8 @@ function OptionEditor({ groupId, option, onClose }: { groupId: string; option?: 
         <TextField label={t("common.sort")} type="number" value={f.sort_order} onChange={(e) => setF({ ...f, sort_order: e.target.value })} />
       </div>
       <Check label={t("common.active")} checked={f.is_active} onChange={(v) => setF({ ...f, is_active: v })} />
+      <Check label={t("modifiers.noStockEffect")} checked={!f.track_stock} onChange={(v) => setF({ ...f, track_stock: !v })} />
+      {fieldError(save.error, "track_stock") && <div className="field-error" role="alert">{fieldError(save.error, "track_stock")}</div>}
 
       <h4 style={{ margin: "14px 0 6px" }}>{t("modifiers.sizePrices")}</h4>
       <p className="form-hint">{t("modifiers.sizePricesHint")}</p>
@@ -184,6 +195,7 @@ function OptionEditor({ groupId, option, onClose }: { groupId: string; option?: 
       </tbody></table></div>
       <button className="btn btn-outline btn-sm" onClick={() => setPrices([...prices, { key: ++seq, variant_id: "", price_delta: "" }])}>{t("modifiers.addSizePrice")}</button>
 
+      {f.track_stock && <>
       <h4 style={{ margin: "14px 0 6px" }}>{t("modifiers.effects")}</h4>
       <p className="form-hint">{t("modifiers.effectsHint")}</p>
       {fieldError(save.error, "effects") && <div className="field-error" role="alert">{fieldError(save.error, "effects")}</div>}
@@ -202,6 +214,7 @@ function OptionEditor({ groupId, option, onClose }: { groupId: string; option?: 
         </tbody>
       </table></div>
       <button className="btn btn-outline btn-sm" onClick={() => setEffects([...effects, { key: ++seq, variant_id: "", ingredient_id: "", base_qty: "", waste_pct: "0.00" }])}>{t("modifiers.addEffect")}</button>
+      </>}
     </Modal>
   );
 }

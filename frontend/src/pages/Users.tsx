@@ -7,6 +7,7 @@ import { useAuth } from "../auth/AuthContext";
 import { Field, fieldError, TextField } from "../components/Form";
 import { Modal } from "../components/Modal";
 import { PageHeader } from "../components/PageHeader";
+import { Kbd } from "../components/ShortcutsHelp";
 import { ErrorBanner } from "../components/States";
 import { ListState, Pager, StatusBadge } from "../components/Table";
 
@@ -26,10 +27,10 @@ export function Users() {
   });
   return (
     <>
-      <PageHeader title={t("nav.users")} actions={<button className="btn btn-primary" onClick={() => setDialog({ kind: "create" })}>{t("common.new")}</button>} />
+      <PageHeader title={t("nav.users")} actions={<button className="btn btn-primary" data-shortcut="new" onClick={() => setDialog({ kind: "create" })}>{t("common.new")}<Kbd k="N" /></button>} />
       <div className="card">
         <ErrorBanner error={toggle.error} />
-        <div className="toolbar"><div className="form-group"><label className="form-label">{t("common.search")}</label><input className="form-input" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div></div>
+        <div className="toolbar"><div className="form-group"><label className="form-label">{t("common.search")}</label><input data-shortcut="search" className="form-input" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div></div>
         <ListState loading={q.isLoading} error={q.error} empty={q.data?.data.length === 0}>
           <table className="erp-table">
             <thead><tr><th>{t("users.username")}</th><th>{t("users.displayName")}</th><th>{t("users.role")}</th><th>{t("common.status")}</th><th /></tr></thead>

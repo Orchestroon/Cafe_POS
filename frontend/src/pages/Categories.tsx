@@ -6,6 +6,7 @@ import type { Category } from "../api/types";
 import { Check, fieldError, TextField } from "../components/Form";
 import { Modal } from "../components/Modal";
 import { PageHeader } from "../components/PageHeader";
+import { Kbd } from "../components/ShortcutsHelp";
 import { ErrorBanner } from "../components/States";
 import { ListState, StatusBadge } from "../components/Table";
 
@@ -15,7 +16,7 @@ export function Categories() {
   const q = useQuery({ queryKey: ["categories"], queryFn: () => api.all<Category>("/categories", { ordering: "sort_order" }) });
   return (
     <>
-      <PageHeader title={t("nav.categories")} actions={<button className="btn btn-primary" onClick={() => setEditing({ is_active: true, sort_order: 0 })}>{t("common.new")}</button>} />
+      <PageHeader title={t("nav.categories")} actions={<button className="btn btn-primary" data-shortcut="new" onClick={() => setEditing({ is_active: true, sort_order: 0 })}>{t("common.new")}<Kbd k="N" /></button>} />
       <div className="card">
         <ListState loading={q.isLoading} error={q.error} empty={q.data?.length === 0}>
           <table className="erp-table">
