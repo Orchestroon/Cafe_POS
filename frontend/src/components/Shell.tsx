@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { setLang } from "../i18n";
+import { confirmLeave } from "../lib/unsaved";
+import { Alerts } from "./Alerts";
 import { moveFocus, useShortcuts } from "../lib/shortcuts";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 
@@ -26,41 +28,51 @@ const ICONS = {
   cart: "M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0",
   chart: "M18 20V10M12 20V4M6 20v-6",
   sliders: "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
+  bell: "M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0",
+  help: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01",
 };
 
-interface Item { to: string; label: string; icon: keyof typeof ICONS; admin?: boolean; mobile?: boolean }
+type Section = "daily" | "menu" | "buying" | "manage";
+interface Item { to: string; label: string; short?: string; icon: keyof typeof ICONS; section: Section; admin?: boolean; mobile?: boolean }
+const SECTIONS: Section[] = ["daily", "menu", "buying", "manage"];
 
+/** App shell (owner design, 2026-11-16): grouped sidebar, workspace card, help + alerts + date in
+ *  the top bar. Growl theme. Every navigation asks the unsaved-changes guard first. */
 export function Shell(): ReactNode {
   const { t, i18n } = useTranslation();
   const { me, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const loc = useLocation();
-  const nav = useNavigate();
+  const navigate = useNavigate();
+  const nav = (to: string) => { if (confirmLeave()) navigate(to); };
   const isAdmin = me?.user.role === "admin";
+  const tz = me?.settings.timezone ?? "UTC";
 
   const items: Item[] = [
-    { to: "/", label: t("nav.home"), icon: "home" },
-    { to: "/pos", label: t("nav.pos"), icon: "pos", mobile: true },
-    { to: "/orders", label: t("nav.orders"), icon: "receipt", mobile: true },
-    { to: "/shift", label: t("nav.shift"), icon: "clock", mobile: !isAdmin },
-    { to: "/expenses", label: t("nav.expenses"), icon: "wallet" },
-    { to: "/admin/products", label: t("nav.products"), icon: "cup", admin: true, mobile: true },
-    { to: "/admin/modifiers", label: t("nav.modifiers"), icon: "sliders", admin: true },
-    { to: "/admin/categories", label: t("nav.categories"), icon: "tag", admin: true },
-    { to: "/admin/ingredients", label: t("nav.ingredients"), icon: "doc", admin: true },
-    { to: "/admin/inventory", label: t("nav.inventory"), icon: "box", admin: true, mobile: true },
-    { to: "/admin/suppliers", label: t("nav.suppliers"), icon: "truck", admin: true },
-    { to: "/admin/purchases", label: t("nav.purchases"), icon: "cart", admin: true },
-    { to: "/admin/shifts", label: t("nav.shifts"), icon: "clock", admin: true },
-    { to: "/admin/reports", label: t("nav.reports"), icon: "chart", admin: true },
-    { to: "/admin/audit", label: t("nav.audit"), icon: "doc", admin: true },
-    { to: "/admin/users", label: t("nav.users"), icon: "users", admin: true },
-    { to: "/admin/settings", label: t("nav.settings"), icon: "gear", admin: true },
+    { to: "/", label: t("nav.home"), icon: "home", section: "daily" },
+    { to: "/pos", label: t("nav.pos"), short: t("nav.short.pos"), icon: "pos", section: "daily", mobile: true },
+    { to: "/orders", label: t("nav.orders"), short: t("nav.short.orders"), icon: "receipt", section: "daily", mobile: true },
+    { to: "/shift", label: t("nav.shift"), short: t("nav.short.shift"), icon: "clock", section: "daily", mobile: !isAdmin },
+    { to: "/expenses", label: t("nav.expenses"), icon: "wallet", section: "daily" },
+    { to: "/admin/products", label: t("nav.products"), short: t("nav.short.products"), icon: "cup", section: "menu", admin: true, mobile: true },
+    { to: "/admin/modifiers", label: t("nav.modifiers"), icon: "sliders", section: "menu", admin: true },
+    { to: "/admin/categories", label: t("nav.categories"), icon: "tag", section: "menu", admin: true },
+    { to: "/admin/ingredients", label: t("nav.ingredients"), icon: "doc", section: "menu", admin: true },
+    { to: "/admin/inventory", label: t("nav.inventory"), short: t("nav.short.inventory"), icon: "box", section: "menu", admin: true, mobile: true },
+    { to: "/admin/suppliers", label: t("nav.suppliers"), icon: "truck", section: "buying", admin: true },
+    { to: "/admin/purchases", label: t("nav.purchases"), icon: "cart", section: "buying", admin: true },
+    { to: "/admin/shifts", label: t("nav.shifts"), icon: "clock", section: "manage", admin: true },
+    { to: "/admin/reports", label: t("nav.reports"), icon: "chart", section: "manage", admin: true },
+    { to: "/admin/audit", label: t("nav.audit"), icon: "doc", section: "manage", admin: true },
+    { to: "/admin/users", label: t("nav.users"), icon: "users", section: "manage", admin: true },
+    { to: "/admin/settings", label: t("nav.settings"), icon: "gear", section: "manage", admin: true },
   ].filter((i) => !i.admin || isAdmin) as Item[];
   const current = items.find((i) => (i.to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(i.to)));
   const initials = (me?.user.display_name || me?.user.username || "?").slice(0, 2).toUpperCase();
   const go = () => setOpen(false);
   const [help, setHelp] = useState(false);
+  const city = tz.split("/").pop()?.replace(/_/g, " ") ?? tz;
+  const today = new Intl.DateTimeFormat(i18n.language === "ar" ? "ar-EG" : "en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: tz }).format(new Date());
 
   // B2: shortcuts that work on every page (the page's own ones are registered by the page).
   const click = (sel: string) => {
@@ -103,18 +115,34 @@ export function Shell(): ReactNode {
           <div>
             <div className="workspace-label">{t("nav.workspace")}</div>
             <div className="workspace-title">{me?.organization.name}</div>
+            <div className="workspace-sub">{t("nav.branch", { city })}</div>
           </div>
         </div>
-        <ul className="nav-menu">
-          {items.map((i) => (
-            <li className="nav-item" key={i.to}>
-              <NavLink to={i.to} end={i.to === "/"} className={({ isActive }) => `nav-link${isActive ? " active" : ""}`} onClick={go}>
-                {icon(ICONS[i.icon])}<span>{i.label}</span>
-              </NavLink>
-            </li>
-          ))}
-        </ul>
+        <nav className="nav-scroll" aria-label={t("nav.menu")}>
+          {SECTIONS.map((sec) => {
+            const list = items.filter((i) => i.section === sec);
+            if (list.length === 0) return null;
+            return (
+              <div key={sec} className="nav-group">
+                {(isAdmin || sec !== "daily") && <div className="nav-section-title">{t(`nav.sections.${sec}`)}</div>}
+                <ul className="nav-menu">
+                  {list.map((i) => (
+                    <li className="nav-item" key={i.to}>
+                      <NavLink to={i.to} end={i.to === "/"} className={({ isActive }) => `nav-link${isActive ? " active" : ""}`} onClick={(e) => { if (!confirmLeave()) e.preventDefault(); else go(); }}>
+                        {icon(ICONS[i.icon])}<span>{i.label}</span>
+                      </NavLink>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </nav>
         <div className="sidebar-footer">
+          <div className="sidebar-help">
+            <div className="sidebar-help-title">{t("nav.needHand")}</div>
+            <button className="sidebar-help-link" onClick={() => setHelp(true)}>{t("nav.openShortcuts")} ↗</button>
+          </div>
           <div className="user-profile-badge">
             <div className="avatar-circle">{initials}</div>
             <div className="user-meta">
@@ -123,7 +151,7 @@ export function Shell(): ReactNode {
             </div>
           </div>
           <div className="sidebar-user-actions">
-            <button className="btn btn-outline btn-sm" onClick={() => void logout().then(() => nav("/login"))}>{t("nav.logout")}</button>
+            <button className="btn btn-outline btn-sm" onClick={() => { if (confirmLeave()) void logout().then(() => navigate("/login")); }}>{t("nav.logout")}</button>
           </div>
         </div>
       </aside>
@@ -135,7 +163,9 @@ export function Shell(): ReactNode {
             <div className="breadcrumbs"><span>{t("nav.workspace")}</span><span>/</span><span className="current">{current?.label}</span></div>
           </div>
           <div className="top-bar-right">
-            <button className="lang-btn kbd-btn" onClick={() => setHelp(true)} aria-label={t("shortcuts.title")} title={t("shortcuts.hint")}>?</button>
+            <span className="top-date">{today}</span>
+            <button className="top-icon-btn" onClick={() => setHelp(true)} aria-label={t("shortcuts.title")} title={t("shortcuts.hint")}>{icon(ICONS.help)}</button>
+            {isAdmin && <Alerts icon={icon(ICONS.bell)} onGo={(to) => nav(to)} />}
             <button className="lang-btn" onClick={() => setLang(i18n.language === "ar" ? "en" : "ar")}>{i18n.language === "ar" ? "EN" : "عربي"}</button>
           </div>
         </header>
@@ -145,7 +175,7 @@ export function Shell(): ReactNode {
       <nav className="mobile-bottom-nav">
         {items.filter((i) => i.mobile).map((i) => (
           <button key={i.to} className={`mobile-nav-btn${current?.to === i.to ? " active" : ""}`} onClick={() => nav(i.to)}>
-            {icon(ICONS[i.icon])}<span>{i.label}</span>
+            {icon(ICONS[i.icon])}<span>{i.short ?? i.label}</span>
           </button>
         ))}
         <button className="mobile-nav-btn" onClick={() => setOpen(true)}>{icon(ICONS.menu)}<span>{t("nav.menu")}</span></button>

@@ -843,6 +843,9 @@ Insufficient stock is **not** an error: it returns 200/201 with `stock_warnings`
 | GET, POST | `/products` | GET A/B, POST A | GET returns variants and linked modifier groups; B sees active only. Filters: `category_id`, `search`, `is_active` (A) |
 | GET, PATCH | `/products/{id}` | GET A/B, PATCH A | |
 | PUT | `/products/{id}/modifier-groups` | A | Replace linked groups `[{group_id, sort_order}]` |
+| GET | `/products/{id}/setup` | A | Product + every size (active or not) with its recipe and warnings, for the Products & recipes editor |
+| PUT | `/products/{id}/setup` | A | Save `{product, variants[{id?, label, sku, price, sort_order, is_active, track_stock, recipe?}], modifier_groups?}` in **one transaction**, reusing the same validation, locks and audit events as the separate endpoints. Any error saves nothing; errors carry `part` and `variant_index`. Sizes are never deleted (owner, 2026-11-16) |
+| POST | `/products/setup` | A | Same body: create a product with its sizes, recipes and links in one transaction (201) |
 | POST | `/products/{id}/variants` | A | Create variant |
 | PATCH | `/variants/{id}` | A | Label, price, sku, active, sort |
 | GET, PUT | `/variants/{id}/recipe` | A | Read or replace the full recipe |
@@ -1131,9 +1134,7 @@ As a Barista, source, method and shift are set by the server. As an Admin, you m
 - **Dashboard:** today's sales summary, payment split, low/negative stock count, open shifts.
 - **Catalog:**
   - Categories CRUD.
-  - Products with an inline variants table.
-  - Per-variant recipe editor: ingredient picker, base qty, waste %, slot key, with a live "consumption per unit" preview.
-  - Linked modifier groups.
+  - **Products & recipes** (owner design, 2026-11-16): menu list (search by name or code, category filter, price "from …", recipe status) beside one editor: details, product type (Made to order / Stock item = one pcs item × 1 (D18) / No stock tracking), size tabs (price, code (SKU), active per size), per-serving recipe of the selected size (quantity in g/kg or ml/L, converted to the base unit; waste % and slot under "⋯"; stock deduction per line), consumption preview with servings, current stock of each ingredient (one location in v1), linked modifier groups, and one **Save product & recipe** (`/products/.../setup`) with Discard and an unsaved-changes warning.
 - **Modifiers:**
   - Groups CRUD.
   - Options with a per-variant price override table.

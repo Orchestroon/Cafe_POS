@@ -23,6 +23,8 @@ export interface ModifierGroup { id: string; name: string; mode: "add" | "replac
 export interface RecipeLine { ingredient_id: string; ingredient_name?: string; unit?: Unit; base_qty: string; waste_pct: string; slot_key: string | null; }
 export interface RecipeWarning { code: string; group_name: string; replacement_slot: string; }
 export interface Recipe { variant_id: string; lines: RecipeLine[]; warnings: RecipeWarning[]; updated_at: string; }
+/** GET/PUT /products/{id}/setup: the product, every size with its recipe (Admin). */
+export interface ProductSetup extends Omit<Product, "variants"> { variants: (Variant & { recipe: Recipe })[]; }
 export interface ShiftTotals { cash_sales: string; card_sales: string; cash_refunds: string; card_refunds: string; drawer_expenses: string; orders_count: number; expected_cash: string; }
 export interface Person { id: string; display_name: string; }
 export interface Shift {

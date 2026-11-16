@@ -20,10 +20,9 @@ from .serializers import (
     RecipeInputSerializer,
     VariantSerializer,
 )
+from .setup import PRODUCT_FIELDS, VARIANT_FIELDS, save_setup, setup_payload
 
 CATEGORY_FIELDS = ["name", "sort_order", "is_active"]
-PRODUCT_FIELDS = ["category_id", "name", "description", "sort_order", "is_active"]
-VARIANT_FIELDS = ["label", "sku", "price", "sort_order", "is_active", "track_stock"]
 
 
 class _CatalogBase(TenantScopedViewSetMixin, viewsets.GenericViewSet):
@@ -107,6 +106,29 @@ class ProductViewSet(
         ser.is_valid(raise_exception=True)
         variant = create_obj(request.user, ser, "variant.created", VARIANT_FIELDS, product=product)
         return Response(VariantSerializer(variant, context={"request": request}).data, status=201)
+
+    @property
+    def permissions_by_method(self):
+        # The setup (recipes, all sizes incl. inactive) is Admin-only, even for GET.
+        if getattr(self, "action", None) in ("setup", "create_setup"):
+            return {"*": "recipes.manage"}
+        return {"GET": "catalog.view", "*": "catalog.manage"}
+
+    @extend_schema(request=OpenApiTypes.OBJECT, responses=OpenApiTypes.OBJECT)
+    @action(detail=True, methods=["get", "put"], url_path="setup")
+    def setup(self, request, pk=None):
+        """GET: product + every size with its recipe. PUT: save it all in one transaction."""
+        product = self.get_object()
+        if request.method == "PUT":
+            product = save_setup(request.user, product, request.data, request)
+        return Response(setup_payload(product, request))
+
+    @extend_schema(request=OpenApiTypes.OBJECT, responses={201: OpenApiTypes.OBJECT})
+    @action(detail=False, methods=["post"], url_path="setup")
+    def create_setup(self, request):
+        """Create a product with its sizes, recipes and modifier links in one transaction."""
+        product = save_setup(request.user, None, request.data, request)
+        return Response(setup_payload(product, request), status=201)
 
     @extend_schema(request=ModifierLinkSerializer(many=True), responses=ProductSerializer)
     @action(detail=True, methods=["put"], url_path="modifier-groups")
