@@ -103,7 +103,8 @@ def test_products_and_modifiers_do_not_grow_with_catalog(selling, admin_c, baris
 
 def test_shift_endpoints_budget(selling, barista_c, admin_c):
     _sell(barista_c, selling, 3)
-    assert count(lambda: barista_c.get("/api/v1/shifts/current")) <= 9
+    # +2 for the cash put in / taken out (totals and list) and +1 for the previous close gap
+    assert count(lambda: barista_c.get("/api/v1/shifts/current")) <= 11
     sid = data(barista_c.get("/api/v1/shifts/current"))["id"]
     close_shift(barista_c, sid, "460.00")
     closed = count(lambda: admin_c.get("/api/v1/shifts"))

@@ -47,6 +47,8 @@ def test_at18_close_stores_expected_actual_and_difference(barista_c, barista, sh
         "cash_refunds": "0.00",
         "card_refunds": "0.00",
         "drawer_expenses": "0.00",
+        "cash_in": "0.00",
+        "cash_out": "0.00",
         "orders_count": 2,
         "expected_cash": "165.00",
     }

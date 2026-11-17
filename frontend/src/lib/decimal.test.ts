@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addMoney, cmpMoney, fromUnits, isDec, lineTotal, normMoney, packCostFrom, packQty, perUnitQty, roundUpTo, subMoney, toUnits, unitCostFromPack } from "./decimal";
+import { addMoney, cmpMoney, fromUnits, isDec, lineTotal, marginPct, normMoney, packCostFrom, packQty, perUnitQty, roundUpTo, servingCost, subMoney, toUnits, unitCostFromPack } from "./decimal";
 
 describe("decimal strings (spec 5.1, no floats)", () => {
   it("parses and prints scaled integers", () => {
@@ -41,5 +41,22 @@ describe("decimal strings (spec 5.1, no floats)", () => {
     expect(packQty("12", "1000")).toBe("12000.000");
     expect(lineTotal("12000", "0.0550")).toBe("660.00");
     expect(packCostFrom("0.0550", "1000")).toBe("55.0000");
+  });
+});
+
+describe("serving cost and margin (money review)", () => {
+  it("sums qty x average cost and rounds once", () => {
+    // 12.6 g x 0.42 + 200 ml x 0.03 + 1 cup x 1.5 = 12.792 (the backend test's Small latte)
+    expect(servingCost([{ qty: "12.600", unitCost: "0.420000" }, { qty: "200.000", unitCost: "0.030000" }, { qty: "1.000", unitCost: "1.500000" }])).toBe("12.79");
+    expect(servingCost([])).toBe("0.00");
+  });
+  it("is unknown when any cost is unknown", () => {
+    expect(servingCost([{ qty: "1.000", unitCost: "1.0" }, { qty: "1.000", unitCost: null }])).toBeNull();
+  });
+  it("gives the margin on the price, net of an included tax", () => {
+    expect(marginPct("65.00", "12.79")).toBe("80.3");
+    expect(marginPct("10.00", "12.00")).toBe("-20.0");
+    expect(marginPct("114.00", "50.00", "14.00")).toBe("50.0"); // 114 incl. 14% = 100 net
+    expect(marginPct("0.00", "1.00")).toBeNull();
   });
 });

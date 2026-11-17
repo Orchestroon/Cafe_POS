@@ -33,6 +33,9 @@ class Order(TenantModel):
     tax_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total = models.DecimalField(max_digits=12, decimal_places=2)
     tax_snapshot = models.JSONField()
+    # Ingredient cost at sale time (average cost). None = not recorded (older orders, or an
+    # ingredient with no cost known yet).
+    cost_total = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     note = models.CharField(max_length=300, blank=True)
     idempotency_key = models.UUIDField()
 
@@ -67,6 +70,7 @@ class OrderItem(TenantModel):
     line_subtotal = models.DecimalField(max_digits=12, decimal_places=2)
     line_discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     line_total = models.DecimalField(max_digits=12, decimal_places=2)
+    cost_total = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     modifiers_snapshot = models.JSONField(default=list)
     recipe_snapshot = models.JSONField(default=list)
     consumption_snapshot = models.JSONField(default=list)

@@ -24,7 +24,7 @@ export function Purchases() {
         <div className="toolbar">
           <div className="form-group"><label className="form-label">{t("common.status")}
             <select className="form-select" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
-              <option value="">{t("common.all")}</option><option value="draft">{t("purchases.draft")}</option><option value="posted">{t("purchases.posted")}</option>
+              <option value="">{t("common.all")}</option><option value="draft">{t("purchases.draft")}</option><option value="posted">{t("purchases.posted")}</option><option value="voided">{t("purchases.voided")}</option>
             </select></label></div>
         </div>
         <ListState loading={q.isLoading} error={q.error} empty={q.data?.data.length === 0}>
@@ -34,7 +34,7 @@ export function Purchases() {
               {q.data?.data.map((p) => (
                 <tr key={p.id}>
                   <td>{p.purchased_on}</td><td>{p.supplier?.name ?? "—"}</td><td>{p.supplier_invoice_no}</td>
-                  <td><span className={`badge ${p.status === "posted" ? "badge-active" : "badge-draft"}`}>{t(`purchases.${p.status}`)}</span></td>
+                  <td><span className={`badge ${p.status === "posted" ? "badge-active" : p.status === "voided" ? "badge-off" : "badge-draft"}`}>{t(`purchases.${p.status}`)}</span></td>
                   <td className="num">{formatMoney(p.total, cur)}</td>
                   <td><div className="row-actions"><Link className="btn btn-outline btn-sm" to={`/admin/purchases/${p.id}`}>{p.status === "draft" ? t("common.edit") : t("shift.details")}</Link></div></td>
                 </tr>

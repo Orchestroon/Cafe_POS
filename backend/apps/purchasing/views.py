@@ -12,7 +12,7 @@ from apps.core.permissions import PolicyPermission
 
 from . import services
 from .models import Purchase, Supplier
-from .serializers import PurchaseInputSerializer, SupplierSerializer
+from .serializers import PurchaseInputSerializer, SupplierSerializer, VoidPurchaseSerializer
 
 ADMIN_ONLY = {"permissions_by_method": {"*": "purchasing.manage"}}
 
@@ -107,3 +107,11 @@ class PurchaseViewSet(viewsets.GenericViewSet):
             handler=lambda: services.post_purchase(request.user, pk, key),
         )
         return Response(result.body, status=result.status, headers=result.headers())
+
+    @extend_schema(request=VoidPurchaseSerializer, responses=OpenApiTypes.OBJECT)
+    @action(detail=True, methods=["post"], url_path="void")
+    def void(self, request, pk=None):
+        ser = VoidPurchaseSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        p = services.void_purchase(request.user, pk, ser.validated_data["reason"])
+        return Response(services.purchase_dict(p))

@@ -8,12 +8,24 @@ their shift and refunds by the refunding user's shift."""
 
 from decimal import Decimal
 
-from django.db.models import Count, F, Max, Q, Sum
+from django.db.models import (
+    Count,
+    DecimalField,
+    ExpressionWrapper,
+    F,
+    Max,
+    OuterRef,
+    Q,
+    Subquery,
+    Sum,
+)
 
+from apps.core.money import q_money
 from apps.expenses.models import Expense
 from apps.inventory.models import StockBalance, StockMovement
+from apps.inventory.services import unit_cost
 from apps.sales.models import Order, OrderItem, Payment, Refund, RefundLine
-from apps.shifts.models import CashierShift
+from apps.shifts.models import CashierShift, CashMovement
 
 ZERO = Decimal("0.00")
 S = lambda v: str(v if v is not None else ZERO)  # noqa: E731
@@ -92,37 +104,52 @@ def payment_breakdown(org, lo, hi, p) -> dict:
 TOP_PRODUCTS_LIMIT = 100
 # Expenses have no cashier, and purchases/external expenses no shift, so these filters would
 # silently drop rows (spec 8.13, Q6 item 3A): the report refuses them instead.
-NO_PERSON_FILTER = {"purchases-expenses"}
+NO_PERSON_FILTER = {"purchases-expenses", "money-in-out", "profit"}
+
+
+def _per_variant(qs):
+    return {
+        r["variant_id"]: r
+        for r in qs.values("variant_id").annotate(
+            product_name_snapshot=Max("product_name_snapshot"),
+            variant_label_snapshot=Max("variant_label_snapshot"),
+            qty=Sum("quantity"),
+            revenue=Sum("line_total"),
+        )
+    }
 
 
 def top_products(org, lo, hi, p) -> dict:
-    qs = (
-        OrderItem.objects.filter(order__in=_orders(org, lo, hi, p), order__status="paid")
-        .values("variant_id")
-        .annotate(
-            product_name_snapshot=Max("product_name_snapshot"),
-            variant_label_snapshot=Max("variant_label_snapshot"),
-            qty_sold=Sum("quantity"),
-            net_revenue=Sum("line_total"),
-        )
-    )
-    key = "qty_sold" if p.get("ordering") == "qty" else "net_revenue"
-    rows = list(qs.order_by(f"-{key}", "product_name_snapshot")[: TOP_PRODUCTS_LIMIT + 1])
-    truncated = len(rows) > TOP_PRODUCTS_LIMIT
-    rows = rows[:TOP_PRODUCTS_LIMIT]
-    return {
-        "truncated": truncated,
-        "products": [
+    """Same rule as the sales summary (money review, 2026-11-16): an item counts on the day it was
+    sold, and comes off on the day its order was refunded, so a past period never changes.
+    Revenue is line totals (before tax)."""
+    sold = _per_variant(OrderItem.objects.filter(order__in=_orders(org, lo, hi, p)))
+    back = _per_variant(OrderItem.objects.filter(order__refund__in=_refunds(org, lo, hi, p)))
+    rows = []
+    for vid in sold.keys() | back.keys():
+        s_, b_ = sold.get(vid, {}), back.get(vid, {})
+        names = s_ or b_
+        sold_qty, back_qty = s_.get("qty") or 0, b_.get("qty") or 0
+        revenue, refunded = s_.get("revenue") or ZERO, b_.get("revenue") or ZERO
+        rows.append(
             {
-                "variant_id": str(r["variant_id"]),
-                "product_name_snapshot": r["product_name_snapshot"],
-                "variant_label_snapshot": r["variant_label_snapshot"],
-                "qty_sold": r["qty_sold"],
-                "net_revenue": S(r["net_revenue"]),
+                "variant_id": str(vid),
+                "product_name_snapshot": names["product_name_snapshot"],
+                "variant_label_snapshot": names["variant_label_snapshot"],
+                "qty_sold": sold_qty,
+                "qty_refunded": back_qty,
+                "refunded_revenue": S(refunded),
+                "net_revenue": S(revenue - refunded),
+                "_net_qty": sold_qty - back_qty,
+                "_net": revenue - refunded,
             }
-            for r in rows
-        ],
-    }
+        )
+    key = "_net_qty" if p.get("ordering") == "qty" else "_net"
+    rows.sort(key=lambda r: (-r[key], r["product_name_snapshot"]))
+    truncated = len(rows) > TOP_PRODUCTS_LIMIT
+    for r in rows:
+        del r["_net_qty"], r["_net"]
+    return {"truncated": truncated, "products": rows[:TOP_PRODUCTS_LIMIT]}
 
 
 def stock(org, lo, hi, p) -> dict:
@@ -137,14 +164,22 @@ def stock(org, lo, hi, p) -> dict:
         .values("ingredient_id")
         .annotate(t=Sum(-F("qty_delta")))
     }
+    # A switched-off ingredient stays listed while it still holds stock (money review).
     rows = (
-        StockBalance.objects.filter(organization=org, ingredient__is_active=True)
+        StockBalance.objects.filter(organization=org)
+        .filter(Q(ingredient__is_active=True) | ~Q(qty=0))
         .select_related("ingredient")
         .order_by("ingredient__name")
     )
-    items = []
+    items, total, no_cost = [], ZERO, 0
     for b in rows:
         th = b.ingredient.low_stock_threshold
+        uc = unit_cost(b)
+        value = None if uc is None else q_money(b.qty * uc)
+        if value is None:
+            no_cost += 1
+        else:
+            total += value
         items.append(
             {
                 "ingredient_id": str(b.ingredient_id),
@@ -155,9 +190,12 @@ def stock(org, lo, hi, p) -> dict:
                 "is_low": th is not None and b.qty <= th,
                 "is_negative": b.qty < 0,
                 "consumed_qty_period": str(consumed.get(b.ingredient_id) or Decimal("0.000")),
+                "is_active": b.ingredient.is_active,
+                "unit_cost": None if uc is None else str(uc),
+                "value": None if value is None else str(value),
             }
         )
-    return {"ingredients": items}
+    return {"ingredients": items, "stock_value": S(total), "without_cost_count": no_cost}
 
 
 def purchases_expenses(org, lo, hi, p) -> dict:
@@ -184,8 +222,23 @@ def shifts(org, lo, hi, p) -> dict:
         qs = qs.filter(user_id=p["cashier_id"])
     if p.get("shift_id"):
         qs = qs.filter(pk=p["shift_id"])
-    qs = qs.annotate(n_orders=Count("orders")).order_by("-opened_at")
+    prev = CashierShift.objects.filter(
+        user_id=OuterRef("user_id"), status="closed", closed_at__lte=OuterRef("opened_at")
+    ).order_by("-closed_at")
+    moved = lambda kind: Subquery(  # noqa: E731
+        CashMovement.objects.filter(shift=OuterRef("pk"), status="posted", kind=kind)
+        .values("shift")
+        .annotate(t=Sum("amount"))
+        .values("t")
+    )
+    qs = qs.annotate(
+        n_orders=Count("orders"),
+        prev_actual=Subquery(prev.values("actual_cash")[:1]),
+        cash_in=moved("in"),
+        cash_out=moved("out"),
+    ).order_by("-opened_at")
     rows = list(qs)
+    gaps = [s.opening_cash - s.prev_actual for s in rows if s.prev_actual is not None]
     closed = [s for s in rows if s.status == "closed"]
     ts = lambda dt: dt.isoformat().replace("+00:00", "Z") if dt else None  # noqa: E731
     opt = lambda v: None if v is None else str(v)  # noqa: E731
@@ -196,6 +249,9 @@ def shifts(org, lo, hi, p) -> dict:
         "expected_cash_total": S(sum((s.expected_cash for s in closed), ZERO)),
         "actual_cash_total": S(sum((s.actual_cash for s in closed), ZERO)),
         "total_difference": S(sum((s.difference for s in closed), ZERO)),
+        "cash_in_total": S(sum((s.cash_in or ZERO for s in rows), ZERO)),
+        "cash_out_total": S(sum((s.cash_out or ZERO for s in rows), ZERO)),
+        "gap_total": S(sum(gaps, ZERO)),
         "shifts": [
             {
                 "id": str(s.pk),
@@ -211,9 +267,138 @@ def shifts(org, lo, hi, p) -> dict:
                 "actual": opt(s.actual_cash),
                 "difference": opt(s.difference),
                 "orders_count": s.n_orders,
+                "cash_in": S(s.cash_in),
+                "cash_out": S(s.cash_out),
+                "previous_actual": opt(s.prev_actual),
+                "gap": None if s.prev_actual is None else str(s.opening_cash - s.prev_actual),
             }
             for s in rows
         ],
+    }
+
+
+METHODS = ("cash", "card", "transfer")
+
+
+def _by_method(qs, field="payment_method", amount="amount") -> dict:
+    got = {r[field]: r["t"] for r in qs.values(field).annotate(t=Sum(amount))}
+    return {m: got.get(m) or ZERO for m in METHODS}
+
+
+def _row(key, direction, amounts) -> dict:
+    return {
+        "key": key,
+        "direction": direction,
+        **{m: S(amounts[m]) for m in METHODS},
+        "total": S(sum(amounts.values(), ZERO)),
+    }
+
+
+def money_in_out(org, lo, hi, p) -> dict:
+    """Every pound in and out for the period (owner, 2026-11-16), by how it was paid.
+    In: sales (by order date). Out: refunds (by refund date), expenses and purchases (by paid
+    date; voided ones excluded). Cash put in / taken out of drawers only moves cash, so it is
+    listed apart and never counted as in or out."""
+    orders, refunds = _orders(org, lo, hi, p), _refunds(org, lo, hi, p)
+    exp = Expense.objects.filter(organization=org, status="posted", paid_at__gte=lo, paid_at__lt=hi)
+    rows = [
+        _row("sales", "in", _by_method(Payment.objects.filter(order__in=orders), "method")),
+        _row("refunds", "out", _by_method(RefundLine.objects.filter(refund__in=refunds), "method")),
+        _row(
+            "drawer_expenses", "out", _by_method(exp.filter(type="general", source="cash_drawer"))
+        ),
+        _row("other_expenses", "out", _by_method(exp.filter(type="general", source="external"))),
+        _row(
+            "drawer_purchases", "out", _by_method(exp.filter(type="purchase", source="cash_drawer"))
+        ),
+        _row("other_purchases", "out", _by_method(exp.filter(type="purchase", source="external"))),
+    ]
+    tot = {}
+    for d in ("in", "out"):
+        tot[d] = {
+            m: sum((Decimal(r[m]) for r in rows if r["direction"] == d), ZERO) for m in METHODS
+        }
+    net = {m: tot["in"][m] - tot["out"][m] for m in METHODS}
+    moves = {
+        r["kind"]: r["t"]
+        for r in CashMovement.objects.filter(
+            organization=org, status="posted", created_at__gte=lo, created_at__lt=hi
+        )
+        .values("kind")
+        .annotate(t=Sum("amount"))
+    }
+    shift_rows = shifts(org, lo, hi, {})
+    return {
+        "rows": rows,
+        "total_in": _row("total_in", "in", tot["in"]),
+        "total_out": _row("total_out", "out", tot["out"]),
+        "net": _row("net", "net", net),
+        "drawer": {
+            "cash_in": S(moves.get("in")),
+            "cash_out": S(moves.get("out")),
+            "gap_total": shift_rows["gap_total"],
+            "closed_count": shift_rows["closed_count"],
+            "total_difference": shift_rows["total_difference"],
+        },
+    }
+
+
+_VALUE = ExpressionWrapper(
+    F("qty_delta") * F("unit_cost"), output_field=DecimalField(max_digits=28, decimal_places=9)
+)
+
+
+def profit(org, lo, hi, p) -> dict:
+    """Profit for the period (owner, 2026-11-16: weighted average cost).
+    net sales (before tax, minus refunds by refund date) - cost of what was sold (saved on each
+    order at sale time) = gross profit; then + stock gains - stock losses (adjustments and counts,
+    valued at average cost) - general expenses = net profit. Purchases are not subtracted: they
+    become stock and are counted when sold. Refunded orders keep their cost (the ingredients were
+    used; D8: no stock is returned). Unknown costs are reported, never treated as 0."""
+    orders = Order.objects.filter(organization=org, created_at__gte=lo, created_at__lt=hi)
+    ex_tax = F("total") - F("tax_total")
+    o = orders.aggregate(rev=Sum(ex_tax), cost=Sum("cost_total"))
+    missing = orders.filter(cost_total__isnull=True).aggregate(n=Count("id"), rev=Sum(ex_tax))
+    back = Order.objects.filter(
+        organization=org, refund__created_at__gte=lo, refund__created_at__lt=hi
+    ).aggregate(rev=Sum(ex_tax))
+    revenue, refunded = o["rev"] or ZERO, back["rev"] or ZERO
+    net_sales, cogs = revenue - refunded, o["cost"] or ZERO
+    adj = StockMovement.objects.filter(
+        organization=org, movement_type="adjustment", occurred_at__gte=lo, occurred_at__lt=hi
+    )
+    valued = adj.filter(unit_cost__isnull=False)
+    losses = valued.filter(qty_delta__lt=0).aggregate(v=Sum(_VALUE))["v"] or ZERO
+    gains = valued.filter(qty_delta__gt=0).aggregate(v=Sum(_VALUE))["v"] or ZERO
+    losses, gains = q_money(-losses), q_money(gains)
+    general = (
+        Expense.objects.filter(
+            organization=org, status="posted", type="general", paid_at__gte=lo, paid_at__lt=hi
+        ).aggregate(t=Sum("amount"))["t"]
+        or ZERO
+    )
+    purchases = (
+        Expense.objects.filter(
+            organization=org, status="posted", type="purchase", paid_at__gte=lo, paid_at__lt=hi
+        ).aggregate(t=Sum("amount"))["t"]
+        or ZERO
+    )
+    gross = net_sales - cogs
+    return {
+        "sales": S(revenue),
+        "refunds": S(refunded),
+        "net_sales": S(net_sales),
+        "cost_of_sales": S(cogs),
+        "gross_profit": S(gross),
+        "gross_margin_pct": S(q_money(gross * 100 / net_sales)) if net_sales else None,
+        "stock_losses": S(losses),
+        "stock_gains": S(gains),
+        "general_expenses": S(general),
+        "net_profit": S(gross - losses + gains - general),
+        "purchases_info": S(purchases),
+        "orders_without_cost": missing["n"],
+        "sales_without_cost": S(missing["rev"]),
+        "adjustments_without_cost": adj.filter(unit_cost__isnull=True).count(),
     }
 
 
@@ -224,4 +409,6 @@ REPORTS = {
     "stock": stock,
     "purchases-expenses": purchases_expenses,
     "shifts": shifts,
+    "money-in-out": money_in_out,
+    "profit": profit,
 }

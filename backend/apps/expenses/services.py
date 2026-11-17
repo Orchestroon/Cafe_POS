@@ -140,3 +140,12 @@ def void_expense(actor, pk, reason) -> Expense:
     exp.save()
     record(actor, "expense.voided", exp, {**_audit_summary(exp), "reason": reason})
     return exp
+
+
+def void_purchase_expense(actor, exp, reason) -> Expense:
+    """Called by the purchase void (inside its transaction, shift already locked and open)."""
+    exp.status, exp.void_reason = Expense.Status.VOIDED, reason
+    exp.voided_by, exp.voided_at = actor, timezone.now()
+    exp.save()
+    record(actor, "expense.voided", exp, {**_audit_summary(exp), "reason": reason})
+    return exp

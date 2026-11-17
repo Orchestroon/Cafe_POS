@@ -8,8 +8,8 @@ from apps.core.exceptions import ApiError
 from apps.core.policy import has_perm
 from apps.tenancy.models import Register
 
-from .models import CashierShift
-from .selectors import live_totals
+from .models import CashierShift, CashMovement
+from .selectors import cash_movement_dict, live_totals
 
 
 @transaction.atomic
@@ -128,3 +128,68 @@ def close_shift(actor, pk, actual_cash, note):
         },
     )
     return get_visible(actor, shift.pk)
+
+
+def move_cash(actor, data, key) -> tuple[int, dict]:
+    """Cash put into / taken out of the actor's own open drawer (owner, 2026-11-16: Barista and
+    Admin, own shift). Runs inside the idempotency wrapper's transaction; the shift row lock keeps
+    a concurrent close from missing it."""
+    shift = lock_open_shift(actor)
+    if shift is None:
+        raise ApiError("SHIFT_NOT_OPEN", "Open your shift before moving cash.", 409)
+    m = CashMovement.objects.create(
+        organization=actor.organization,
+        shift=shift,
+        kind=data["kind"],
+        amount=data["amount"],
+        reason=data["reason"],
+        created_by=actor,
+        idempotency_key=key,
+    )
+    record(
+        actor,
+        "cash.added" if data["kind"] == CashMovement.Kind.IN else "cash.removed",
+        m,
+        {"amount": str(m.amount), "reason": m.reason, "shift_id": str(shift.pk)},
+    )
+    m = CashMovement.objects.select_related("created_by", "voided_by").get(pk=m.pk)
+    return 201, cash_movement_dict(m)
+
+
+@transaction.atomic
+def void_cash_movement(actor, pk, reason):
+    """Admin. Lock order as a close: shift -> movement. Only while the shift is still open (a
+    closed shift's numbers are frozen), same rule as drawer expenses."""
+    seen = CashMovement.objects.filter(organization=actor.organization, pk=pk).first()
+    if seen is None:
+        raise ApiError("NOT_FOUND", "Not found.", 404)
+    shift = CashierShift.objects.select_for_update().get(pk=seen.shift_id)
+    m = CashMovement.objects.select_for_update().get(pk=pk)
+
+    def refuse(why):
+        raise ApiError("CASH_MOVEMENT_NOT_VOIDABLE", "This cannot be cancelled.", 422, {"why": why})
+
+    if m.status == CashMovement.Status.VOIDED:
+        refuse("already_voided")
+    if shift.status == CashierShift.Status.CLOSED:
+        refuse("shift_closed")
+    m.status, m.void_reason, m.voided_by, m.voided_at = (
+        CashMovement.Status.VOIDED,
+        reason,
+        actor,
+        timezone.now(),
+    )
+    m.save()
+    record(
+        actor,
+        "cash.voided",
+        m,
+        {
+            "kind": m.kind,
+            "amount": str(m.amount),
+            "reason": reason,
+            "original_reason": m.reason,
+            "shift_id": str(shift.pk),
+        },
+    )
+    return CashMovement.objects.select_related("created_by", "voided_by").get(pk=pk)

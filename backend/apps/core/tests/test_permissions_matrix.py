@@ -20,7 +20,7 @@ from apps.modifiers.models import (
 )
 from apps.purchasing.models import Purchase, PurchaseItem, Supplier
 from apps.sales.models import Order, Payment, Refund, RefundLine
-from apps.shifts.models import CashierShift
+from apps.shifts.models import CashierShift, CashMovement
 
 pytestmark = pytest.mark.django_db
 
@@ -48,6 +48,9 @@ MATRIX = [
     ("GET", "products", BOTH),
     ("POST", "products", ADMIN),
     ("GET", "products/{product}", BOTH),
+    ("GET", "products/{product}/setup", ADMIN),
+    ("PUT", "products/{product}/setup", ADMIN),
+    ("POST", "products/setup", ADMIN),
     ("PATCH", "products/{product}", ADMIN),
     ("POST", "products/{product}/variants", ADMIN),
     ("PUT", "products/{product}/modifier-groups", ADMIN),
@@ -70,6 +73,8 @@ MATRIX = [
     ("GET", "shifts", ADMIN),
     ("GET", "shifts/{shift}", BOTH),
     ("POST", "shifts/{shift}/close", BOTH),
+    ("POST", "shifts/current/cash-movements", BOTH),
+    ("POST", "cash-movements/{cash_movement}/void", ADMIN),
     ("POST", "orders/{order}/refunds", BOTH),
     ("GET", "refunds", ADMIN),
     ("GET", "payments", ADMIN),
@@ -82,6 +87,7 @@ MATRIX = [
     ("PATCH", "purchases/{purchase}", ADMIN),
     ("DELETE", "purchases/{purchase}", ADMIN),
     ("POST", "purchases/{purchase}/post", ADMIN),
+    ("POST", "purchases/{purchase}/void", ADMIN),
     ("GET", "expenses", BOTH),
     ("POST", "expenses", BOTH),
     ("POST", "expenses/{expense}/void", ADMIN),
@@ -91,6 +97,8 @@ MATRIX = [
     ("GET", "reports/stock", ADMIN),
     ("GET", "reports/purchases-expenses", ADMIN),
     ("GET", "reports/shifts", ADMIN),
+    ("GET", "reports/money-in-out", ADMIN),
+    ("GET", "reports/profit", ADMIN),
     ("GET", "audit-events", ADMIN),
     ("GET", "ingredients", ADMIN),
     ("POST", "ingredients", ADMIN),
@@ -146,7 +154,17 @@ def ids(org, admin, barista):
         shift=shift,
         created_by=barista,
     )
+    move = CashMovement.objects.create(
+        organization=org,
+        shift=shift,
+        kind="out",
+        amount="5.00",
+        reason="Safe",
+        created_by=barista,
+        idempotency_key="22222222-2222-2222-2222-222222222222",
+    )
     return {
+        "cash_movement": move.id,
         "supplier": supplier.id,
         "purchase": purchase.id,
         "expense": expense.id,
@@ -193,6 +211,7 @@ def snapshot():
             Purchase,
             PurchaseItem,
             Expense,
+            CashMovement,
         )
     }
 
@@ -216,6 +235,7 @@ def test_matrix_covers_every_route():
     routes = set()
     for s in found:
         s = re.sub(r"\(\?P<\w+>\[\^/\.\]\+\)", "{id}", s)
+        s = re.sub(r"<\w+:\w+>", "{id}", s)  # path("x/<uuid:pk>/...") routes
         routes.add(s.replace("^", "").replace("$", "").removeprefix("api/v1/").rstrip("/"))
     listed = {re.sub(r"\{\w+\}", "{id}", r) for _, r, _ in MATRIX}
     assert routes == listed, f"unlisted: {routes - listed}; stale: {listed - routes}"

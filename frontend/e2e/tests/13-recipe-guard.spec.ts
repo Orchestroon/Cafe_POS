@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { api, authFile } from "../helpers";
 
 // B3 (owner, 2026-11-11): a size with no recipe cannot be sold until it gets a recipe or the
-// Admin ticks off "Track stock".
+// Admin switches it to "No stock tracking".
 test("a new size without a recipe is greyed out at the till until it is set up", async ({ browser }) => {
   const a = await api("admin");
   const latte = (await a.get("/products")).data.find((p: { name: string }) => p.name === "Iced Latte");
@@ -11,7 +11,13 @@ test("a new size without a recipe is greyed out at the till until it is set up",
 
   const admin = await browser.newPage({ storageState: authFile("admin") });
   await admin.goto("/admin/products");
-  await expect(admin.getByText(`${label}`).first()).toContainText("No recipe");
+  const item = admin.locator(".pr-item", { hasText: "Iced Latte" });
+  await expect(item).toContainText("No recipe");
+  await item.click();
+  const tab = admin.getByRole("tab", { name: new RegExp(label) });
+  await expect(tab.locator(".pr-dot")).toBeVisible();
+  await tab.click();
+  await expect(admin.getByText(/This size has no recipe, so it cannot be sold/)).toBeVisible();
   await admin.close();
 
   const page = await browser.newPage({ storageState: authFile("barista1") });

@@ -24,7 +24,7 @@ export default tseslint.config(
         mode: "jsx-text-only",
         "jsx-attributes": { include: ["title", "placeholder", "aria-label", "alt", "label"] },
         // Symbols and separators, and language names (always shown in their own language).
-        words: { exclude: ["[0-9!-/:-@[-`{-~ ✓✕▲▼…—–·×←→↑↓+−?]+", "EN", "عربي", "English", "العربية"] },
+        words: { exclude: ["[0-9!-/:-@[-`{-~ ✓✕▲▼…—–·×←→↑↓+−?ⓘ⋯⚠↗]+", "EN", "عربي", "English", "العربية"] },
       }],
     },
   },

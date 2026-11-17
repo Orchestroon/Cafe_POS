@@ -12,6 +12,7 @@ from apps.audit.services import record
 from apps.core.exceptions import ApiError
 from apps.core.money import q_money, q_qty
 from apps.inventory.models import StockBalance, StockMovement
+from apps.inventory.services import unit_cost
 from apps.shifts.models import CashierShift
 from apps.tenancy.models import OrganizationSettings
 from apps.tenancy.seed import default_location
@@ -113,15 +114,40 @@ def _recipe_snapshot(lines):
     ]
 
 
-def _deduct_stock(user, org, order_items, required):
-    """Step 10: lock balances in id order, apply the negative deltas, write the ledger rows.
-    Returns the stock warnings computed from the locked (true) balances."""
-    ids = {_uuid(row["ingredient_id"]) for _, c in order_items for row in c.per_ingredient}
+def _lock_stock(org, consumptions):
+    """Lock every balance the order touches, in id order (after the invoice counter, as always).
+    Returns {ingredient_id (UUID): StockBalance}."""
+    ids = {_uuid(row["ingredient_id"]) for c in consumptions for row in c.per_ingredient}
     balances = loader.locked_balances(org, ids)
     for missing in ids - set(balances):  # an ingredient always has a balance row; be safe anyway
         balances[missing] = StockBalance.objects.create(
             organization=org, ingredient_id=missing, location=default_location(org)
         )
+    return balances
+
+
+def _costed(cons, balances):
+    """Consumption rows with the cost per unit at sale time, and the item's cost (None when any
+    ingredient has no known cost: never counted as 0). Owner, 2026-11-16: weighted average."""
+    rows, total = [], Decimal("0")
+    for row in cons.per_ingredient:
+        uc = unit_cost(balances[_uuid(row["ingredient_id"])])
+        cost = None if uc is None else Decimal(row["total_qty"]) * uc
+        if total is not None:
+            total = None if cost is None else total + cost
+        rows.append(
+            {
+                **row,
+                "unit_cost": None if uc is None else str(uc),
+                "cost": None if cost is None else str(q_money(cost)),
+            }
+        )
+    return rows, None if total is None else q_money(total)
+
+
+def _deduct_stock(user, org, order_items, balances, required):
+    """Step 10: apply the negative deltas to the locked balances and write the ledger rows.
+    Returns the stock warnings computed from the locked (true) balances."""
     available = {str(i): b.qty for i, b in balances.items()}
     for item, cons in order_items:
         for row in cons.per_ingredient:
@@ -137,6 +163,7 @@ def _deduct_stock(user, org, order_items, required):
                 source_type=StockMovement.Source.ORDER_ITEM,
                 source_id=item.pk,
                 balance_after=bal.qty,
+                unit_cost=unit_cost(bal),
                 created_by=user,
             )
     for bal in balances.values():
@@ -166,6 +193,10 @@ def place_order(user, data, key) -> tuple[int, dict]:
     pay_rows = validate_payments(data["payments"], priced.total)  # 5.
 
     seq, invoice_no = _next_invoice(org)  # 6. gapless: rolls back with a failed checkout
+    balances = _lock_stock(org, consumptions)  # 6b. stock locks, and the costs at this moment
+    costed = [_costed(c, balances) for c in consumptions]
+    item_costs = [c for _, c in costed]
+    order_cost = None if None in item_costs else q_money(sum(item_costs, Decimal("0")))
     order = Order.objects.create(  # 7.
         organization=org,
         branch=shift.branch,
@@ -179,11 +210,14 @@ def place_order(user, data, key) -> tuple[int, dict]:
         tax_total=priced.tax_total,
         total=priced.total,
         tax_snapshot=priced.tax.snapshot(),
+        cost_total=order_cost,
         note=(data.get("note") or "").strip(),
         idempotency_key=key,
     )
     order_items = []
-    for p, cons in zip(priced.items, consumptions, strict=True):  # 8. items with snapshots
+    for p, cons, (cost_rows, item_cost) in zip(  # 8. items with snapshots
+        priced.items, consumptions, costed, strict=True
+    ):
         item = OrderItem.objects.create(
             organization=org,
             order=order,
@@ -196,9 +230,10 @@ def place_order(user, data, key) -> tuple[int, dict]:
             line_subtotal=p.line_subtotal,
             line_discount=p.line_discount,
             line_total=p.line_total,
+            cost_total=item_cost,
             modifiers_snapshot=list(p.modifiers),
             recipe_snapshot=_recipe_snapshot(cons.lines),
-            consumption_snapshot=list(cons.per_ingredient),
+            consumption_snapshot=cost_rows,
             promotion_snapshot=None,
         )
         order_items.append((item, cons))
@@ -206,7 +241,7 @@ def place_order(user, data, key) -> tuple[int, dict]:
         Payment.objects.create(organization=org, order=order, shift=shift, **row)
         for row in pay_rows
     ]
-    warnings = _deduct_stock(user, org, order_items, required)  # 10.
+    warnings = _deduct_stock(user, org, order_items, balances, required)  # 10.
     record(  # 11.
         user,
         "order.created",

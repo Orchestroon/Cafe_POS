@@ -109,6 +109,7 @@ Drip Café needs a web-based **POS for day-to-day sales**, not a demo.
 | D16 | Modifier groups | Reusable across products (linked many-to-many), instead of being duplicated per product. | Final (design) |
 | D17 | Card terminal reference | Optional on card payments and card refunds. **Confirmed by the owner (2026-11-10).** | Final |
 | D18 | Packaged goods (no recipe) | Modeled as an ingredient in `pcs` with a one-line recipe (qty 1, waste 0). No separate stock-item model. A size that truly uses no stock (a service item) is marked "No stock tracking" (`track_stock = false`, Sprint 4 B3). | Final (design) |
+| D19 | Money review | **Owner, 2026-11-16 — "every pound in or out":** (1) a pack purchase costs exactly packs × pack price; (2) an ingredient used by a recipe or option cannot be switched off; (3) top products count a sale on its day and a refund on its day; (4) a **Money in & out** report; (5a) the gap between a person's previous count and their next opening is shown; (5b) **cash taken out / put in** of the drawer during a shift (Barista and Admin, own shift; Admin cancels while the shift is open); (6) a posted purchase can be **voided** (Admin, reason); (8) **cost and profit now** (brought in from Section 3.4): weighted average cost per ingredient, the cost saved on every sale, a **Profit** report, stock value. Supplier/inventory/ingredient cycle review is the next step. | Final |
 
 ---
 
@@ -159,7 +160,7 @@ Drip Café needs a web-based **POS for day-to-day sales**, not a demo.
 - Delivery, tables, and kitchen display.
 - Customer accounts and credit.
 - Multi-branch and multi-warehouse (beyond the seeded single rows); stock transfers.
-- ERP accounting, COGS and profit reports.
+- ERP accounting (ledgers, double entry). *COGS and a profit report are now in v1: D19.*
 - Government e-invoice / e-receipt integration.
 - Partial refunds.
 - Promotion stacking, BOGO and combos.
@@ -176,7 +177,7 @@ Drip Café needs a web-based **POS for day-to-day sales**, not a demo.
 - Custom roles and permissions.
 - Arabic UI translation (the infrastructure is built now).
 - Multiple registers and warehouses.
-- COGS and average cost.
+- ~~COGS and average cost.~~ Built in v1 (owner, 2026-11-16, D19).
 - Manual discounts.
 - Partial refunds.
 
@@ -661,12 +662,16 @@ A failure at any step rolls back everything: no order, no payments, no movements
 
 **Close** — `POST /shifts/{id}/close {actual_closing_cash, note}`, by the owner or an Admin:
 - If the shift is already closed, return 409 `SHIFT_ALREADY_CLOSED`.
-- `expected_cash = opening_cash + Σ cash Payment.amount (this shift) − Σ cash RefundLine.amount (refunds whose shift = this shift) − Σ Expense.amount (source=cash_drawer, status=posted, shift = this shift)`
+- `expected_cash = opening_cash + Σ cash Payment.amount (this shift) − Σ cash RefundLine.amount (refunds whose shift = this shift) − Σ Expense.amount (source=cash_drawer, status=posted, shift = this shift) + Σ CashMovement in − Σ CashMovement out (status=posted, this shift)` (D19)
 - `difference = actual − expected` (negative means a shortage).
 - Store `totals_snapshot`, set `closed_at` and `closed_by`, and write an audit event.
 - Closed shifts are immutable. Voiding an expense later does not change a closed shift's stored numbers.
 
 **Accountability [D7]:** every cashier is accountable for their own shift. The system makes no attempt to split a shared physical drawer.
+
+**Cash taken out / put in [D19]** — `POST /shifts/current/cash-movements {kind: in|out, amount > 0, reason}`, Idempotency-Key (scope `cash_movement`), Barista and Admin, on their **own open shift** only (409 `SHIFT_NOT_OPEN`). The shift row is locked, as for drawer expenses. It is not an expense and never touches profit; it only moves cash (e.g. to the safe). Audit `cash.added` / `cash.removed`. `POST /cash-movements/{id}/void {reason}` (Admin) only while the shift is open (422 `CASH_MOVEMENT_NOT_VOIDABLE`: `shift_closed` / `already_voided`), audit `cash.voided`. Shift detail lists the movements; totals carry `cash_in` and `cash_out` (missing on shifts closed before D19: read as 0).
+
+**Gap between shifts [D19]** — shift detail has `since_previous_close`: the same user's last close before this shift opened (`previous_actual_cash`) and `difference = opening_cash − previous_actual_cash` (negative = cash left the drawer between the shifts). The shifts report shows it per shift (`gap`) and as `gap_total`.
 
 ### 8.6 Refunds — `POST /orders/{id}/refunds`
 
@@ -702,6 +707,9 @@ Rules:
    - Sets `status = posted`, `posted_at`, `posted_by`.
    - Records an audit event.
 3. If the purchase is already posted and the call uses a different key, return 409 `PURCHASE_ALREADY_POSTED`.
+4. **Pack price [D19]:** an item may send `pack_count`, `pack_size` and `pack_cost` (instead of `unit_cost`); then `line_total = pack_count × pack_cost` exactly and `unit_cost` is only shown (rounded to 4 dp). `pack_cost` without packs, or with `unit_cost`, is 400.
+5. **Average cost [D19]:** posting sets each ingredient's `avg_cost = (on_hand × avg + qty × cost) / (on_hand + qty)`, where `cost = line_total / qty` (6 dp). With nothing on hand (zero or negative) or no known cost, the purchase cost becomes the average. Before the first purchase the ingredient's `reference_unit_cost` stands in. Every stock movement stores the `unit_cost` it was made at.
+6. **Void [D19]:** `POST /purchases/{id}/void {reason}` (Admin). Writes `purchase_void` movements taking the stock back out (it may go negative), takes the purchase out of the average (`(on_hand × avg − qty × cost) / (on_hand − qty)`, kept unchanged if nothing would be left or the result would be negative), voids its expense, sets `status = voided` with reason, who and when, and records `purchase.voided`. A draft (422 `draft`), an already voided purchase (409 `voided`), or a drawer purchase whose shift is **closed** (422 `shift_closed`) is refused (`PURCHASE_NOT_VOIDABLE`). Lock order: the expense's shift → purchase → balances.
 
 ### 8.8 Expenses
 
@@ -725,6 +733,7 @@ Rules:
   - Allowed only for ingredients with **no** prior movements. Otherwise 409 `OPENING_BALANCE_EXISTS`.
   - Creates `opening_balance` movements. Never creates an expense [D15].
 - Ingredient `PATCH` never accepts balance fields.
+- **[D19]** An ingredient used by any recipe line or modifier effect cannot be switched off: 409 `INGREDIENT_IN_USE` with `used_by` (product sizes and options). Adjustments and opening balances store the ingredient's current cost on their movement.
 
 ### 8.10 Recipes
 
@@ -767,10 +776,12 @@ All reports are Admin-only and are derived from persisted records only. Period f
 |---|---|
 | `sales-summary` | `orders_count` (orders created in period, any status); `gross_sales` = Σ subtotal; `discounts` = Σ discount_total; `tax` = Σ tax_total; `collected` = Σ total; `refunds` = Σ refund total_amount with refund created in period; `net_sales` = collected − refunds; `refunded_orders_count` |
 | `payment-breakdown` | `cash_collected`, `card_collected` (Σ Payment.amount by method, payment date in period); `cash_refunded`, `card_refunded` (Σ RefundLine by method, refund date in period); `cash_net`, `card_net` |
-| `top-products` | Per variant from order-item snapshots, **excluding refunded orders**: `product_name_snapshot`, `variant_label_snapshot`, `qty_sold`, `net_revenue` (Σ line_total). Sort by `qty` or `revenue` (`ordering` param). **At most 100 rows**; `meta.limit` = 100 and `meta.truncated` = true when rows were cut (Q6 item 4A, owner 2026-11-11) |
-| `stock` | Per ingredient: unit, balance, threshold, is_low (balance ≤ threshold), is_negative, consumed_qty_period (Σ −qty_delta of `sale` movements in period) |
+| `top-products` | Per variant from order-item snapshots. **[D19]** Sold on the order's day (`qty_sold`), taken off on the refund's day (`qty_refunded`, `refunded_revenue`), so a past period never changes: `net_revenue` = Σ line_total sold − Σ line_total refunded (before tax). Before D19 refunded orders were excluded entirely. Sort by `qty` or `revenue` (`ordering` param). **At most 100 rows**; `meta.limit` = 100 and `meta.truncated` = true when rows were cut (Q6 item 4A, owner 2026-11-11) |
+| `stock` | Per ingredient: unit, balance, threshold, is_low (balance ≤ threshold), is_negative, consumed_qty_period (Σ −qty_delta of `sale` movements in period); **[D19]** is_active (a switched-off ingredient is still listed while its balance ≠ 0), unit_cost (average, else reference, else null), value = balance × unit_cost; `stock_value` (total of known values) and `without_cost_count` |
 | `purchases-expenses` | From `Expense` only (status=posted), so no double counting: `purchase_total`, `general_expenses_total`, `cash_drawer_total`, `external_total`, `breakdown` by category. **No `cashier_id` / `shift_id` filter:** sending either returns 400 (purchases and external expenses have no shift, so a filter would silently drop them — Q6 item 3A, owner 2026-11-11) |
-| `shifts` | `shifts_count`, `open_count`, `closed_count`, `expected_cash_total`, `actual_cash_total`, `total_difference`, `shifts[]` (user, opened_at, closed_at, opening_cash, expected, actual, difference, orders_count) |
+| `shifts` | `shifts_count`, `open_count`, `closed_count`, `expected_cash_total`, `actual_cash_total`, `total_difference`, `cash_in_total`, `cash_out_total`, `gap_total`, `shifts[]` (user, opened_at, closed_at, opening_cash, expected, actual, difference, orders_count, cash_in, cash_out, previous_actual, gap) |
+| `money-in-out` **[D19]** | Rows by method (`cash`, `card`, `transfer`, `total`): in = `sales` (payments of orders in period); out = `refunds` (refund lines, refund date), `drawer_expenses`, `other_expenses` (general, by source), `drawer_purchases`, `other_purchases` (purchase expenses, by source; voided excluded, by `paid_at`). `total_in`, `total_out`, `net`. `drawer`: `cash_in`, `cash_out` (moved, never counted as in/out), `gap_total`, `closed_count`, `total_difference`. No `cashier_id` / `shift_id` filter (400) |
+| `profit` **[D19]** | `sales` = Σ (total − tax_total) of orders in period; `refunds` = the same for orders refunded in period; `net_sales`; `cost_of_sales` = Σ `Order.cost_total` (saved at sale time; refunded orders keep their cost, D8); `gross_profit`, `gross_margin_pct`; `stock_losses` / `stock_gains` = value of `adjustment` movements in period; `general_expenses` (posted, general); `net_profit` = gross − losses + gains − general expenses. Purchases are **not** subtracted (`purchases_info` shows them). Unknown costs are never 0: `orders_without_cost`, `sales_without_cost`, `adjustments_without_cost`. No person filter (400) |
 
 **Dates and filters (implemented in Sprint 3):** orders, their payments and their items are dated by the order's `created_at`; refunds and their lines by the refund's `created_at`; expenses by `paid_at`; stock movements by `occurred_at`; shifts by `opened_at`. Orders and payments share the order's date so the invariant below holds at any midnight boundary. `cashier_id` filters orders by their cashier and refunds by the **refunding** user; `shift_id` filters orders and payments by their shift and refunds by the refunding user's shift. With no dates a report covers the café's local today, and `meta.range` echoes the resolved range.
 
@@ -821,6 +832,9 @@ All reports are Admin-only and are derived from persisted records only. Period f
 | 422 | `EXPENSE_NOT_VOIDABLE` | Voiding a purchase expense, an already voided one, or a drawer expense of a closed shift |
 | 422 | `LAST_ADMIN` | Deactivating or demoting the last admin |
 | 422 | `INVALID_RECIPE` | Recipe validation failed |
+| 409 | `INGREDIENT_IN_USE` | D19: switching off an ingredient a recipe or option uses (`details.used_by`) |
+| 409/422 | `PURCHASE_NOT_VOIDABLE` | D19: draft, already voided, or a drawer purchase of a closed shift (`details.why`) |
+| 422 | `CASH_MOVEMENT_NOT_VOIDABLE` | D19: already cancelled, or the shift is closed |
 | 429 | `RATE_LIMITED` | Login throttled |
 
 Insufficient stock is **not** an error: it returns 200/201 with `stock_warnings`.
@@ -843,6 +857,9 @@ Insufficient stock is **not** an error: it returns 200/201 with `stock_warnings`
 | GET, POST | `/products` | GET A/B, POST A | GET returns variants and linked modifier groups; B sees active only. Filters: `category_id`, `search`, `is_active` (A) |
 | GET, PATCH | `/products/{id}` | GET A/B, PATCH A | |
 | PUT | `/products/{id}/modifier-groups` | A | Replace linked groups `[{group_id, sort_order}]` |
+| GET | `/products/{id}/setup` | A | Product + every size (active or not) with its recipe and warnings, for the Products & recipes editor |
+| PUT | `/products/{id}/setup` | A | Save `{product, variants[{id?, label, sku, price, sort_order, is_active, track_stock, recipe?}], modifier_groups?}` in **one transaction**, reusing the same validation, locks and audit events as the separate endpoints. Any error saves nothing; errors carry `part` and `variant_index`. Sizes are never deleted (owner, 2026-11-16) |
+| POST | `/products/setup` | A | Same body: create a product with its sizes, recipes and links in one transaction (201) |
 | POST | `/products/{id}/variants` | A | Create variant |
 | PATCH | `/variants/{id}` | A | Label, price, sku, active, sort |
 | GET, PUT | `/variants/{id}/recipe` | A | Read or replace the full recipe |
@@ -861,11 +878,14 @@ Insufficient stock is **not** an error: it returns 200/201 with `stock_warnings`
 | GET, POST | `/purchases` | A | List or create draft |
 | GET, PATCH, DELETE | `/purchases/{id}` | A | Draft only for PATCH and DELETE |
 | POST | `/purchases/{id}/post` | A | Idempotent post |
+| POST | `/purchases/{id}/void` | A | `{reason}`: void a posted purchase (Section 8.7, D19) |
 | GET, POST | `/expenses` | GET A (B: own only), POST A/B | Section 8.8 |
 | POST | `/expenses/{id}/void` | A | Void with reason |
 | GET | `/shifts/current` | A/B | Own open shift + live totals, or null (+ `meta.last_closed`, C2) |
 | POST | `/shifts/open` | A/B | `{opening_cash}` |
 | POST | `/shifts/{id}/close` | Owner or A | `{actual_closing_cash, note}` |
+| POST | `/shifts/current/cash-movements` | A/B | `{kind, amount, reason}` + Idempotency-Key: cash out/in of my open drawer (D19) |
+| POST | `/cash-movements/{id}/void` | A | `{reason}`, while the shift is open (D19) |
 | GET | `/shifts` | A | Filters `user_id`, `status`, `from`, `to` |
 | GET | `/shifts/{id}` | Owner or A | Detail with totals, expected, actual, difference |
 | POST | `/orders/quote` | A/B | No writes |
@@ -882,6 +902,8 @@ Insufficient stock is **not** an error: it returns 200/201 with `stock_warnings`
 | GET | `/reports/stock` | A | |
 | GET | `/reports/purchases-expenses` | A | |
 | GET | `/reports/shifts` | A | |
+| GET | `/reports/money-in-out` | A | D19 |
+| GET | `/reports/profit` | A | D19 |
 | GET | `/audit-events` | A | Filters `action`, `actor_id`, `entity_type`, `entity_id`, `from`, `to` (café-local dates). Newest first, paginated. Rows: `id, created_at, action, entity_type, entity_id, entity_label, actor{id,username,display_name}|null, summary`. `entity_label` is the record's readable name (invoice no, product and size, ingredient, user…); `meta.names` maps every id inside the page's summaries to a readable name (this café only). `meta.actions` / `meta.entity_types` list the values that exist (for the viewer's filters). Read-only (Sprint 4) |
 | GET, POST | `/promotions` | GET A/B, POST A | P1 |
 | PATCH | `/promotions/{id}` | A | P1 |
@@ -1122,7 +1144,8 @@ As a Barista, source, method and shift are set by the server. As an Admin, you m
 
 ### 10.5 Shift (`/shift`)
 
-- Current shift summary: opening cash, cash sales, card sales, refunds, drawer expenses, expected cash so far.
+- Current shift summary: opening cash, cash sales, card sales, refunds, drawer expenses, cash put in / taken out, expected cash so far; the gap since the previous close; the list of cash movements (Admin can cancel one while the shift is open).
+- **Cash out / in** button (D19) beside "Pay from drawer".
 - Close shift: actual cash input. After closing, show expected, actual and difference, with a print-friendly shift report.
 - Admin: shifts list, any shift's detail, and close another user's open shift.
 
@@ -1131,9 +1154,7 @@ As a Barista, source, method and shift are set by the server. As an Admin, you m
 - **Dashboard:** today's sales summary, payment split, low/negative stock count, open shifts.
 - **Catalog:**
   - Categories CRUD.
-  - Products with an inline variants table.
-  - Per-variant recipe editor: ingredient picker, base qty, waste %, slot key, with a live "consumption per unit" preview.
-  - Linked modifier groups.
+  - **Products & recipes** (owner design, 2026-11-16): menu list (search by name or code, category filter, price "from …", recipe status) beside one editor: details, product type (Made to order / Stock item = one pcs item × 1 (D18) / No stock tracking), size tabs (price, code (SKU), active per size), per-serving recipe of the selected size (quantity in g/kg or ml/L, converted to the base unit; waste % and slot under "⋯"; stock deduction per line), consumption preview with servings, current stock of each ingredient (one location in v1), linked modifier groups, and one **Save product & recipe** (`/products/.../setup`) with Discard and an unsaved-changes warning.
 - **Modifiers:**
   - Groups CRUD.
   - Options with a per-variant price override table.
@@ -1145,11 +1166,11 @@ As a Barista, source, method and shift are set by the server. As an Admin, you m
   - Adjustment form (delta or count).
   - Opening balances bulk form.
 - **Suppliers and purchases:**
-  - Draft editor with pack helper (`pack_count × pack_size` = qty, cost per pack → unit cost).
-  - Post confirmation (posting is irreversible).
+  - Draft editor with pack helper (`pack_count × pack_size` = qty; the line total is exactly packs × pack price, D19).
+  - Post confirmation. A posted purchase can be **voided** with a reason (D19).
 - **Expenses:** list, create, void.
 - **Users:** list, create, deactivate/reactivate, reset password, change role.
-- **Reports:** one page per report with a date-range picker (local dates), totals cards and tables.
+- **Reports:** one page per report with a date-range picker (local dates), totals cards and tables. First tab: **Money in & out**; then **Profit** (D19). The Products editor also shows the cost per serving and margin of the selected size at today's average cost.
 - **Audit log:** readable for non-technical users (owner, 2026-11-11): each event is a translated sentence (When · Who · What happened · Details); opening a row shows labelled details and Before → After changes. No JSON, no technical action names, no bare ids. Filters: What happened (grouped by area), Who, dates. Record pages link to it ("History").
 - **Settings:** business name, receipt header/footer, paper width, invoice prefix (warn if sales already exist), tax settings.
 
