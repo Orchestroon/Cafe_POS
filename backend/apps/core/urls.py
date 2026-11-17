@@ -44,6 +44,8 @@ urlpatterns = [
     path("orders/quote", sales.QuoteView.as_view()),
     path("shifts/current", shifts.CurrentShiftView.as_view()),
     path("shifts/open", shifts.OpenShiftView.as_view()),
+    path("shifts/current/cash-movements", shifts.CashMovementView.as_view()),
+    path("cash-movements/<uuid:pk>/void", shifts.VoidCashMovementView.as_view()),
     *report_paths,
     path("inventory/adjustments", inv.AdjustmentView.as_view()),
     path("inventory/opening-balances", inv.OpeningBalancesView.as_view()),

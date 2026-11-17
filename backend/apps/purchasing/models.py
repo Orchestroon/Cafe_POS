@@ -21,6 +21,7 @@ class Purchase(TenantModel):
     class Status(models.TextChoices):
         DRAFT = "draft"
         POSTED = "posted"
+        VOIDED = "voided"
 
     class Method(models.TextChoices):
         CASH = "cash"
@@ -46,6 +47,11 @@ class Purchase(TenantModel):
         "accounts.User", null=True, blank=True, on_delete=models.PROTECT, related_name="+"
     )
     created_by = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="+")
+    void_reason = models.CharField(max_length=300, blank=True)
+    voided_at = models.DateTimeField(null=True, blank=True)
+    voided_by = models.ForeignKey(
+        "accounts.User", null=True, blank=True, on_delete=models.PROTECT, related_name="+"
+    )
 
     class Meta:
         ordering = ["-purchased_on", "-created_at"]
@@ -70,6 +76,8 @@ class PurchaseItem(TenantModel):
     pack_label = models.CharField(max_length=40, blank=True)
     pack_count = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
     pack_size = models.DecimalField(max_digits=14, decimal_places=3, null=True, blank=True)
+    # The price of one pack as typed; when set, line_total = pack_count x pack_cost exactly.
+    pack_cost = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
 
     class Meta:
         ordering = ["created_at", "id"]

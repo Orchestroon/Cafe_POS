@@ -67,3 +67,26 @@ export function lineTotal(qty: string, unitCost: string): string {
 export function packCostFrom(unitCost: string, packSize: string): string {
   return fromUnits((toUnits(unitCost, 4) * toUnits(packSize, 3) + 500n) / 1000n, 4);
 }
+
+/** n / d rounded half away from zero (d > 0), the same rounding as the server. */
+const roundDiv = (n: bigint, d: bigint) => (n >= 0n ? (2n * n + d) / (2n * d) : -((-2n * n + d) / (2n * d)));
+
+/** Cost of one serving: each line's quantity (3 dp, base unit) x its cost per unit (6 dp), summed and
+ * rounded to 2 dp. Null when any line has no known cost (never counted as 0). */
+export function servingCost(lines: { qty: string; unitCost: string | null }[]): string | null {
+  let sum = 0n;
+  for (const l of lines) {
+    if (l.unitCost === null) return null;
+    sum += toUnits(l.qty, 3) * toUnits(l.unitCost, 6);
+  }
+  return fromUnits(roundDiv(sum, pow10(7)), 2);
+}
+
+/** Margin % (1 dp) of a price over a cost. With `includedTaxRate` the price includes that tax and is
+ * taken net of it first. Null for a zero price. */
+export function marginPct(price: string, cost: string, includedTaxRate: string | null = null): string | null {
+  let p = toUnits(price, 2);
+  if (includedTaxRate !== null) p = roundDiv(p * 10000n, 10000n + toUnits(includedTaxRate, 2));
+  if (p <= 0n) return null;
+  return fromUnits(roundDiv((p - toUnits(cost, 2)) * 1000n, p), 1);
+}

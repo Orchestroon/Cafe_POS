@@ -27,21 +27,29 @@ class SupplierSerializer(StrictSerializerMixin, serializers.ModelSerializer):
 class PurchaseItemInputSerializer(StrictSerializerMixin, serializers.Serializer):
     ingredient_id = serializers.UUIDField()
     qty = QtyField(required=False, min_value=Decimal("0.001"))
-    unit_cost = CostField(min_value=0)
+    unit_cost = CostField(required=False, min_value=0)
+    pack_cost = CostField(required=False, allow_null=True, min_value=0)
     pack_label = serializers.CharField(max_length=40, required=False, allow_blank=True, default="")
     pack_count = QtyField(required=False, allow_null=True, min_value=Decimal("0.001"))
     pack_size = QtyField(required=False, allow_null=True, min_value=Decimal("0.001"))
 
     def validate(self, attrs):
         # On a PATCH the root is `partial`, which DRF also applies to these nested fields.
-        missing = {
-            f: "This field is required." for f in ("ingredient_id", "unit_cost") if f not in attrs
-        }
+        pack_cost = attrs.get("pack_cost")
+        need = ("ingredient_id",) if pack_cost is not None else ("ingredient_id", "unit_cost")
+        missing = {f: "This field is required." for f in need if f not in attrs}
         if missing:
             raise serializers.ValidationError(missing)
         count, size, qty = attrs.get("pack_count"), attrs.get("pack_size"), attrs.get("qty")
         if (count is None) != (size is None):
             raise serializers.ValidationError("pack_count and pack_size go together.")
+        if pack_cost is not None:
+            if count is None:
+                raise serializers.ValidationError({"pack_cost": "Send pack_count and pack_size."})
+            if "unit_cost" in attrs:
+                raise serializers.ValidationError(
+                    {"unit_cost": "Send pack_cost or unit_cost, not both."}
+                )
         if count is not None:
             packed = count * size
             if qty is not None and qty != packed:
@@ -66,3 +74,12 @@ class PurchaseInputSerializer(StrictSerializerMixin, serializers.Serializer):
         if self.partial:  # PATCH: every key is optional; `items`, when sent, replaces all lines
             for f in self.fields.values():
                 f.required = False
+
+
+class VoidPurchaseSerializer(StrictSerializerMixin, serializers.Serializer):
+    reason = serializers.CharField(max_length=300)
+
+    def validate_reason(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("A reason is required.")
+        return value.strip()

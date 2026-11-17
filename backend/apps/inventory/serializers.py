@@ -47,6 +47,7 @@ class BalanceSerializer(serializers.ModelSerializer):
     is_low = serializers.SerializerMethodField()
     is_negative = serializers.SerializerMethodField()
     qty = QtyField(read_only=True)
+    unit_cost = serializers.SerializerMethodField()
 
     class Meta:
         model = StockBalance
@@ -60,7 +61,15 @@ class BalanceSerializer(serializers.ModelSerializer):
             "low_stock_threshold",
             "is_low",
             "is_negative",
+            "unit_cost",
         ]
+
+    def get_unit_cost(self, b) -> str | None:
+        """Average cost per base unit (else the reference cost); None = unknown."""
+        from .services import unit_cost
+
+        c = unit_cost(b)
+        return None if c is None else str(c)
 
     def get_is_low(self, b) -> bool:
         t = b.ingredient.low_stock_threshold

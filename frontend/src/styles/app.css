@@ -29,6 +29,7 @@ textarea.form-input { resize: vertical; min-height: 64px; }
 .badge-danger { background: var(--status-alert-bg); color: var(--status-alert-text); border: 1px solid var(--status-alert-border); }
 tr.row-low td { background: var(--status-warning-bg); }
 tr.row-negative td { background: var(--status-alert-bg); }
+tr.row-total td { background: var(--bg-app); border-block-start: 2px solid var(--border-medium); }
 .mono { font-family: var(--font-mono); }
 td.num, th.num { text-align: end; font-variant-numeric: tabular-nums; }
 .row-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
@@ -183,3 +184,15 @@ td.num, th.num { text-align: end; font-variant-numeric: tabular-nums; }
 @media (max-width: 640px) {
 .top-date { display: none; } }
 .nav-scroll .nav-menu { flex: none; }
+
+/* Owner (2026-11-17): desktop/laptop looked like 200% zoom. Above tablet width the whole UI is drawn
+   at 80% and the page uses the full width; phones and tablets keep their touch sizes. Print is untouched.
+   zoom also scales vh, so viewport heights are divided back by the zoom. */
+@media screen and (min-width: 1025px) {
+  html { zoom: .8; }
+  html, body, #app, .view-container { max-width: none; }
+  #app, .main-content, .auth-screen, .receipt-page { min-height: calc(100vh / .8); }
+  .modal-content { max-height: calc(92vh / .8); }
+  .pos-cart { max-height: calc((100vh - 80px) / .8); }
+  .pr-items { max-height: calc(62vh / .8); }
+}

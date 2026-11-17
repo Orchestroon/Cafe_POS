@@ -2,7 +2,7 @@ from django.db import transaction
 
 from apps.audit.services import record
 from apps.core.exceptions import ApiError
-from apps.core.money import q_qty
+from apps.core.money import q_avg, q_qty
 from apps.tenancy.seed import default_location
 
 from .models import StockAdjustment, StockBalance, StockMovement
@@ -29,10 +29,34 @@ def create_ingredient(actor, serializer):
     return ing
 
 
+def _used_by(ing) -> list[str]:
+    """Product sizes and modifier options whose stock effect uses this ingredient."""
+    from apps.catalog.models import RecipeLine
+    from apps.modifiers.models import ModifierEffect
+
+    sizes = RecipeLine.objects.filter(ingredient=ing).values_list(
+        "variant__product__name", "variant__label"
+    )
+    options = ModifierEffect.objects.filter(ingredient=ing).values_list(
+        "option__group__name", "option__label"
+    )
+    return sorted({f"{a} ({b})" for a, b in sizes} | {f"{a}: {b}" for a, b in options})
+
+
 @transaction.atomic
 def update_ingredient(actor, serializer):
     ing = type(serializer.instance).objects.select_for_update().get(pk=serializer.instance.pk)
     serializer.instance = ing
+    if ing.is_active and serializer.validated_data.get("is_active") is False:
+        # A sale would keep deducting an ingredient nobody sees any more (money review, 2026-11-16).
+        used = _used_by(ing)
+        if used:
+            raise ApiError(
+                "INGREDIENT_IN_USE",
+                "This ingredient is used by recipes or options. Remove it from them first.",
+                409,
+                {"used_by": used},
+            )
     changes = {}
     for k, v in serializer.validated_data.items():
         if str(getattr(ing, k)) != str(v):
@@ -43,11 +67,42 @@ def update_ingredient(actor, serializer):
     return ing
 
 
+def unit_cost(bal):
+    """Cost per base unit used for a movement now: the weighted average, else the ingredient's
+    reference cost, else None (unknown, never treated as 0)."""
+    if bal.avg_cost is not None:
+        return bal.avg_cost
+    return bal.ingredient.reference_unit_cost
+
+
+def average_after_purchase(bal, qty, cost):
+    """Weighted average after receiving `qty` at `cost` per unit (owner, 2026-11-16).
+    With no stock on hand (zero or negative) or no known cost, the purchase price is the cost."""
+    current = unit_cost(bal)
+    if current is None or bal.qty <= 0:
+        return q_avg(cost)
+    return q_avg((bal.qty * current + qty * cost) / (bal.qty + qty))
+
+
+def average_after_void(bal, qty, cost):
+    """Take a voided purchase back out of the average: (on_hand x avg - qty x cost) / (on_hand -
+    qty). When nothing would be left, or the result would be negative because the stock was
+    already used, the average stays as it is."""
+    current = unit_cost(bal)
+    left = bal.qty - qty
+    if current is None or left <= 0:
+        return bal.avg_cost
+    value = bal.qty * current - qty * cost
+    return q_avg(value / left) if value >= 0 else bal.avg_cost
+
+
 def _lock_balances(org, ingredient_ids):
-    """Lock in ingredient_id order (deadlock-safe) and return {ingredient_id: balance}."""
+    """Lock in ingredient_id order (deadlock-safe) and return {ingredient_id: balance}. The
+    ingredient is joined (not locked) for its reference cost."""
     location = default_location(org)
     rows = (
-        StockBalance.objects.select_for_update()
+        StockBalance.objects.select_for_update(of=("self",))
+        .select_related("ingredient")
         .filter(organization=org, location=location, ingredient_id__in=ingredient_ids)
         .order_by("ingredient_id")
     )
@@ -78,6 +133,7 @@ def _post_movement(actor, bal, adjustment, movement_type, delta):
         source_type=StockMovement.Source.STOCK_ADJUSTMENT,
         source_id=adjustment.id,
         balance_after=bal.qty,
+        unit_cost=unit_cost(bal),
         created_by=actor,
     )
 

@@ -14,7 +14,7 @@ import { PageHeader } from "../components/PageHeader";
 import { Kbd } from "../components/ShortcutsHelp";
 import { ErrorBanner, Loading } from "../components/States";
 import { formatMoney } from "../i18n/format";
-import { isDec, perUnitQty, toUnits } from "../lib/decimal";
+import { isDec, marginPct, perUnitQty, servingCost, toUnits } from "../lib/decimal";
 import { useShortcuts } from "../lib/shortcuts";
 import { gte, inLarge, readable, times, toBase, trim, unitsFor, validEntry, type EntryUnit } from "../lib/units";
 import { confirmLeave, setUnsaved } from "../lib/unsaved";
@@ -424,14 +424,21 @@ function StockItemLine({ size, ingredients, onPick }: { size: Size; ingredients:
 
 function PreviewAndStock({ size, ings, balances, productName }: { size: Size; ings: Map<string, Ingredient>; balances: Balance[]; productName: string }) {
   const { t } = useTranslation();
+  const { me } = useAuth();
   const [n, setN] = useState(1);
   const bal = new Map(balances.map((b) => [b.ingredient_id, b]));
   const rows = size.lines.filter((l) => l.ingredient_id && validEntry(l.qty.trim(), l.unit) && isDec(l.waste.trim() || "0", 2)).map((l) => {
     const unit = (ings.get(l.ingredient_id)?.base_unit ?? l.base ?? "g") as Unit;
-    const need = times(perUnitQty(toBase(l.qty.trim(), l.unit), l.waste.trim() || "0"), n);
+    const one = perUnitQty(toBase(l.qty.trim(), l.unit), l.waste.trim() || "0");
+    const need = times(one, n);
     const have = bal.get(l.ingredient_id)?.qty;
-    return { key: l.key, name: ings.get(l.ingredient_id)?.name ?? l.name ?? "", unit, need, have, enough: have !== undefined && gte(have, need) };
+    return { key: l.key, name: ings.get(l.ingredient_id)?.name ?? l.name ?? "", unit, one, need, have, enough: have !== undefined && gte(have, need), unitCost: bal.get(l.ingredient_id)?.unit_cost ?? null };
   });
+  // Cost per serving at today's average cost (options are not included), and the margin on this size's price.
+  const cost = servingCost(rows.map((r) => ({ qty: r.one, unitCost: r.unitCost })));
+  const s = me?.settings;
+  const margin = cost !== null && isDec(size.price, 2) ? marginPct(size.price, cost, s?.tax_enabled && s.prices_include_tax ? s.tax_rate : null) : null;
+  const noCost = rows.filter((r) => r.unitCost === null).map((r) => r.name);
   const show = (q: string, u: Unit) => { const r = readable(q, u); return `${r.qty} ${t(`units.${r.unit}`)}`; };
   const allEnough = rows.length > 0 && rows.every((r) => r.enough);
   return (
@@ -449,6 +456,10 @@ function PreviewAndStock({ size, ings, balances, productName }: { size: Size; in
           </div>
           {rows.map((r) => <div key={r.key} className="pr-kv"><strong>{r.name}</strong><strong className="mono">{show(r.need, r.unit)}</strong></div>)}
           <p className="form-hint">{t("products.previewNote")}</p>
+          <div className="pr-kv pr-cost"><span>{t("products.costPerServing")}</span><strong>{cost === null ? "—" : formatMoney(cost, s?.currency ?? "")}</strong></div>
+          {margin !== null && <div className="pr-kv"><span>{t("products.margin")}</span><strong className={margin.startsWith("-") ? "pr-bad" : ""}>{margin}%</strong></div>}
+          {noCost.length > 0 && <p className="form-hint">{t("products.noCost", { names: noCost.join(t("audit.listSep")) })}</p>}
+          {cost !== null && <p className="form-hint">{t("products.costNote")}</p>}
         </div>
         <div className="card">
           <div className="pr-card-head"><h3>{t("products.stock")}</h3><span className="pr-accent">{t("products.mainLocation")}</span></div>

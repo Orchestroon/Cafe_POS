@@ -36,6 +36,9 @@ class StockBalance(TenantModel):
     ingredient = models.ForeignKey(Ingredient, on_delete=models.PROTECT, related_name="balances")
     location = models.ForeignKey("tenancy.Location", on_delete=models.PROTECT, related_name="+")
     qty = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+    # Weighted average cost per base unit, moved only by purchase post/void (owner, 2026-11-16).
+    # None until the first purchase: the ingredient's reference_unit_cost stands in.
+    avg_cost = models.DecimalField(max_digits=14, decimal_places=6, null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -72,11 +75,13 @@ class StockMovement(AppendOnlyModel, TenantModel):
         SALE = "sale"
         PURCHASE = "purchase"
         ADJUSTMENT = "adjustment"
+        PURCHASE_VOID = "purchase_void"
 
     class Source(models.TextChoices):
         ORDER_ITEM = "order_item"
         PURCHASE_ITEM = "purchase_item"
         STOCK_ADJUSTMENT = "stock_adjustment"
+        PURCHASE_VOID = "purchase_void"
 
     ingredient = models.ForeignKey(Ingredient, on_delete=models.PROTECT, related_name="movements")
     location = models.ForeignKey("tenancy.Location", on_delete=models.PROTECT, related_name="+")
@@ -85,6 +90,8 @@ class StockMovement(AppendOnlyModel, TenantModel):
     source_type = models.CharField(max_length=20, choices=Source.choices)
     source_id = models.UUIDField(default=uuid.uuid4)
     balance_after = models.DecimalField(max_digits=14, decimal_places=3)
+    # Cost per base unit at the time; value = qty_delta x unit_cost. None = no cost was known.
+    unit_cost = models.DecimalField(max_digits=14, decimal_places=6, null=True, blank=True)
     created_by = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="+")
     occurred_at = models.DateTimeField(default=timezone.now)
 

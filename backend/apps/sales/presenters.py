@@ -81,8 +81,11 @@ def order_detail(order, *, admin):
         if admin:  # recipes and consumption are business internals
             row["recipe"] = i.recipe_snapshot
             row["consumption"] = i.consumption_snapshot
+            row["cost_total"] = None if i.cost_total is None else str(i.cost_total)
         items.append(row)
+    extra = {"cost_total": None if order.cost_total is None else str(order.cost_total)}
     return {
+        **(extra if admin else {}),
         **order_summary(order),
         "shift_id": str(order.shift_id),
         "subtotal": str(order.subtotal),

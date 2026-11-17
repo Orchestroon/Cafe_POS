@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api } from "../api/client";
+import { api, ApiError } from "../api/client";
 import type { Ingredient, Unit } from "../api/types";
 import { Check, Field, fieldError, isDecimal, TextField } from "../components/Form";
 import { Modal } from "../components/Modal";
@@ -73,6 +73,9 @@ function IngredientForm({ initial, onClose }: { initial: Partial<Ingredient>; on
     <Modal title={initial.id ? t("ingredients.edit") : t("ingredients.new")} onClose={onClose}
       footer={<><button className="btn btn-outline" onClick={onClose}>{t("common.cancel")}</button><button className="btn btn-primary" disabled={save.isPending} onClick={submit}>{t("common.save")}</button></>}>
       <ErrorBanner error={save.error} />
+      {save.error instanceof ApiError && save.error.code === "INGREDIENT_IN_USE" && (
+        <ul className="form-hint" style={{ marginBottom: 12 }}>{((save.error.details as { used_by?: string[] }).used_by ?? []).map((u) => <li key={u}>{u}</li>)}</ul>
+      )}
       <TextField label={t("common.name")} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} error={fieldError(save.error, "name")} autoFocus />
       <Field label={t("ingredients.unit")} hint={initial.id ? t("ingredients.unitLocked") : undefined} error={fieldError(save.error, "base_unit")}>
         <select className="form-select" value={f.base_unit} disabled={!!initial.id} onChange={(e) => setF({ ...f, base_unit: e.target.value as Unit })}>

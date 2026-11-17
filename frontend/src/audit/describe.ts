@@ -16,7 +16,7 @@ export const entityKey = (type: string) => type.replace(/\./g, "_");
 export const AREAS = ["sales", "shifts", "stock", "menu", "purchases", "expenses", "admin"] as const;
 export type Area = (typeof AREAS)[number];
 const AREA_OF: Record<string, Area> = {
-  order: "sales", refund: "sales", shift: "shifts", stock: "stock", ingredient: "stock",
+  order: "sales", refund: "sales", shift: "shifts", cash: "shifts", stock: "stock", ingredient: "stock",
   category: "menu", product: "menu", variant: "menu", recipe: "menu", modifier_group: "menu", modifier_option: "menu",
   purchase: "purchases", supplier: "purchases", expense: "expenses", user: "admin", settings: "admin",
 };
@@ -25,7 +25,7 @@ export const areaOf = (action: string): Area => AREA_OF[action.split(".")[0]] ??
 const MONEY = new Set(["total", "total_amount", "amount", "opening_cash", "expected_cash", "actual_cash", "difference", "price", "price_delta", "cash_sales", "card_sales", "cash_refunds", "card_refunds", "drawer_expenses"]);
 const ID_KEYS = new Set(["shift_id", "order_id", "original_cashier_id", "owner_id", "expense_id", "ingredient_id", "category_id", "variant_id", "group_id", "supplier_id"]);
 // Shown in the sentence or as their own section, not repeated as plain rows.
-const SKIP = new Set(["changes", "before", "after", "totals", "payments", "lines", "items_detail"]);
+const SKIP = new Set(["changes", "before", "after", "totals", "payments", "lines", "items_detail", "balances_after"]);
 
 const isEmpty = (v: unknown) => v === null || v === undefined || v === "" || v === "None";
 
@@ -46,6 +46,7 @@ export function fmt(key: string, v: unknown, c: Ctx): string {
     case "category": return t(`expenses.categories.${s}`, { defaultValue: s });
     case "type": return t(`audit.values.${s}`, { defaultValue: s });
     case "mode": return t(`modifiers.modes.${s}`, { defaultValue: s });
+    case "kind": return t(`cash.${s}`, { defaultValue: s });
     case "base_unit": return t(`units.${s}`, { defaultValue: s });
     case "preferred_language":
     case "default_language": return s === "ar" ? "العربية" : "English";
@@ -103,6 +104,10 @@ export function sentence(e: AuditEvent, c: Ctx): string {
     case "purchase.updated":
     case "purchase.deleted":
     case "purchase.posted": Object.assign(vars, { total: m("total"), items: s.items ?? "—", source: m("source") }); break;
+    case "purchase.voided": Object.assign(vars, { total: m("total"), reason: s.reason ?? "" }); break;
+    case "cash.added":
+    case "cash.removed": Object.assign(vars, { amount: m("amount"), reason: s.reason ?? "" }); break;
+    case "cash.voided": Object.assign(vars, { kind: m("kind"), amount: m("amount"), reason: s.reason ?? "", original: s.original_reason ?? "" }); break;
     case "expense.created":
     case "expense.voided": Object.assign(vars, { description: s.description, amount: m("amount"), source: m("source"), reason: s.reason ?? "" }); break;
     case "user.created": vars.role = m("role"); vars.name = s.username ?? name; break;

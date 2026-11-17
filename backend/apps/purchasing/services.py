@@ -6,10 +6,11 @@ from django.utils import timezone
 
 from apps.audit.services import record
 from apps.core.exceptions import ApiError
-from apps.core.money import q_cost, q_money, q_qty
-from apps.expenses.services import create_purchase_expense
+from apps.core.money import q_avg, q_cost, q_money, q_qty
+from apps.expenses.models import Expense
+from apps.expenses.services import create_purchase_expense, void_purchase_expense
 from apps.inventory.models import Ingredient, StockBalance, StockMovement
-from apps.inventory.services import lock_balances
+from apps.inventory.services import average_after_purchase, average_after_void, lock_balances
 from apps.shifts import services as shift_services
 from apps.tenancy.seed import default_location
 
@@ -42,6 +43,9 @@ def purchase_dict(p) -> dict:
         "posted_at": _ts(p.posted_at),
         "posted_by": _user(p.posted_by),
         "created_by": _user(p.created_by),
+        "void_reason": p.void_reason,
+        "voided_at": _ts(p.voided_at),
+        "voided_by": _user(p.voided_by),
         "items": [
             {
                 "id": str(i.pk),
@@ -54,6 +58,7 @@ def purchase_dict(p) -> dict:
                 "pack_label": i.pack_label,
                 "pack_count": None if i.pack_count is None else str(i.pack_count),
                 "pack_size": None if i.pack_size is None else str(i.pack_size),
+                "pack_cost": None if i.pack_cost is None else str(i.pack_cost),
             }
             for i in p.items.all()
         ],
@@ -71,7 +76,7 @@ def get_purchase(org, pk, lock=False):
 def detail(org, pk) -> Purchase:
     return (
         Purchase.objects.filter(organization=org, pk=pk)
-        .select_related("supplier", "posted_by", "created_by")
+        .select_related("supplier", "posted_by", "created_by", "voided_by")
         .prefetch_related("items__ingredient")
         .get()
     )
@@ -97,8 +102,14 @@ def _build_items(org, purchase, items):
         raise _bad("items", "Unknown or inactive ingredient.")
     rows, total = [], q_money(0)
     for i in items:
-        qty, cost = q_qty(i["qty"]), q_cost(i["unit_cost"])
-        line = q_money(qty * cost)
+        qty, pack_cost = q_qty(i["qty"]), i.get("pack_cost")
+        if pack_cost is not None:  # what was typed is what is paid: packs x pack price, exactly
+            pack_cost = q_cost(pack_cost)
+            line = q_money(i["pack_count"] * pack_cost)
+            cost = q_cost(pack_cost / i["pack_size"])  # shown only; the line total is the truth
+        else:
+            cost = q_cost(i["unit_cost"])
+            line = q_money(qty * cost)
         total += line
         rows.append(
             PurchaseItem(
@@ -111,6 +122,7 @@ def _build_items(org, purchase, items):
                 pack_label=i.get("pack_label", ""),
                 pack_count=i.get("pack_count"),
                 pack_size=i.get("pack_size"),
+                pack_cost=pack_cost,
             )
         )
     PurchaseItem.objects.bulk_create(rows)
@@ -168,6 +180,12 @@ def delete_draft(actor, pk) -> None:
     p.delete()  # items cascade; drafts have no stock or expense effect
 
 
+def item_cost(item):
+    """Exact cost per base unit of a purchase line: its money total over its quantity, so the
+    stock value of a purchase equals what was paid (no 4-dp unit cost rounding)."""
+    return q_avg(item.line_total / item.qty)
+
+
 def post_purchase(actor, pk, key) -> tuple[int, dict]:
     """Runs inside the idempotency wrapper's transaction."""
     org = actor.organization
@@ -195,8 +213,10 @@ def post_purchase(actor, pk, key) -> tuple[int, dict]:
     movement_ids = []
     for item in items:
         bal = balances[item.ingredient_id]
+        cost = item_cost(item)
+        bal.avg_cost = average_after_purchase(bal, item.qty, cost)
         bal.qty = q_qty(bal.qty + item.qty)
-        bal.save(update_fields=["qty", "updated_at"])
+        bal.save(update_fields=["qty", "avg_cost", "updated_at"])
         mv = StockMovement.objects.create(
             organization=org,
             ingredient_id=item.ingredient_id,
@@ -206,6 +226,7 @@ def post_purchase(actor, pk, key) -> tuple[int, dict]:
             source_type=StockMovement.Source.PURCHASE_ITEM,
             source_id=item.pk,
             balance_after=bal.qty,
+            unit_cost=cost,
             created_by=actor,
             occurred_at=now,
         )
@@ -229,3 +250,75 @@ def post_purchase(actor, pk, key) -> tuple[int, dict]:
     # Spec 9.4: the purchase fields plus the ids of what the post created.
     body = purchase_dict(detail(org, p.pk))
     return 200, {**body, "stock_movement_ids": movement_ids, "expense_id": str(expense.pk)}
+
+
+@transaction.atomic
+def void_purchase(actor, pk, reason) -> Purchase:
+    """Admin, reason required (owner, 2026-11-16). Takes the purchased stock back out (it may go
+    below zero if some was already used), takes the purchase out of the average cost, and voids
+    its expense. A drawer purchase of a closed shift is refused: that shift's numbers are frozen.
+    Lock order, as a close: the expense's shift -> purchase row -> stock balances."""
+    org = actor.organization
+    seen = get_purchase(org, pk)
+    exp = Expense.objects.filter(purchase=seen).select_related("shift").first()
+    if exp and exp.shift_id:
+        from apps.shifts.models import CashierShift
+
+        shift = CashierShift.objects.select_for_update().get(pk=exp.shift_id)
+        if shift.status == CashierShift.Status.CLOSED:
+            raise ApiError(
+                "PURCHASE_NOT_VOIDABLE",
+                "This purchase was paid from a shift that is already closed.",
+                422,
+                {"why": "shift_closed"},
+            )
+    p = get_purchase(org, pk, lock=True)
+    if p.status == Purchase.Status.DRAFT:
+        raise ApiError(
+            "PURCHASE_NOT_VOIDABLE", "A draft is deleted, not voided.", 422, {"why": "draft"}
+        )
+    if p.status == Purchase.Status.VOIDED:
+        raise ApiError(
+            "PURCHASE_NOT_VOIDABLE", "This purchase is already voided.", 409, {"why": "voided"}
+        )
+    items = list(p.items.all())
+    balances = lock_balances(org, sorted({i.ingredient_id for i in items}))
+    now, after = timezone.now(), {}
+    for item in items:
+        bal = balances[item.ingredient_id]
+        cost = item_cost(item)
+        bal.avg_cost = average_after_void(bal, item.qty, cost)
+        bal.qty = q_qty(bal.qty - item.qty)
+        bal.save(update_fields=["qty", "avg_cost", "updated_at"])
+        StockMovement.objects.create(
+            organization=org,
+            ingredient_id=item.ingredient_id,
+            location=bal.location,
+            qty_delta=-item.qty,
+            movement_type=StockMovement.Type.PURCHASE_VOID,
+            source_type=StockMovement.Source.PURCHASE_VOID,
+            source_id=item.pk,
+            balance_after=bal.qty,
+            unit_cost=cost,
+            created_by=actor,
+            occurred_at=now,
+        )
+        after[str(item.ingredient_id)] = str(bal.qty)
+    if exp:
+        void_purchase_expense(actor, exp, reason)
+    p.status, p.void_reason, p.voided_at, p.voided_by = Purchase.Status.VOIDED, reason, now, actor
+    p.save()
+    record(
+        actor,
+        "purchase.voided",
+        p,
+        {
+            "total": str(p.total),
+            "items": len(items),
+            "source": p.source,
+            "reason": reason,
+            "expense_id": str(exp.pk) if exp else None,
+            "balances_after": after,
+        },
+    )
+    return detail(org, p.pk)

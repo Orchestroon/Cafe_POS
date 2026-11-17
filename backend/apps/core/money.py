@@ -5,6 +5,7 @@ from decimal import ROUND_HALF_UP, Decimal
 _MONEY = Decimal("0.01")
 _QTY = Decimal("0.001")
 _COST = Decimal("0.0001")
+_AVG = Decimal("0.000001")  # average cost per base unit (g, ml, pcs)
 
 
 def _q(value, exp):
@@ -23,3 +24,7 @@ def q_qty(value) -> Decimal:
 
 def q_cost(value) -> Decimal:
     return _q(value, _COST)
+
+
+def q_avg(value) -> Decimal:
+    return _q(value, _AVG)

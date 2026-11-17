@@ -181,7 +181,11 @@
     "save": "Save product & recipe",
     "unsavedConfirm": "You have unsaved changes on this product. Leave and lose them?",
     "nameRequired": "Enter a product name.",
-    "categoryRequired": "Choose a category."
+    "categoryRequired": "Choose a category.",
+    "costPerServing": "Cost per serving",
+    "margin": "Margin",
+    "noCost": "No cost yet for: {{names}}. Post a purchase or set a unit cost on the ingredient.",
+    "costNote": "At today's average cost; options are not included."
   },
   "ingredients": {
     "new": "New ingredient",
@@ -293,7 +297,10 @@
     "EXPENSE_NOT_VOIDABLE": "This expense cannot be voided (purchase expense, already voided, or its shift is closed).",
     "RECIPE_MISSING": "A size in the cart has no recipe, so it cannot be sold. Ask an Admin.",
     "REGISTER_NOT_CONFIGURED": "No single default register is set up for this café. Ask an Admin.",
-    "INTERNAL_ERROR": "Something went wrong on the server. Please try again."
+    "INTERNAL_ERROR": "Something went wrong on the server. Please try again.",
+    "INGREDIENT_IN_USE": "This ingredient is used by these recipes or options. Remove it from them first:",
+    "PURCHASE_NOT_VOIDABLE": "This purchase cannot be voided (a draft, already voided, or paid from a shift that is already closed).",
+    "CASH_MOVEMENT_NOT_VOIDABLE": "This cannot be cancelled (already cancelled, or the shift is closed)."
   },
   "recipe": {
     "ingredient": "Ingredient",
@@ -556,7 +563,14 @@
     "postUnsure": "We could not confirm the post. Tap Retry: it is safe, it will not post twice.",
     "editTitle": "Edit draft",
     "newTitle": "New purchase",
-    "roundingHint": "Packs × pack cost is {{packs}}, but the stored cost per unit is rounded to 4 decimals, so the line total is {{stored}}."
+    "voided": "Voided",
+    "void": "Void purchase",
+    "voidTitle": "Void this purchase?",
+    "voidText": "The purchased stock goes back out (it can go below zero if some was used) and the expense of {{total}} is cancelled. This cannot be undone.",
+    "voidReason": "Reason",
+    "voidReasonRequired": "Enter a reason.",
+    "voidConfirm": "Void purchase",
+    "voidedNote": "Voided {{time}} by {{by}} · Reason: “{{reason}}”"
   },
   "reports": {
     "today": "Today",
@@ -566,7 +580,9 @@
       "top-products": "Top products",
       "stock": "Stock",
       "purchases-expenses": "Purchases & expenses",
-      "shifts": "Shifts"
+      "shifts": "Shifts",
+      "money-in-out": "Money in & out",
+      "profit": "Profit"
     },
     "stockNote": "Balances are current. The date range only affects the consumed column.",
     "orders": "Orders",
@@ -589,7 +605,53 @@
     "drawerTotal": "Paid from drawer",
     "externalTotal": "Paid externally",
     "shiftsCount": "Shifts",
-    "openClosed": "{{open}} open, {{closed}} closed"
+    "openClosed": "{{open}} open, {{closed}} closed",
+    "notes": {
+      "money-in-out": "Every pound in and out: sales by sale date, refunds by refund date, expenses and purchases by paid date. Voided ones are left out.",
+      "profit": "Costs use each ingredient's average purchase price, saved on every sale. Purchases are not subtracted here: they become stock and count when sold."
+    },
+    "qtyRefunded": "Refunded",
+    "stockValue": "Stock value",
+    "withoutCost_one": "{{count}} ingredient has no cost yet",
+    "withoutCost_other": "{{count}} ingredients have no cost yet",
+    "avgCost": "Average cost",
+    "value": "Value",
+    "perUnit": "{{cost}} / {{unit}}",
+    "noCost": "No cost yet",
+    "money": {
+      "sales": "Sales",
+      "refunds": "Refunds",
+      "drawer_expenses": "Expenses from the drawer",
+      "other_expenses": "Other expenses",
+      "drawer_purchases": "Purchases from the drawer",
+      "other_purchases": "Other purchases",
+      "total_in": "Money in",
+      "total_out": "Money out",
+      "net": "Net",
+      "netNegative": "More went out than came in",
+      "drawerTitle": "Cash drawers",
+      "drawerNote": "Cash put in or taken out of drawers only moves cash (e.g. to the safe), so it is not counted as money in or out.",
+      "closedDiff_one": "Over / short ({{count}} closed shift)",
+      "closedDiff_other": "Over / short ({{count}} closed shifts)",
+      "eachShift": "See each shift"
+    },
+    "profitRows": {
+      "sales": "Sales (before tax)",
+      "refunds": "Refunds",
+      "net_sales": "Net sales",
+      "cost_of_sales": "Cost of what was sold",
+      "gross_profit": "Gross profit",
+      "stock_losses": "Stock losses (adjustments, counts)",
+      "stock_gains": "Stock gains",
+      "general_expenses": "Expenses",
+      "net_profit": "Net profit"
+    },
+    "margin": "Margin {{pct}}%",
+    "missingOrders_one": "{{count}} order ({{amount}}) has no saved cost (sold before costs were recorded, or an ingredient had no cost). The profit is too high by its cost.",
+    "missingOrders_other": "{{count}} orders ({{amount}}) have no saved cost (sold before costs were recorded, or an ingredient had no cost). The profit is too high by their cost.",
+    "missingAdjustments_one": "{{count}} stock change has no cost and is left out.",
+    "missingAdjustments_other": "{{count}} stock changes have no cost and are left out.",
+    "purchasesInfo": "Purchases in this period: {{amount}} (they became stock; not subtracted here)."
   },
   "audit": {
     "title": "Audit log",
@@ -642,7 +704,8 @@
       "expenses_expense": "Expense",
       "accounts_user": "User",
       "tenancy_organizationsettings": "Settings",
-      "purchasing_supplier": "Supplier"
+      "purchasing_supplier": "Supplier",
+      "shifts_cashmovement": "Cash entry"
     },
     "actions": {
       "order_created": "Sale",
@@ -679,7 +742,11 @@
       "user_password_reset": "Password reset",
       "settings_updated": "Settings changed",
       "supplier_created": "Supplier added",
-      "supplier_updated": "Supplier changed"
+      "supplier_updated": "Supplier changed",
+      "cash_added": "Cash put in",
+      "cash_removed": "Cash taken out",
+      "cash_voided": "Cash entry cancelled",
+      "purchase_voided": "Purchase voided"
     },
     "sentences": {
       "order_created": "Sold invoice {{invoice}} for {{total}} · {{payments}}",
@@ -716,7 +783,11 @@
       "user_password_reset": "Reset the password of {{name}}",
       "settings_updated": "Changed the settings: {{changes}}",
       "supplier_created": "Added the supplier {{name}}",
-      "supplier_updated": "Changed the supplier {{name}}: {{changes}}"
+      "supplier_updated": "Changed the supplier {{name}}: {{changes}}",
+      "cash_added": "Put {{amount}} into the drawer · Reason: “{{reason}}”",
+      "cash_removed": "Took {{amount}} out of the drawer · Reason: “{{reason}}”",
+      "cash_voided": "Cancelled “{{original}}” ({{kind}} {{amount}}) · Reason: “{{reason}}”",
+      "purchase_voided": "Voided a purchase of {{total}} · Reason: “{{reason}}”"
     },
     "fields": {
       "invoice_no": "Invoice",
@@ -798,7 +869,9 @@
       "supplier_invoice_no": "Supplier invoice",
       "purchased_on": "Purchase date",
       "notes": "Notes",
-      "phone": "Phone"
+      "phone": "Phone",
+      "kind": "Type",
+      "original_reason": "Original reason"
     }
   },
   "shortcuts": {
@@ -861,5 +934,29 @@
     "noRecipe_other": "{{count}} sizes without a recipe (cannot be sold)",
     "openShifts_one": "{{count}} shift still open",
     "openShifts_other": "{{count}} shifts still open"
+  },
+  "cash": {
+    "title": "Cash out / in",
+    "note": "Cash leaving or entering your drawer that is not a sale, refund or expense, e.g. cash to the safe or change from the owner. It changes your expected cash; it is not an expense.",
+    "out": "Taken out",
+    "in": "Put in",
+    "kind": "Type",
+    "reason": "Reason",
+    "reasonOut": "e.g. To the safe",
+    "reasonIn": "e.g. Change from the owner",
+    "reasonRequired": "Enter a reason.",
+    "inTotal": "Cash put in",
+    "outTotal": "Cash taken out",
+    "listTitle": "Cash taken out / put in",
+    "voided": "Cancelled: “{{reason}}”",
+    "voidTitle": "Cancel",
+    "voidConfirm": "Cancel this entry",
+    "gapOut": "Last close counted {{previous}}, but this shift opened with {{opening}}: {{amount}} left the drawer between the shifts.",
+    "gapIn": "Last close counted {{previous}}, but this shift opened with {{opening}}: {{amount}} was added between the shifts.",
+    "gap": "Since last close",
+    "gapTotal": "Between shifts",
+    "gapHint": "Opening cash vs. the same person's previous count",
+    "previousClose": "Previous close: {{cash}}",
+    "voidWhat": "{{kind}} {{amount}} · “{{reason}}”"
   }
 }

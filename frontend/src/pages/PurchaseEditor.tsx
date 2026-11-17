@@ -24,10 +24,11 @@ const derive = (r: Row) => {
   const pack = r.mode === "pack";
   const qty = pack ? (isDecimal(r.pack_count, 3) && isDecimal(r.pack_size, 3) ? packQty(r.pack_count, r.pack_size) : "") : r.qty;
   const unit = pack ? (isDecimal(r.pack_cost, 4) && isDecimal(r.pack_size, 3) ? unitCostFromPack(r.pack_cost, r.pack_size) : "") : r.unit_cost;
-  const total = isDecimal(qty, 3) && isDecimal(unit, 4) ? lineTotal(qty, unit) : "";
-  // Packs x pack cost vs the stored line total: differs by cents when the 4-dp unit cost was rounded.
-  const packTotal = pack && isDecimal(r.pack_count, 3) && isDecimal(r.pack_cost, 4) ? lineTotal(r.pack_count, r.pack_cost) : "";
-  return { qty, unit, total, drift: packTotal && total && packTotal !== total ? packTotal : "" };
+  // By pack, the line is exactly packs x pack price (what was typed is what is paid); the unit cost is shown only.
+  const total = pack
+    ? (isDecimal(r.pack_count, 3) && isDecimal(r.pack_cost, 4) ? lineTotal(r.pack_count, r.pack_cost) : "")
+    : (isDecimal(qty, 3) && isDecimal(unit, 4) ? lineTotal(qty, unit) : "");
+  return { qty, unit, total };
 };
 
 export function PurchaseEditor() {
@@ -44,7 +45,7 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
   const nav = useNavigate();
   const cur = me?.settings.currency ?? "";
   const tz = me?.settings.timezone ?? "UTC";
-  const posted = purchase?.status === "posted";
+  const posted = !!purchase && purchase.status !== "draft";
   const ings = useQuery({ queryKey: ["ingredients", "active"], queryFn: () => api.all<Ingredient>("/ingredients", { is_active: true, ordering: "name" }) });
   const sups = useQuery({ queryKey: ["suppliers", "active"], queryFn: () => api.all<Supplier>("/suppliers", { is_active: true }) });
   const [head, setHead] = useState<Head>({
@@ -57,13 +58,14 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
       ? purchase.items.map((i) => {
           const pack = i.pack_count !== null && i.pack_size !== null;
           return { key: newKey(), ingredient_id: i.ingredient_id, mode: pack ? "pack" : "qty", pack_label: i.pack_label, pack_count: i.pack_count ?? "", pack_size: i.pack_size ?? "",
-            pack_cost: pack ? packCostFrom(i.unit_cost, i.pack_size!) : "", qty: i.qty, unit_cost: i.unit_cost };
+            pack_cost: pack ? i.pack_cost ?? packCostFrom(i.unit_cost, i.pack_size!) : "", qty: i.qty, unit_cost: i.unit_cost };
         })
       : [blank()],
   );
   const [dirty, setDirty] = useState(purchase === null);
   const [clientErr, setClientErr] = useState("");
   const [confirmPost, setConfirmPost] = useState(false);
+  const [voiding, setVoiding] = useState(false);
 
   const setH = <K extends keyof Head>(k: K, v: Head[K]) => { setDirty(true); setHead({ ...head, [k]: v }); };
   const setRow = (key: string, patch: Partial<Row>) => { setDirty(true); setRows(rows.map((r) => (r.key === key ? { ...r, ...patch } : r))); };
@@ -73,9 +75,8 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
     supplier_id: head.supplier_id || null, supplier_invoice_no: head.supplier_invoice_no.trim(), purchased_on: head.purchased_on,
     payment_method: head.source === "cash_drawer" ? "cash" : head.payment_method, source: head.source, notes: head.notes.trim(),
     items: rows.map((r) => {
-      const d = derive(r);
       return r.mode === "pack"
-        ? { ingredient_id: r.ingredient_id, pack_label: r.pack_label.trim(), pack_count: r.pack_count.trim(), pack_size: r.pack_size.trim(), unit_cost: d.unit }
+        ? { ingredient_id: r.ingredient_id, pack_label: r.pack_label.trim(), pack_count: r.pack_count.trim(), pack_size: r.pack_size.trim(), pack_cost: r.pack_cost.trim() }
         : { ingredient_id: r.ingredient_id, qty: r.qty.trim(), unit_cost: r.unit_cost.trim(), pack_label: "" };
     }),
   });
@@ -118,9 +119,11 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
   if (posted) {
     return (
       <>
-        <PageHeader title={t("purchases.viewTitle")} subtitle={`${purchase.purchased_on} · ${purchase.supplier?.name ?? "—"}`} actions={<><Link className="btn btn-outline" to="/admin/purchases">{t("orders.back")}</Link><HistoryLink entityType="purchasing.purchase" entityId={purchase.id} /></>} />
+        <PageHeader title={t("purchases.viewTitle")} subtitle={`${purchase.purchased_on} · ${purchase.supplier?.name ?? "—"}`} actions={<><Link className="btn btn-outline" to="/admin/purchases">{t("orders.back")}</Link><HistoryLink entityType="purchasing.purchase" entityId={purchase.id} />
+          {purchase.status === "posted" && <button className="btn btn-outline" onClick={() => setVoiding(true)}>{t("purchases.void")}</button>}</>} />
         <div className="card">
           <div className="alert-banner alert-success" style={{ marginBottom: 12 }}>{t("purchases.postedNote", { time: purchase.posted_at ? formatDateTime(purchase.posted_at, tz) : "", by: purchase.posted_by?.display_name ?? "" })}</div>
+          {purchase.status === "voided" && <div className="alert-banner alert-warning" role="note" style={{ marginBottom: 12 }}>{t("purchases.voidedNote", { time: purchase.voided_at ? formatDateTime(purchase.voided_at, tz) : "", by: purchase.voided_by?.display_name ?? "", reason: purchase.void_reason })}</div>}
           <table className="erp-table">
             <thead><tr><th>{t("nav.ingredients")}</th><th className="num">{t("inventory.qty")}</th><th className="num">{t("purchases.unitCost")}</th><th className="num">{t("pos.total")}</th></tr></thead>
             <tbody>
@@ -135,6 +138,7 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
             <div className="totals-row grand"><span>{t("pos.total")}</span><span>{formatMoney(purchase.total, cur)}</span></div>
           </div>
         </div>
+        {voiding && <VoidPurchaseDialog purchase={purchase} onClose={() => setVoiding(false)} />}
       </>
     );
   }
@@ -198,7 +202,7 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
                     <td>{pack && <input aria-label={t("purchases.packCost")} className="form-input inline-input num" inputMode="decimal" value={r.pack_cost} onChange={(e) => setRow(r.key, { pack_cost: e.target.value })} />}</td>
                     <td className="num mono">{pack ? `${d.qty} ${unit}` : <input aria-label={t("inventory.qty")} className="form-input inline-input num" inputMode="decimal" value={r.qty} onChange={(e) => setRow(r.key, { qty: e.target.value })} />}</td>
                     <td className="num mono">{pack ? d.unit : <input aria-label={t("purchases.unitCost")} className="form-input inline-input num" inputMode="decimal" value={r.unit_cost} onChange={(e) => setRow(r.key, { unit_cost: e.target.value })} />}</td>
-                    <td className="num">{d.total}{d.drift && <div className="form-hint" role="note">{t("purchases.roundingHint", { packs: d.drift, stored: d.total })}</div>}</td>
+                    <td className="num">{d.total}</td>
                     <td><button className="icon-btn" aria-label={t("common.remove")} onClick={() => { setDirty(true); setRows(rows.filter((x) => x.key !== r.key)); }}>✕</button></td>
                   </tr>
                 );
@@ -219,5 +223,33 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
         </Modal>
       )}
     </>
+  );
+}
+
+/** Void a posted purchase (Admin, reason required): stock goes back out, its expense is cancelled. */
+function VoidPurchaseDialog({ purchase, onClose }: { purchase: Purchase; onClose: () => void }) {
+  const { t } = useTranslation();
+  const { me } = useAuth();
+  const qc = useQueryClient();
+  const [reason, setReason] = useState("");
+  const [clientErr, setClientErr] = useState("");
+  const v = useMutation({
+    mutationFn: () => api.post<Purchase>(`/purchases/${purchase.id}/void`, { reason: reason.trim() }),
+    onSuccess: (p) => {
+      qc.setQueryData(["purchase", p.id], p);
+      for (const k of ["purchases", "balances", "movements", "expenses", "shift", "report"]) void qc.invalidateQueries({ queryKey: [k] });
+      onClose();
+    },
+  });
+  const submit = () => (reason.trim() ? (setClientErr(""), v.mutate()) : setClientErr(t("purchases.voidReasonRequired")));
+  return (
+    <Modal title={t("purchases.voidTitle")} onClose={onClose} footer={<>
+      <button className="btn btn-outline" onClick={onClose}>{t("common.cancel")}</button>
+      <button className="btn btn-primary" disabled={v.isPending} onClick={submit}>{t("purchases.voidConfirm")}</button>
+    </>}>
+      <p style={{ marginBottom: 10 }}>{t("purchases.voidText", { total: formatMoney(purchase.total, me?.settings.currency ?? "") })}</p>
+      <ErrorBanner error={v.error} />
+      <TextField label={t("purchases.voidReason")} autoFocus value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} error={clientErr} />
+    </Modal>
   );
 }

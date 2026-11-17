@@ -67,7 +67,7 @@ def scenario(org, shop, admin_c, barista_c):
     return {"shift": s, "orders": ids}
 
 
-def test_at22_every_report_reconciles(admin_c, barista_c, scenario):
+def test_at22_every_report_reconciles(admin_c, barista_c, scenario, shop):
     s = report(admin_c, "sales-summary")["data"]
     assert s == {
         "orders_count": 5,
@@ -93,16 +93,30 @@ def test_at22_every_report_reconciles(admin_c, barista_c, scenario):
     assert Decimal(p["cash_refunded"]) + Decimal(p["card_refunded"]) == Decimal(s["refunds"])
     assert Decimal(p["cash_net"]) + Decimal(p["card_net"]) == Decimal(s["net_sales"])
 
-    top = report(admin_c, "top-products")["data"]["products"]  # refunded orders are excluded
+    # Sold on the sale day, taken off on the refund day (money review, 2026-11-16): same rule as
+    # the summary, so net revenue matches net sales here (no tax).
+    top = report(admin_c, "top-products")["data"]["products"]
     assert top == [
         {
-            "variant_id": top[0]["variant_id"],
+            "variant_id": str(shop.small.pk),
             "product_name_snapshot": "Iced Latte",
             "variant_label_snapshot": "Small",
-            "qty_sold": 4,
+            "qty_sold": 5,
+            "qty_refunded": 1,
+            "refunded_revenue": "65.00",
             "net_revenue": "260.00",
-        }
+        },
+        {
+            "variant_id": str(shop.large.pk),
+            "product_name_snapshot": "Iced Latte",
+            "variant_label_snapshot": "Large",
+            "qty_sold": 1,
+            "qty_refunded": 1,
+            "refunded_revenue": "80.00",
+            "net_revenue": "0.00",
+        },
     ]
+    assert sum(Decimal(r["net_revenue"]) for r in top) == Decimal(s["net_sales"])
 
     pe = report(admin_c, "purchases-expenses")["data"]
     assert pe["purchase_total"] == "360.00" and pe["general_expenses_total"] == "1030.00"
