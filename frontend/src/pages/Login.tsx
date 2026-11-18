@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation } from "react-router";
 import { useAuth } from "../auth/AuthContext";
 import { landingPath } from "../lib/layout";
 import { ErrorBanner } from "../components/States";

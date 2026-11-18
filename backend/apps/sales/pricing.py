@@ -5,6 +5,7 @@ from decimal import Decimal
 from apps.core.exceptions import ApiError
 from apps.core.money import q_money
 
+from . import promotions as promo_engine
 from .domain import ItemRequest, OptionData, PricedItem, PricedOrder, TaxConfig, VariantData
 
 ZERO = Decimal("0.00")
@@ -80,7 +81,7 @@ def price_item(item: ItemRequest, variant: VariantData | None, options: dict) ->
         for o in chosen
     )
     unit_price = q_money(variant.price + sum((option_price(o, variant.id) for o in chosen), ZERO))
-    unit_discount = ZERO  # P1 promotions: the hook is here; no promotions exist yet (spec 8.12)
+    unit_discount = ZERO  # promotions are applied to the whole cart afterwards (spec 8.12)
     line_subtotal = q_money(unit_price * item.quantity)
     line_discount = q_money(unit_discount * item.quantity)
     return PricedItem(
@@ -108,10 +109,26 @@ def order_totals(subtotal: Decimal, discount_total: Decimal, tax: TaxConfig):
 
 
 def price_order(
-    items: list[ItemRequest], variants: dict, options: dict, tax: TaxConfig
+    items: list[ItemRequest],
+    variants: dict,
+    options: dict,
+    tax: TaxConfig,
+    promotions=(),
+    selected=frozenset(),
 ) -> PricedOrder:
-    priced = tuple(price_item(i, variants.get(i.variant_id), options) for i in items)
+    """`promotions` are the ones live now (loader); `selected` the manual ones that were tapped."""
+    plain = [price_item(i, variants.get(i.variant_id), options) for i in items]
+    priced, applied = promo_engine.apply(plain, promotions, selected)
     subtotal = q_money(sum((p.line_subtotal for p in priced), ZERO))
     discount = q_money(sum((p.line_discount for p in priced), ZERO))
     tax_total, total = order_totals(subtotal, discount, tax)
-    return PricedOrder(priced, subtotal, discount, tax_total, total, tax)
+    return PricedOrder(
+        tuple(priced),
+        subtotal,
+        discount,
+        tax_total,
+        total,
+        tax,
+        applied,
+        promo_engine.selectable(plain, promotions, selected),
+    )

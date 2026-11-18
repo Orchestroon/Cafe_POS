@@ -1,4 +1,4 @@
-/* New-app additions in the legacy design language (tokens from theme.css). Logical properties only. */
+/* New-app additions in the Growl Tech design language (tokens from theme.css). Logical properties only. */
 body { margin: 0; font-family: var(--font-sans); background: var(--bg-app); color: var(--text-body); }
 .hidden { display: none !important; }
 
@@ -338,3 +338,18 @@ html, body { overflow-x: clip; }
 }
 .table-scroll td > select.form-select { min-inline-size: 110px; }
 @media (max-width: 480px) { .no-sidebar .top-bar:has(.top-bar-left .btn) .top-logo { display: none; } }
+
+/* Promotions (Sprint 6). Logical properties only. */
+.promo-section { border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 12px 14px; margin-block-end: 14px; min-inline-size: 0; }
+.promo-section legend { padding-inline: 6px; font-weight: 700; color: var(--text-heading); font-size: 13px; }
+.promo-slot { border: 1px dashed var(--border-medium); border-radius: var(--radius-md); padding: 10px; margin-block-end: 10px; }
+.promo-slot-head { display: flex; justify-content: space-between; align-items: center; margin-block-end: 6px; }
+.promo-preview { background: var(--brand-terracotta-light); border: 1px solid var(--brand-terracotta-border); border-radius: var(--radius-md); padding: 10px 12px; margin-block-end: 12px; }
+.day-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-block-end: 6px; }
+.picker { display: grid; gap: 8px; }
+.picker-list { max-block-size: 260px; overflow-y: auto; border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 8px 10px; }
+.picker-group { margin-block-end: 8px; }
+.picker-group .check-row { margin-block-end: 4px; }
+.picker-product { font-weight: 700; }
+.picker-sizes { padding-inline-start: 22px; display: flex; flex-wrap: wrap; column-gap: 16px; }
+.erp-table td.wrap-cell { white-space: normal; min-inline-size: 180px; max-inline-size: 320px; }

@@ -46,6 +46,8 @@ def variant(
     product_active=True,
     category_active=True,
     track=None,
+    category_id=None,
+    name="Iced Latte",
 ):
     """`track` defaults to "has a recipe" (B3), so engine tests that only price need no recipe."""
     track = bool(recipe) if track is None else track
@@ -55,10 +57,37 @@ def variant(
         D(price),
         active,
         uuid4(),
-        "Iced Latte",
+        name,
         product_active,
         category_active,
         tuple(groups),
         tuple(recipe),
         track,
+        category_id,
     )
+
+
+_clock = [0]
+
+
+def promo(kind="discount", name=None, **kw):
+    """A live promotion for the engine tests. `created_at` rises with every call (tie-break)."""
+    from apps.sales.domain import PromotionData
+
+    _clock[0] += 1
+    kw.setdefault("auto_apply", True)
+    for k in ("variant_ids", "category_ids"):
+        kw[k] = frozenset(kw.get(k, ()))
+    if "value" in kw:
+        kw["value"] = D(kw["value"])
+    if "combo_price" in kw:
+        kw["combo_price"] = D(kw["combo_price"])
+    return PromotionData(
+        id=uuid4(), name=name or f"P{_clock[0]}", kind=kind, created_at=_clock[0], **kw
+    )
+
+
+def slot(quantity=1, category_id=None, variants=()):
+    from apps.sales.domain import SlotData
+
+    return SlotData(quantity, category_id, frozenset(v.id for v in variants))

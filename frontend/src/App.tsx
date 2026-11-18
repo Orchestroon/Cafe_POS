@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router";
 import { useAuth } from "./auth/AuthContext";
 import { RequireAdmin, RequireAuth } from "./auth/guards";
 import { Shell } from "./components/Shell";
@@ -18,6 +18,7 @@ import { Purchases } from "./pages/Purchases";
 import { Reports } from "./pages/Reports";
 import { ReceiptPage } from "./pages/ReceiptPage";
 import { Products } from "./pages/Products";
+import { Promotions } from "./pages/Promotions";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ShiftDetailPage } from "./pages/ShiftDetail";
 import { Suppliers } from "./pages/Suppliers";
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="categories" element={<Categories />} />
             <Route path="products" element={<Products />} />
             <Route path="modifiers" element={<Modifiers />} />
+            <Route path="promotions" element={<Promotions />} />
             <Route path="ingredients" element={<Navigate to="/admin/inventory" replace />} />
             <Route path="inventory" element={<Inventory />} />
             <Route path="suppliers" element={<Suppliers />} />

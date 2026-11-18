@@ -25,7 +25,7 @@ from apps.expenses.models import Expense
 from apps.inventory.models import StockBalance, StockMovement
 from apps.inventory.services import unit_cost
 from apps.purchasing.models import Purchase
-from apps.sales.models import Order, OrderItem, Payment, Refund, RefundLine
+from apps.sales.models import Order, OrderItem, OrderPromotion, Payment, Refund, RefundLine
 from apps.shifts.models import CashierShift, CashMovement
 
 ZERO = Decimal("0.00")
@@ -426,7 +426,10 @@ def profit(org, lo, hi, p) -> dict:
     def share(v):  # out of every 100 of net sales
         return S(q_money(v * 100 / net_sales)) if net is not None and net_sales > 0 else None
 
+    discounts = _discounts_ex_tax(orders)
     return {
+        "sales_before_discounts": S(revenue + discounts),
+        "promotion_discounts": S(discounts),
         "sales": S(revenue),
         "refunds": S(refunded),
         "net_sales": S(net_sales),
@@ -474,6 +477,59 @@ def profit(org, lo, hi, p) -> dict:
     }
 
 
+def _discounts_ex_tax(orders) -> Decimal:
+    """Promotion discounts of these orders without tax, so that sales_before_discounts - discounts
+    = sales (total - tax) in both tax modes: with prices that include tax, the discount carries
+    its share of tax (rate / (100 + rate)); with tax on top the discount is already before tax."""
+    total = ZERO
+    for disc, tax in orders.filter(discount_total__gt=0).values_list(
+        "discount_total", "tax_snapshot"
+    ):
+        if tax.get("enabled") and tax.get("inclusive"):
+            rate = Decimal(tax["rate"])
+            disc = q_money(disc * 100 / (100 + rate))
+        total += disc
+    return total
+
+
+def promotions(org, lo, hi, p) -> dict:
+    """What each promotion took off in the period (orders dated by their `created_at`, any status:
+    the discount was given). Rows come from OrderPromotion, so renames and later edits never
+    change them. No per-promotion profit: one order can carry several promotions."""
+    rows = (
+        OrderPromotion.objects.filter(order__in=_orders(org, lo, hi, p))
+        .values("promotion_id")
+        .annotate(
+            name=Max("name_snapshot"),
+            kind=Max("kind"),
+            orders_count=Count("order_id", distinct=True),
+            manual_count=Count("id", filter=Q(manual=True)),
+            discount=Sum("amount"),
+        )
+        .order_by("-discount", "name")
+    )
+    out = [
+        {
+            "promotion_id": str(r["promotion_id"]),
+            "name": r["name"],
+            "kind": r["kind"],
+            "orders_count": r["orders_count"],
+            "manual_count": r["manual_count"],
+            "discount_total": S(r["discount"]),
+        }
+        for r in rows
+    ]
+    return {
+        "orders_count": _orders(org, lo, hi, p).count(),
+        "orders_with_promotion": OrderPromotion.objects.filter(order__in=_orders(org, lo, hi, p))
+        .values("order_id")
+        .distinct()
+        .count(),
+        "discount_total": S(sum((Decimal(r["discount_total"]) for r in out), ZERO)),
+        "promotions": out,
+    }
+
+
 def _ingredients_without_cost(org, ids) -> list[str]:
     """Names of the given ingredients that still have no cost today (what the owner must price)."""
     rows = StockBalance.objects.filter(organization=org, ingredient_id__in=ids).select_related(
@@ -491,4 +547,5 @@ REPORTS = {
     "shifts": shifts,
     "money-in-out": money_in_out,
     "profit": profit,
+    "promotions": promotions,
 }

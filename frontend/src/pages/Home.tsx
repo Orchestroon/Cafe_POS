@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router";
 import { api } from "../api/client";
 import { needsRecipe, type Ingredient, type ModifierGroup, type PaymentBreakdown, type Product, type SalesSummary, type Supplier } from "../api/types";
 import { addMoney } from "../lib/decimal";

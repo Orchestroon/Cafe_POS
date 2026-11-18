@@ -41,16 +41,37 @@ export interface LastClosed { id: string; closed_at: string; actual_cash: string
 export interface AuditEvent { id: string; created_at: string; action: string; entity_type: string; entity_id: string; entity_label: string | null; actor: { id: string; username: string; display_name: string } | null; summary: Record<string, unknown>; }
 export interface AuditMeta { page: number; page_size: number; total_count: number; actions: string[]; entity_types: string[]; names: Record<string, string>; }
 export interface StockWarning { ingredient_id: string; ingredient_name: string; unit: Unit; available: string; required: string; projected_balance: string; }
-export interface QuoteItem { variant_id: string; product_name: string; variant_label: string; quantity: number; unit_price: string; unit_discount: string; line_total: string; modifiers: { option_id: string; label: string; price_delta: string }[]; }
-export interface Quote { subtotal: string; discount_total: string; tax_total: string; total: string; tax: { enabled: boolean; rate: string; inclusive: boolean; label: string }; items: QuoteItem[]; stock_warnings: StockWarning[]; }
+/** What a promotion took off one line (or the order): amounts add up to the line / order discount. */
+export interface AppliedPromotion { id: string; name: string; amount: string; }
+/** A promotion as saved on an order (spec 8.12): what receipts and order pages show. */
+export interface SnapshotPromotion { promotion_id: string; name: string; amount: string; }
+export interface QuoteItem { variant_id: string; product_name: string; variant_label: string; quantity: number; unit_price: string; unit_discount: string; line_subtotal: string; line_discount: string; line_total: string; promotions: AppliedPromotion[]; modifiers: { option_id: string; label: string; price_delta: string }[]; }
+/** A manual promotion the cashier can tap; `gain` = what it adds to the discount (0 = a better deal wins). */
+export interface Selectable { id: string; name: string; kind: PromotionKind; selected: boolean; gain: string; }
+export interface Quote { subtotal: string; discount_total: string; tax_total: string; total: string; tax: { enabled: boolean; rate: string; inclusive: boolean; label: string }; promotions: (AppliedPromotion & { kind: PromotionKind; manual: boolean })[]; selectable: Selectable[]; items: QuoteItem[]; stock_warnings: StockWarning[]; }
+export type PromotionKind = "discount" | "combo";
+export type PromotionScope = "variant" | "category" | "order";
+export type PromotionStatus = "active" | "scheduled" | "expired" | "off";
+export interface ComboSlot { quantity: number; category_id: string | null; variant_ids: string[]; }
+/** Admin view of a promotion (a Barista only gets id, name, kind and auto_apply). Days: 0 = Monday. */
+export interface Promotion {
+  id: string; name: string; kind: PromotionKind; is_active: boolean; auto_apply: boolean;
+  scope: PromotionScope | ""; discount_type: "percentage" | "fixed_amount" | ""; discount_value: string | null;
+  variant_ids: string[]; category_ids: string[]; combo_price: string | null; slots: ComboSlot[];
+  starts_on: string | null; ends_on: string | null; days_of_week: number[]; window_start: string | null; window_end: string | null;
+  status: PromotionStatus; live_now: boolean; created_at: string;
+}
+export type PromotionInput = Omit<Promotion, "id" | "status" | "live_now" | "created_at">;
+/** Recipe cost of one size (before extras), for the "below cost" warning. cost = null: not known yet. */
+export interface VariantCost { variant_id: string; product_name: string; variant_label: string; category_id: string; price: string; cost: string | null; }
 export interface PaymentRow { method: "cash" | "card"; amount: string; cash_tendered?: string; change_given?: string; external_reference?: string; }
-export interface CheckoutResult { order_id: string; invoice_no: string; status: string; subtotal: string; discount_total: string; tax_total: string; total: string; payments: PaymentRow[]; change_due: string; receipt_url: string; stock_warnings: StockWarning[]; }
+export interface CheckoutResult { order_id: string; invoice_no: string; status: string; subtotal: string; discount_total: string; tax_total: string; total: string; promotions: (AppliedPromotion & { kind: PromotionKind })[]; payments: PaymentRow[]; change_due: string; receipt_url: string; stock_warnings: StockWarning[]; }
 export interface OrderSummary { id: string; invoice_no: string; status: "paid" | "refunded"; total: string; created_at: string; cashier: { id: string; display_name: string }; items_count: number; payment_methods: string[]; }
 /** Sprint 5 P7 (Admin only): what was put back in stock after the refund. */
 export interface StockReturnInfo { created_at: string; reason: string; total_value: string; created_by: string; }
 export interface ConsumptionRow { ingredient_id: string; ingredient_name: string; unit: Unit; total_qty: string; unit_cost: string | null; }
-export interface OrderDetail extends OrderSummary { stock_return?: StockReturnInfo | null; cost_total?: string | null; shift_id: string; subtotal: string; discount_total: string; tax_total: string; tax: { enabled: boolean; rate: string; inclusive: boolean; label: string }; note: string; items: { id: string; product_name: string; variant_label: string; quantity: number; unit_price: string; line_total: string; modifiers: { option_label: string; price_delta: string }[]; consumption?: ConsumptionRow[] }[]; payments: PaymentRow[]; refund: RefundInfo | null; }
-export interface Receipt { business: { name: string; header: string; footer: string; tax_registration_number: string }; invoice_no: string; status: string; created_at: string; timezone: string; cashier: string; items: { name: string; variant: string; quantity: number; modifiers: string[]; unit_price: string; line_total: string }[]; subtotal: string; discount_total: string; tax: { enabled: boolean; label: string; rate: string; inclusive: boolean; amount: string }; total: string; payments: PaymentRow[]; refund: RefundInfo | null; paper_width: PaperWidth; currency: string; }
+export interface OrderDetail extends OrderSummary { stock_return?: StockReturnInfo | null; cost_total?: string | null; shift_id: string; subtotal: string; discount_total: string; tax_total: string; tax: { enabled: boolean; rate: string; inclusive: boolean; label: string }; note: string; promotions: SnapshotPromotion[]; items: { id: string; product_name: string; variant_label: string; quantity: number; unit_price: string; line_discount: string; line_total: string; promotions: SnapshotPromotion[]; modifiers: { option_label: string; price_delta: string }[]; consumption?: ConsumptionRow[] }[]; payments: PaymentRow[]; refund: RefundInfo | null; }
+export interface Receipt { business: { name: string; header: string; footer: string; tax_registration_number: string }; invoice_no: string; status: string; created_at: string; timezone: string; cashier: string; items: { name: string; variant: string; quantity: number; modifiers: string[]; unit_price: string; line_subtotal: string; line_discount: string; line_total: string; promotions: string[] }[]; subtotal: string; discount_total: string; promotions: SnapshotPromotion[]; tax: { enabled: boolean; label: string; rate: string; inclusive: boolean; amount: string }; total: string; payments: PaymentRow[]; refund: RefundInfo | null; paper_width: PaperWidth; currency: string; }
 export type Unit = "g" | "ml" | "pcs";
 /** stock_qty / avg_cost come from the stock balance (Sprint 5 L1): the cost is never typed. */
 export interface Ingredient { id: string; name: string; base_unit: Unit; low_stock_threshold: string | null; stock_qty: string | null; avg_cost: string | null; is_active: boolean; }
@@ -104,14 +125,19 @@ export interface MoneyInOut {
   rows: MoneyRow[]; total_in: MoneyRow; total_out: MoneyRow; net: MoneyRow;
   drawer: { cash_in: string; cash_out: string; gap_total: string; closed_count: number; total_difference: string };
 }
+/** Promotions report (Admin): what each promotion took off in the period. */
+export interface PromotionsReport {
+  orders_count: number; orders_with_promotion: number; discount_total: string;
+  promotions: { promotion_id: string; name: string; kind: PromotionKind; orders_count: number; manual_count: number; discount_total: string }[];
+}
 export interface ProfitReport {
   // cost, profit and margin are null when any order or stock change has no cost (never shown as 0)
-  sales: string; refunds: string; net_sales: string; cost_of_sales: string | null; gross_profit: string | null; gross_margin_pct: string | null;
+  sales_before_discounts: string; promotion_discounts: string; sales: string; refunds: string; net_sales: string; cost_of_sales: string | null; gross_profit: string | null; gross_margin_pct: string | null;
   returned_to_stock: string; stock_losses: string; general_expenses: string; card_fees: string; expenses_by_category: { category: string; amount: string }[];
   net_profit: string | null; per_100: { cost: string; losses: string; expenses: string; profit: string } | null;
   purchases_info: string; stock_added_info: string;
   orders_without_cost: number; sales_without_cost: string; adjustments_without_cost: number;
   estimated_orders: number; ingredients_without_cost: string[];
 }
-export const REPORT_NAMES = ["money-in-out", "profit", "sales-summary", "payment-breakdown", "top-products", "stock", "purchases-expenses", "shifts"] as const;
+export const REPORT_NAMES = ["money-in-out", "profit", "sales-summary", "payment-breakdown", "top-products", "stock", "purchases-expenses", "shifts", "promotions"] as const;
 export type ReportName = (typeof REPORT_NAMES)[number];

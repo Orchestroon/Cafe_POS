@@ -3,7 +3,9 @@
 import type { TFunction } from "i18next";
 import type { AuditEvent } from "../api/types";
 import { paperLabel, type PaperWidth } from "../api/types";
+import i18n from "../i18n";
 import { formatMoney } from "../i18n/format";
+import { dayName } from "../lib/promoText";
 
 export type Names = Record<string, string>;
 export interface Ctx { t: TFunction; currency: string; names: Names }
@@ -18,11 +20,11 @@ export type Area = (typeof AREAS)[number];
 const AREA_OF: Record<string, Area> = {
   order: "sales", refund: "sales", shift: "shifts", cash: "shifts", stock: "stock", ingredient: "stock",
   category: "menu", product: "menu", variant: "menu", recipe: "menu", modifier_group: "menu", modifier_option: "menu",
-  purchase: "purchases", supplier: "purchases", supplier_payment: "purchases", expense: "expenses", user: "admin", settings: "admin",
+  promotion: "menu", purchase: "purchases", supplier: "purchases", supplier_payment: "purchases", expense: "expenses", user: "admin", settings: "admin",
 };
 export const areaOf = (action: string): Area => AREA_OF[action.split(".")[0]] ?? "admin";
 
-const MONEY = new Set(["total", "total_amount", "amount", "opening_cash", "expected_cash", "actual_cash", "difference", "price", "price_delta", "cash_sales", "card_sales", "cash_refunds", "card_refunds", "drawer_expenses", "cost_total", "total_value"]);
+const MONEY = new Set(["total", "total_amount", "amount", "opening_cash", "expected_cash", "actual_cash", "difference", "price", "price_delta", "cash_sales", "card_sales", "cash_refunds", "card_refunds", "drawer_expenses", "cost_total", "total_value", "combo_price"]);
 const ID_KEYS = new Set(["shift_id", "order_id", "original_cashier_id", "owner_id", "expense_id", "ingredient_id", "category_id", "variant_id", "group_id", "supplier_id"]);
 // Shown in the sentence or as their own section, not repeated as plain rows.
 const SKIP = new Set(["changes", "before", "after", "totals", "payments", "lines", "items_detail", "balances_after"]);
@@ -46,7 +48,10 @@ export function fmt(key: string, v: unknown, c: Ctx): string {
     case "category": return t(`expenses.categories.${s}`, { defaultValue: s });
     case "type": return t(`audit.values.${s}`, { defaultValue: s });
     case "mode": return t(`modifiers.modes.${s}`, { defaultValue: s });
-    case "kind": return t(`cash.${s}`, { defaultValue: s });
+    case "kind": return t(`cash.${s}`, { defaultValue: t(`promos.kinds.${s}`, { defaultValue: s }) });
+    case "scope": return t(`promos.scopes.${s}`, { defaultValue: s });
+    case "discount_type": return t(`promos.types.${s}`, { currency: "", defaultValue: s }).replace(/\s*\(\s*\)/, "");
+    case "days_of_week": return s.split(", ").map((d) => dayName(Number(d), i18n.language)).join(t("audit.listSep"));
     case "base_unit": return t(`units.${s}`, { defaultValue: s });
     case "preferred_language":
     case "default_language": return s === "ar" ? "العربية" : "English";

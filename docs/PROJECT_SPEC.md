@@ -113,6 +113,7 @@ Drip Café needs a web-based **POS for day-to-day sales**, not a demo.
 | D20 | Missing costs | **Owner, 2026-11-17 — "how can profit be 100%?":** (1) when any order in the period has no saved cost, the Profit report shows cost, gross profit, margin and net profit as **"can't calculate"** (null), never as 0 / 100 %, and names the ingredients that still have no price (net profit also when a stock change has no cost); (2) a one-time migration fills each ingredient's average cost from purchases posted before D19 (replayed with the D19 rules; balances that already have an average are kept; the stock ledger is not changed); (3) an Admin can **recalculate** the cost of past orders sold without one (`POST /orders/recost?from=&to=`): rows without a cost get today's average cost marked `estimated`, rows that had a cost keep it, the order gets `cost_estimated = true`, each order is audited `order.cost_estimated`; an order with any ingredient still without a price is left untouched; running it again changes nothing. **Part (3) removed by D21 (Sprint 5 P8).** | Final |
 | D21 | Profit cycle (Sprint 5) | **Owner, 2026-11-17 — "I sell for 100, all my costs are 90, so I made 10. Nothing may enter the system without knowing what it cost and where it came from":** (1) the typed `reference_unit_cost` is removed; an ingredient's only cost is its weighted average (L1); (2) stock comes in only by a purchase, an opening balance **with its total value** (any time; a reason once the ingredient has stock, Q-E) or a count surplus; adjustments only take stock out (L2); a count surplus or opening balance is **never profit** (Q-A); (3) an ingredient with no average cost cannot be sold (422 `COST_MISSING`) nor adjusted; (4) a purchase line is quantity + total paid (or by pack); the cost per unit is computed (L4); (5) **buying on credit** with partial supplier payments (P4); (6) a **card fee %** saved on each card payment (Q-C); (7) packaging is part of the recipe (Q-B); (8) **return to stock** after a refund, at the cost it left at (P7); (9) the Profit report reads sales − cost of sales − losses − expenses (by category) − card fees = net profit, with "out of every 100"; (10) expense categories add salaries, card fees, marketing, taxes & fees; (11) **Recalculate cost** (D20 part 3) is removed (P8). P1 (per-person drawer) and P9 (posting day) unchanged. Details: `docs/sprints/sprint-5-plan.md`, `docs/SYSTEM_LOGIC.md`. | Final |
 | D22 | Step 1 (Sprint 5 follow-up) | **Owner, 2026-11-18:** (1) creating an **expense** is idempotent (scope `expense`, `Idempotency-Key` required): a double click or a retry never pays twice; (2) a purchase post refuses with 409 `PURCHASE_CHANGED` when the draft's source, credit flag or supplier changed between the first read and the row lock; (3) a size saved without a SKU gets `SKU-00001`, `SKU-00002`... (typed SKUs are kept); (4) a purchase gets its own number `PUR-00001` **when it is posted** (gapless, kept if voided; drafts have none); `supplier_invoice_no` stays optional; old sizes and posted/voided purchases are numbered by a migration; (5) an opening balance line always needs a quantity and a total value above zero (serializer, service and a database check; the dev DB was reset and re-seeded on 2026-11-18 so no value-less opening rows remain). | Final |
+| D23 | Promotions and production readiness (Sprint 6) | **Owner, 2026-11-18:** (1) promotions are in v1: percentage / fixed discounts for sizes, a category or the whole order, fixed-price combos (BOGO = a combo of the same size), dates, weekdays, a Happy Hour window (café time), an on/off switch; (2) **no stacking: the best deal wins** (a unit gets one promotion; an order-wide offer is an alternative, not an addition); (3) offers are automatic or tapped by the cashier (`auto_apply`); no free-typed discounts, no usage caps, coupon codes or minimum order; (4) item and category offers and combos discount the size's base price only, an order-wide offer the whole subtotal; (5) `line_discount` is authoritative (shares of combo / order discounts); (6) the Admin form warns when an offer sells below the recipe cost (advice only); (7) fonts are self-hosted and the production stack is Caddy + Django + Postgres + daily backups; `legacy/` is removed; the super-admin console, `import_catalog` and the user guide are deferred. Details: Section 8.12. | Final |
 
 ---
 
@@ -153,7 +154,7 @@ Drip Café needs a web-based **POS for day-to-day sales**, not a demo.
 
 ### 3.2 P1 — only if every P0 item is green
 
-- Simple time-boxed promotions (percentage or fixed amount per variant, no stacking).
+- ~~Simple time-boxed promotions~~ **Promotions and offers: moved into v1 in Sprint 6 (owner, 2026-11-18, D23)**: percentage or fixed-amount discounts for sizes, categories or the whole order, fixed-price combos (BOGO is a combo of the same size), optional dates, weekdays and a Happy Hour window, automatic or tapped by the cashier, **no stacking** (Section 8.12).
 - Extra reporting polish.
 
 ### 3.3 Out of scope for v1
@@ -166,8 +167,8 @@ Drip Café needs a web-based **POS for day-to-day sales**, not a demo.
 - ERP accounting (ledgers, double entry). *COGS and a profit report are now in v1: D19.*
 - Government e-invoice / e-receipt integration.
 - Partial refunds.
-- Promotion stacking, BOGO and combos.
-- Manual cashier discounts.
+- Promotion stacking, usage caps, coupon codes and minimum-order rules (combos and BOGO-as-a-combo are in v1 since Sprint 6, D23).
+- Manual cashier discounts (a free-typed amount or percentage). A cashier can only tap an Admin-defined offer.
 - Payroll.
 - Supplier credit and accounts payable (purchases are treated as paid immediately).
 - Events module.
@@ -248,11 +249,11 @@ Drip Café needs a web-based **POS for day-to-day sales**, not a demo.
 │     │                            # RefundLine, InvoiceCounter
 │     ├─ purchasing/               # Supplier, Purchase, PurchaseItem
 │     ├─ expenses/                 # Expense
-│     ├─ promotions/               # Promotion (P1)
+│     ├─ promotions/               # Promotion, ComboSlot (D23); the engine is sales/promotions.py
 │     ├─ reports/                  # read-only report services and views
 │     └─ audit/                    # AuditEvent + audit service
 ├─ frontend/                       # existing React app (moved here if needed)
-├─ legacy/                         # old Node backend if present: untouched, excluded from tooling
+├─ legacy/                         # (removed in Sprint 6; the old prototype lives in git history)
 ├─ ops/                            # backup/restore scripts, proxy config
 └─ docs/
    ├─ PROJECT_SPEC.md
@@ -547,11 +548,13 @@ Constraint: **partial unique (user) where status = 'open'**.
 | `SupplierPaymentLine` | payment, purchase, amount (> 0) | unique(payment, purchase) |
 | `Expense` | type (`general`/`purchase`/`supplier_payment`), category (`salaries`/`rent`/`utilities`/`maintenance`/`supplies`/`transport`/`cleaning`/`marketing`/`taxes_fees`/`card_fees`/`other`/`purchase`), description, amount (> 0), payment_method (`cash`/`card`/`transfer`), source (`cash_drawer`/`external`), shift (nullable), purchase (1:1 nullable, unique), supplier_payment (1:1 nullable, D21), paid_at, status (`posted`/`voided`), void_reason, voided_by, voided_at, created_by | Check: source=`cash_drawer` ⇒ shift not null and payment_method=`cash`. A purchase has at most one expense |
 
-### 7.9 promotions (P1) and audit
+### 7.9 promotions (D23) and audit
 
 | Model | Fields |
 |---|---|
-| `Promotion` | name, discount_type (`percentage`/`fixed_amount`), discount_value, variants (M2M), starts_at, ends_at, is_active. Check: ends_at > starts_at; percentage in (0, 100] |
+| `Promotion` | name (unique per café, case-insensitive), kind (`discount`/`combo`), is_active, auto_apply (false = the cashier taps it), **discount:** scope (`variant`/`category`/`order`), discount_type (`percentage`/`fixed_amount`), discount_value, variants (M2M), categories (M2M); **combo:** combo_price (>= 0) and `ComboSlot`s; **schedule (café timezone):** starts_on, ends_on (inclusive dates), days_of_week (0 = Monday .. 6; empty = every day), window_start, window_end (both or neither; may pass midnight). Checks: ends_on >= starts_on; percentage in (0, 100]; discount_value > 0; a discount has a scope, a type and a value; a combo has a price and no scope/type/value |
+| `ComboSlot` | promotion, quantity (1..20), category (nullable) and/or variants (M2M), position. A combo needs 1..6 parts and at least 2 items in total |
+| `OrderPromotion` | order, promotion (PROTECT), name_snapshot, kind, amount (> 0), manual. One row per promotion per order; unique(order, promotion). Created by checkout |
 | `AuditEvent` | actor (nullable), action (e.g. `refund.created`), entity_type, entity_id, summary (JSON), created_at. **Append-only**; index (org, created_at), (entity_type, entity_id) |
 | `IdempotencyRecord` | see Section 5.3 |
 
@@ -574,11 +577,9 @@ For each requested item `{variant_id, quantity, modifier_option_ids}`:
    - No duplicate option IDs.
 3. **Compute prices:**
    - `unit_price = variant.price + Σ option price`. Each option price is its `ModifierOptionPrice` for this variant if one exists, else `price_delta`.
-   - **Promotion (P1):** the best single active promotion for the variant at `now`, applied to `variant.price` only (not modifiers). Pick the largest discount; on a tie, the earliest created.
-     - `unit_discount = q_money(variant.price × pct / 100)` or `min(value, variant.price)`.
-     - Without promotions, `unit_discount = 0`.
+   - **Promotions (D23):** each line is priced without discounts first; Section 8.12 then decides which promotions apply to the whole cart and gives each line its `line_discount`.
    - `line_subtotal = unit_price × qty`
-   - `line_discount = unit_discount × qty`
+   - `line_discount` comes from 8.12 (it can include a share of a combo or order-wide discount, so it is **not** always `unit_discount × qty`; `unit_discount` is the average per unit, for display)
    - `line_total = line_subtotal − line_discount`
 
 Order level:
@@ -633,6 +634,7 @@ Everything below runs in one `transaction.atomic()`, inside the idempotency wrap
 1. The cashier must have an open shift. Otherwise 409 `SHIFT_NOT_OPEN`.
 2. Cart must be non-empty. Otherwise 422 `EMPTY_CART`.
 3. Run the pricing and consumption engines with fresh DB data.
+3b. The request may carry `promotion_ids` (offers the cashier tapped). The server decides what applies; the client never sends a discount. Unknown, inactive, expired or unhelpful ids are ignored.
 4. Compare `expected_total` (from the client) with the server total. If they differ, return 409 `PRICE_CHANGED` with `details: {server_total, quote}`.
 5. **Validate payments:**
    - **A 0.00 order takes no payment:** `payments` must be empty (otherwise 422 `INVALID_PAYMENT`). Owner decision, 2026-11-10.
@@ -648,7 +650,8 @@ Everything below runs in one `transaction.atomic()`, inside the idempotency wrap
    - `modifiers_snapshot`: `[{group_id, group_name, mode, option_id, option_label, price_delta}]`
    - `recipe_snapshot`: `[{ingredient_id, ingredient_name, unit, base_qty, waste_pct, slot_key, source: "recipe"|"modifier", option_id?}]` (the final working lines after modifiers)
    - `consumption_snapshot`: `[{ingredient_id, ingredient_name, unit, qty_per_unit, total_qty}]`
-   - `promotion_snapshot`: `{promotion_id, name, discount_type, discount_value, unit_discount}` or null
+   - `promotion_snapshot`: `[{promotion_id, name, kind, amount}]` (the amounts add up to `line_discount`) or null
+   - one `OrderPromotion` row per promotion that applied (8.12)
 9. Create the `Payment`s linked to the cashier's shift.
 10. Lock the `StockBalance` rows (ordered by `ingredient_id`), apply negative deltas, and create the `StockMovement`s:
     - `movement_type = sale`
@@ -775,15 +778,27 @@ The old recipe goes into the audit summary.
 - Because the increment rolls back with a failed checkout, numbers are **gapless**.
 - Format: `invoice_prefix` + 7-digit zero-padded sequence.
 
-### 8.12 Promotions (P1)
+### 8.12 Promotions (D23)
 
-- **Applies when:**
-  - `is_active`;
-  - `starts_at ≤ now < ends_at`;
-  - the variant is in the promotion.
-- No stacking (Section 8.1).
-- A discount never makes a price negative.
-- Snapshotted on the order item. Editing a promotion never changes past orders.
+`apps/sales/promotions.py`: a pure function (no database), unit-tested, shared by quote and checkout. Money is handled in whole cents.
+
+**Live now.** A promotion is considered when `is_active` and, in the café's timezone: `starts_on <= date <= ends_on` (inclusive), the weekday is in `days_of_week` (or the list is empty), and the time is inside `[window_start, window_end)`. An overnight window (e.g. 22:00-02:00) belongs to the day it **started**: Friday 22:00-02:00 is still Friday's at Saturday 01:00. One `now` is read per request. A promotion with `auto_apply = false` is considered only when its id is in `promotion_ids`.
+
+**No stacking: the best deal wins.** A cart unit gets at most one promotion.
+1. **Item promotions** (`scope` `variant` or `category`): each unit gets the largest discount that fits. Percentage: `q_money(variant.price × pct / 100)`; fixed: `min(value, variant.price)`. They discount the size's **base price only**; extras (modifier prices) are charged in full.
+2. **Combos** claim units, highest base price first (ties: cart order), one slot after another. A combo instance discounts `Σ base prices of its units − combo_price` (extras are charged on top); it applies only when that is > 0 **and** more than the item discounts those units already had. The best such combo is applied first, and complete identical bundles are applied together (qty 3 + 2 = 2 bundles). The combo discount is spread over the lines it used in proportion to their base prices, to the cent. **Matching is greedy, not an optimal assignment** (documented limit). A BOGO is a combo of the same size (e.g. 2 lattes for the price of 1).
+3. An **order-wide promotion** (`scope = order`) takes `pct × subtotal` (extras included) or `min(value, subtotal)`. It is an **alternative** to steps 1-2, never added to them: whichever gives the cart the larger total discount wins as a whole; a tie keeps the line-level result. Its discount is split over the lines by `line_subtotal` (largest remainder, so the lines add up to the cent and no line goes below 0).
+4. Ties between promotions: the earliest created wins.
+
+`discount_total = Σ line_discount`; tax is computed on `subtotal − discount_total` (8.1). A 100 % discount gives a 0.00 order (no payment, 8.4); stock is still consumed and costed.
+
+**Selectable offers.** The quote lists `selectable` (offers with `auto_apply = false`): an untapped one only when tapping it would increase the discount (`gain`), a tapped one always (`selected`, `gain` 0 = a better deal already wins).
+
+**Server re-validation.** Checkout re-runs everything with fresh data. If the total differs from `expected_total` (e.g. Happy Hour ended) it answers 409 `PRICE_CHANGED`, as for a price change. Editing or switching off a promotion never changes past orders (snapshots on the order item and `OrderPromotion`; promotions used by an order cannot be deleted, only switched off).
+
+**Stock and cost are independent of the price.** Every unit sold inside a promotion or combo consumes its own recipe (8.2) and is costed at the weighted average cost at that moment (D19, D21): a discount changes revenue, never consumption or cost. Profit = (total − tax) − cost, so it is automatically after discounts.
+
+**API.** `GET/POST /promotions`, `GET/PATCH /promotions/{id}` (a PATCH is merged with the stored rules and validated as a whole; no DELETE), `GET /promotions/variant-costs` (Admin: recipe cost of every active size, for the "below cost" warning, which is advice only and never blocks saving). A Barista gets only `{id, name, kind, auto_apply}` of the active promotions. Audit: `promotion.created`, `promotion.updated` (in words, with names, never ids).
 
 ### 8.13 Report definitions
 
@@ -797,8 +812,9 @@ All reports are Admin-only and are derived from persisted records only. Period f
 | `stock` | Per ingredient: unit, balance, threshold, is_low (balance ≤ threshold), is_negative, consumed_qty_period (Σ −qty_delta of `sale` movements in period; **[D21, P11]** `cashier_id` / `shift_id` narrow it to that cashier's / shift's sales, balances stay current); **[D19]** is_active (a switched-off ingredient is still listed while its balance ≠ 0), unit_cost (the average, else null), value = balance × unit_cost; `stock_value` (total of known values) and `without_cost_count` |
 | `purchases-expenses` | From `Expense` only (status=posted), so no double counting: `purchase_total` (purchase and supplier-payment expenses, D21), `general_expenses_total`, `cash_drawer_total`, `external_total`, `breakdown` by category. **No `cashier_id` / `shift_id` filter:** sending either returns 400 (purchases and external expenses have no shift, so a filter would silently drop them — Q6 item 3A, owner 2026-11-11) |
 | `shifts` | `shifts_count`, `open_count`, `closed_count`, `expected_cash_total`, `actual_cash_total`, `total_difference`, `cash_in_total`, `cash_out_total`, `gap_total`, `shifts[]` (user, opened_at, closed_at, opening_cash, expected, actual, difference, orders_count, cash_in, cash_out, previous_actual, gap) |
+| `promotions` **[D23]** | From `OrderPromotion` of orders created in the period (any status: the discount was given; names are snapshots). `orders_count`, `orders_with_promotion`, `discount_total`, and per promotion: `orders_count`, `manual_count` (tapped by the cashier), `discount_total`. Supports `cashier_id` / `shift_id`. No per-promotion profit: one order can carry several promotions (use `profit`) |
 | `money-in-out` **[D19]** | Rows by method (`cash`, `card`, `transfer`, `total`): in = `sales` (payments of orders in period); out = `refunds` (refund lines, refund date), `drawer_expenses`, `other_expenses` (general, by source), `drawer_purchases`, `other_purchases` (purchase expenses, by source; voided excluded, by `paid_at`); **[D21]** `drawer_supplier_payments`, `other_supplier_payments` (by `paid_at`), `card_fees` (Σ `Payment.fee_amount` of orders in period, card column). `total_in`, `total_out`, `net`. `drawer`: `cash_in`, `cash_out` (moved, never counted as in/out), `gap_total`, `closed_count`, `total_difference`. No `cashier_id` / `shift_id` filter (400) |
-| `profit` **[D19]** | `sales` = Σ (total − tax_total) of orders in period; `refunds` = the same for orders refunded in period; `net_sales`; `cost_of_sales` = Σ `Order.cost_total` (saved at sale time; refunded orders keep their cost, D8); `gross_profit`, `gross_margin_pct` (null unless net sales > 0: a refunds-only day is not a 100 % margin, D20); **[D21]** `cost_of_sales` is net of `returned_to_stock` (value of `refund_return` movements in period); `stock_losses` = value of negative `adjustment` movements (losses, count shortages); stock coming in is **never profit**: `stock_added_info` = value of positive adjustment movements (information only); `general_expenses` (posted, general) and `expenses_by_category`; `card_fees` (Σ `Payment.fee_amount` of orders in period); `net_profit` = gross − losses − general expenses − card fees; `per_100` = cost, losses, expenses (incl. card fees) and profit per 100 of net sales (null when net profit is null or net sales ≤ 0). Purchases are **not** subtracted; `purchases_info` = Σ total of purchases posted in period (paid now or on credit). Unknown costs are never 0: `orders_without_cost`, `sales_without_cost`, `adjustments_without_cost`; **[D20]** when `orders_without_cost > 0` then `cost_of_sales`, `gross_profit`, `gross_margin_pct`, `net_profit` are null, and `net_profit` is null when `adjustments_without_cost > 0`; `ingredients_without_cost` (names still without a price), `estimated_orders` (cost filled in later). No person filter (400) |
+| `profit` **[D19]** | **[D23]** `sales_before_discounts` = `sales` + `promotion_discounts`; `promotion_discounts` = Σ order `discount_total` without tax (with prices that include tax each discount is divided by `(100 + rate) / 100`); `sales` = Σ (total − tax_total) of orders in period (**after** discounts); `refunds` = the same for orders refunded in period; `net_sales`; `cost_of_sales` = Σ `Order.cost_total` (saved at sale time; refunded orders keep their cost, D8); `gross_profit`, `gross_margin_pct` (null unless net sales > 0: a refunds-only day is not a 100 % margin, D20); **[D21]** `cost_of_sales` is net of `returned_to_stock` (value of `refund_return` movements in period); `stock_losses` = value of negative `adjustment` movements (losses, count shortages); stock coming in is **never profit**: `stock_added_info` = value of positive adjustment movements (information only); `general_expenses` (posted, general) and `expenses_by_category`; `card_fees` (Σ `Payment.fee_amount` of orders in period); `net_profit` = gross − losses − general expenses − card fees; `per_100` = cost, losses, expenses (incl. card fees) and profit per 100 of net sales (null when net profit is null or net sales ≤ 0). Purchases are **not** subtracted; `purchases_info` = Σ total of purchases posted in period (paid now or on credit). Unknown costs are never 0: `orders_without_cost`, `sales_without_cost`, `adjustments_without_cost`; **[D20]** when `orders_without_cost > 0` then `cost_of_sales`, `gross_profit`, `gross_margin_pct`, `net_profit` are null, and `net_profit` is null when `adjustments_without_cost > 0`; `ingredients_without_cost` (names still without a price), `estimated_orders` (cost filled in later). No person filter (400) |
 
 **Dates and filters (implemented in Sprint 3):** orders, their payments and their items are dated by the order's `created_at`; refunds and their lines by the refund's `created_at`; expenses by `paid_at`; stock movements by `occurred_at`; shifts by `opened_at`. Orders and payments share the order's date so the invariant below holds at any midnight boundary. `cashier_id` filters orders by their cashier and refunds by the **refunding** user; `shift_id` filters orders and payments by their shift and refunds by the refunding user's shift. With no dates a report covers the café's local today, and `meta.range` echoes the resolved range.
 
@@ -929,8 +945,10 @@ Insufficient stock is **not** an error: it returns 200/201 with `stock_warnings`
 | GET | `/reports/money-in-out` | A | D19 |
 | GET | `/reports/profit` | A | D19 |
 | GET | `/audit-events` | A | Filters `action`, `actor_id`, `entity_type`, `entity_id`, `from`, `to` (café-local dates). Newest first, paginated. Rows: `id, created_at, action, entity_type, entity_id, entity_label, actor{id,username,display_name}|null, summary`. `entity_label` is the record's readable name (invoice no, product and size, ingredient, user…); `meta.names` maps every id inside the page's summaries to a readable name (this café only). `meta.actions` / `meta.entity_types` list the values that exist (for the viewer's filters). Read-only (Sprint 4) |
-| GET, POST | `/promotions` | GET A/B, POST A | P1 |
-| PATCH | `/promotions/{id}` | A | P1 |
+| GET, POST | `/promotions` | GET A/B, POST A | D23. Barista: active ones, `id, name, kind, auto_apply` only |
+| GET, PATCH | `/promotions/{id}` | GET A/B, PATCH A | D23. No DELETE |
+| GET | `/promotions/variant-costs` | A | D23. Recipe cost per size, for the below-cost warning |
+| GET | `/reports/promotions` | A | D23 |
 
 ### 9.4 Key payloads
 
@@ -979,15 +997,19 @@ Extra Shot (an `add` group, same for all sizes):
 
 ```json
 POST /orders/quote
-{"items":[{"variant_id":"<large>","quantity":1,"modifier_option_ids":["<oat>"]}]}
+{"items":[{"variant_id":"<large>","quantity":1,"modifier_option_ids":["<oat>"]}],
+ "promotion_ids":[]}   // optional: offers the cashier tapped (D23)
 ```
 
 ```json
 {"data":{
   "subtotal":"115.00","discount_total":"0.00","tax_total":"0.00","total":"115.00",
   "items":[{"variant_id":"<large>","product_name":"Iced Latte","variant_label":"Large","quantity":1,
-            "unit_price":"115.00","unit_discount":"0.00","line_total":"115.00",
+            "unit_price":"115.00","unit_discount":"0.00","line_subtotal":"115.00","line_discount":"0.00",
+            "line_total":"115.00","promotions":[],   // [{id,name,amount}] (D23)
             "modifiers":[{"option_id":"<oat>","label":"Oat Milk","price_delta":"20.00"}]}],
+  "promotions":[],   // applied: [{id,name,kind,amount,manual}] (D23)
+  "selectable":[],   // tap-to-apply offers: [{id,name,kind,selected,gain}] (D23)
   "consumption":[{"ingredient_id":"<coffee>","name":"Coffee Beans","unit":"g","required":"12.600"},
                  {"ingredient_id":"<oat>","name":"Oat Milk","unit":"ml","required":"250.000"}],
   "stock_warnings":[{"ingredient_id":"<oat>","ingredient_name":"Oat Milk","unit":"ml",
@@ -1002,7 +1024,7 @@ POST /orders/checkout
 {"items":[{"variant_id":"<large>","quantity":1,"modifier_option_ids":["<oat>"]}],
  "payments":[{"method":"cash","amount":"55.00","cash_tendered":"100.00"},
              {"method":"card","amount":"60.00","external_reference":"terminal-123"}],
- "expected_total":"115.00","note":""}
+ "expected_total":"115.00","note":"","promotion_ids":[]}
 ```
 
 Response 201:
@@ -1010,6 +1032,7 @@ Response 201:
 ```json
 {"data":{"order_id":"…","invoice_no":"POS-0000123","status":"paid",
  "subtotal":"115.00","discount_total":"0.00","tax_total":"0.00","total":"115.00",
+ "promotions":[],
  "payments":[{"method":"cash","amount":"55.00","cash_tendered":"100.00","change_given":"45.00"},
              {"method":"card","amount":"60.00","external_reference":"terminal-123"}],
  "change_due":"45.00","receipt_url":"/api/v1/orders/…/receipt","stock_warnings":[…]}}
@@ -1428,7 +1451,11 @@ Days are guidance for a 14-day schedule. Each sprint ends with a STOP for owner 
 
 **STOP.**
 
-### Sprint 6 — Release readiness (Days 13–14; moved from Sprint 5 by the owner, 2026-11-17)
+### Sprint 6 — Promotions and production readiness (owner, 2026-11-18; the old "release readiness" list below is reduced: **`import_catalog` and `USER_GUIDE.md` are deferred**; the super-admin console is deferred)
+
+Delivered: Promotions (D23, Section 8.12), `docker-compose.prod.yml` with Caddy, production settings hardening, `create_admin`, daily backups with `ops/restore.sh` and the automated restore test (AT-23, `ops/test-restore.sh`), self-hosted fonts, react-router v7, removal of `legacy/`. Details: `docs/sprints/sprint-6-report.md`.
+
+Original list (kept for reference):
 
 - **`docker-compose.prod.yml`:**
   - reverse proxy with HTTPS (Caddy recommended for automatic certificates, or nginx + certbot) serving the built frontend and proxying `/api` on the same origin;
@@ -1530,6 +1557,6 @@ Any unresolved issue affecting payment collection, financial integrity, security
 | D17 Card terminal reference | **Confirmed (2026-11-10):** optional | Serializer flag |
 | Tax pricing default | **Owner (2026-11-10): tax added on top** (`prices_include_tax=False`), tax disabled until the Admin enables it and types the rate | `OrganizationSettings` |
 | Barista order visibility | Today's orders (all cashiers) + exact invoice lookup | `sales/selectors.py` |
-| Hosting / domain | Generic Linux VPS with Docker | Sprint 6 |
+| Hosting / domain | **Sprint 6 (owner, 2026-11-18):** a Linux VPS with Docker and a public domain; Caddy gets and renews the HTTPS certificate by itself. Behind a Cloudflare Tunnel instead: `CADDY_SITE_ADDRESS=:80`, `CADDY_AUTO_HTTPS=off`. Fonts are self-hosted (no CDN) | `docker-compose.prod.yml`, `ops/caddy/Caddyfile`, `.env` |
 
 Record any answer from the owner in `docs/PROGRESS.md`, and update this table in the same commit.

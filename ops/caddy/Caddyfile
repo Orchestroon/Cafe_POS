@@ -1,0 +1,56 @@
+# Caddy: automatic HTTPS, the built React app, and /api proxied to Django (same origin: no CORS).
+#
+# CADDY_SITE_ADDRESS  the host name Caddy gets a certificate for (default: DOMAIN from .env).
+#                     "localhost" uses Caddy's own local certificate (the browser warns once).
+# Behind a Cloudflare Tunnel (the tunnel already gives HTTPS): CADDY_SITE_ADDRESS=:80,
+# CADDY_AUTO_HTTPS=off, CADDY_TRUSTED_PROXIES=private_ranges (see docs/OPERATIONS.md).
+{
+	auto_https {$CADDY_AUTO_HTTPS:ignore_loaded_certs}
+	servers {
+		# Whose X-Forwarded-* headers to believe. Default: nobody (Caddy is the first hop).
+		trusted_proxies static {$CADDY_TRUSTED_PROXIES:127.0.0.1/32}
+	}
+}
+
+{$CADDY_SITE_ADDRESS:localhost} {
+	encode zstd gzip
+
+	log {
+		output stdout
+		format json
+	}
+
+	header {
+		# One HSTS header for everything (">" replaces what Django sends on /api).
+		>Strict-Transport-Security "max-age={$HSTS_SECONDS:86400}"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy same-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		Cross-Origin-Opener-Policy same-origin
+		# Everything is served by this origin: scripts, styles and fonts included. The only inline
+		# styles are the receipt page's @page rules (print paper size), allowed by hash
+		# (frontend/src/lib/receiptPage.ts; a test keeps the hashes in sync).
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'sha256-swyJqIfVXWMwb+QQq44sIfCzLg0BYtDrpA2KZ6/EDpg=' 'sha256-DFViUtRuWuB3fgheS+04QWuncssJbsVV2YENU/uNhuw=' 'sha256-cksrM9R/t87jmbK1fKxWlFjy+deEeYnAbPDo1WHzRok=' 'sha256-bZZkvxbEczVrogpElW932MxSqQAjYpgDaieG/G0RXBQ=' 'sha256-9XycfLb2WRnrw5KpcSF+bOYUvGaxQrGA0ovRhqXZlAM='; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		-Server
+	}
+
+	handle /api/* {
+		request_body {
+			max_size 2MB
+		}
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		root * /srv
+		# Hashed build files never change; the page itself must always be re-checked.
+		@hashed path /assets/*
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+		@page not path /assets/*
+		header @page Cache-Control "no-cache"
+		# Deep links (/orders, /admin/products ...) fall back to the app.
+		try_files {path} /index.html
+		file_server
+	}
+}

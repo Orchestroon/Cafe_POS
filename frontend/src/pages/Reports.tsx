@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, NavLink, Navigate, useParams } from "react-router-dom";
+import { Link, NavLink, Navigate, useParams } from "react-router";
 import { api } from "../api/client";
 import {
-  MONEY_METHODS, REPORT_NAMES, type MoneyInOut, type MoneyRow, type PaymentBreakdown, type ProfitReport, type PurchasesExpenses, type ReportName,
+  MONEY_METHODS, REPORT_NAMES, type MoneyInOut, type MoneyRow, type PaymentBreakdown, type ProfitReport, type PromotionsReport, type PurchasesExpenses, type ReportName,
   type SalesSummary, type ShiftsReport, type StockReport, type TopProducts, type Unit,
 } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
@@ -52,6 +52,7 @@ function Body({ name, range }: { name: ReportName; range: RangeValue }) {
     case "stock": return <StockView range={range} />;
     case "purchases-expenses": return <PurchasesView range={range} />;
     case "shifts": return <ShiftsView range={range} />;
+    case "promotions": return <PromotionsView range={range} />;
   }
 }
 
@@ -303,6 +304,8 @@ function ProfitView({ range }: { range: RangeValue }) {
           )}
           <div className="card">
             <div className="totals">
+              {line("sales_before_discounts", d.sales_before_discounts)}
+              {d.promotion_discounts !== "0.00" && line("promotion_discounts", d.promotion_discounts, "−")}
               {line("sales", d.sales)}
               {line("refunds", d.refunds, "−")}
               {line("net_sales", d.net_sales, "", true)}
@@ -316,6 +319,40 @@ function ProfitView({ range }: { range: RangeValue }) {
             </div>
             <p className="form-hint" style={{ marginTop: 10 }}>{t("reports.purchasesInfo", { amount: m(d.purchases_info) })}</p>
             {d.stock_added_info !== "0.00" && <p className="form-hint">{t("reports.stockAddedInfo", { amount: m(d.stock_added_info) })}</p>}
+          </div>
+        </>
+      )}
+    </State>
+  );
+}
+
+function PromotionsView({ range }: { range: RangeValue }) {
+  const { t } = useTranslation();
+  const { m } = useCur();
+  const q = useReport<PromotionsReport>("promotions", range);
+  const d = q.data;
+  return (
+    <State q={q}>
+      {d && (
+        <>
+          <div className="stat-grid">
+            <Stat title={t("reports.promoTotal")} value={m(d.discount_total)} />
+            <Stat title={t("reports.promoOrders")} value={`${d.orders_with_promotion} / ${d.orders_count}`} />
+          </div>
+          <div className="card">
+            {d.promotions.length === 0 ? <p className="form-hint">{t("common.empty")}</p> : (
+              <div className="table-scroll">
+                <table className="erp-table">
+                  <thead><tr><th>{t("common.name")}</th><th>{t("promos.kind")}</th><th className="num">{t("reports.promoUsed")}</th><th className="num">{t("reports.promoManual")}</th><th className="num">{t("reports.promoDiscount")}</th></tr></thead>
+                  <tbody>
+                    {d.promotions.map((p) => (
+                      <tr key={p.promotion_id}><td>{p.name}</td><td>{t(`promos.kinds.${p.kind}`)}</td><td className="num">{p.orders_count}</td><td className="num">{p.manual_count}</td><td className="num">{m(p.discount_total)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="form-hint" style={{ marginTop: 10 }}>{t("reports.promoNote")}</p>
           </div>
         </>
       )}

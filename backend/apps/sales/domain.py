@@ -62,6 +62,7 @@ class VariantData:
     linked_groups: tuple[GroupData, ...] = ()  # in display order
     recipe: tuple[RecipeLineData, ...] = ()
     track_stock: bool = True
+    category_id: UUID | None = None
 
     @property
     def sellable(self) -> bool:
@@ -92,6 +93,31 @@ class ItemRequest:
 
 
 @dataclass(frozen=True)
+class SlotData:
+    quantity: int
+    category_id: UUID | None = None
+    variant_ids: frozenset = frozenset()
+
+
+@dataclass(frozen=True)
+class PromotionData:
+    """A promotion that is live right now (the loader filtered by schedule). Spec 8.12."""
+
+    id: UUID
+    name: str
+    kind: str  # "discount" | "combo"
+    auto_apply: bool
+    created_at: object  # tie-break: the earliest created wins
+    scope: str = ""  # "variant" | "category" | "order"
+    discount_type: str = ""  # "percentage" | "fixed_amount"
+    value: Decimal | None = None
+    combo_price: Decimal | None = None
+    variant_ids: frozenset = frozenset()
+    category_ids: frozenset = frozenset()
+    slots: tuple[SlotData, ...] = ()
+
+
+@dataclass(frozen=True)
 class PricedItem:
     request: ItemRequest
     variant: VariantData
@@ -102,6 +128,8 @@ class PricedItem:
     line_discount: Decimal
     line_total: Decimal
     modifiers: tuple[dict, ...]  # modifiers_snapshot rows
+    # promotion_snapshot rows: {promotion_id, name, kind, amount}; amounts add up to line_discount
+    promotions: tuple[dict, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -112,3 +140,5 @@ class PricedOrder:
     tax_total: Decimal
     total: Decimal
     tax: TaxConfig
+    applied: tuple[dict, ...] = ()  # {id, name, kind, amount, manual} per promotion that applied
+    selectable: tuple[dict, ...] = ()  # promotions the cashier may tap: {id, name, kind, ...}

@@ -88,6 +88,27 @@ class OrderItem(TenantModel):
         ]
 
 
+class OrderPromotion(TenantModel):
+    """A promotion that was applied to an order, with what it took off (spec 8.12). One row per
+    promotion per order; the name is a snapshot, so editing a promotion never changes history."""
+
+    order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name="promotions")
+    promotion = models.ForeignKey(
+        "promotions.Promotion", on_delete=models.PROTECT, related_name="+"
+    )
+    name_snapshot = models.CharField(max_length=100)
+    kind = models.CharField(max_length=8)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    manual = models.BooleanField(default=False)  # the cashier tapped it
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["order", "promotion"], name="uniq_order_promotion"),
+            models.CheckConstraint(condition=Q(amount__gt=0), name="orderpromotion_amount_gt_0"),
+        ]
+
+
 class Payment(TenantModel):
     class Method(models.TextChoices):
         CASH = "cash"

@@ -1,4 +1,4 @@
-import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router";
 import { useAuth } from "./AuthContext";
 import { Forbidden } from "../pages/Forbidden";
 import { Loading } from "../components/States";

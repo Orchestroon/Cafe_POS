@@ -7,6 +7,8 @@ _ADMIN = frozenset({ADMIN})
 PERMISSIONS: dict[str, frozenset[str]] = {
     "catalog.view": _BOTH,
     "catalog.manage": _ADMIN,
+    "promotions.view": _BOTH,
+    "promotions.manage": _ADMIN,
     "modifiers.view": _BOTH,
     "modifiers.manage": _ADMIN,
     "shifts.own": _BOTH,

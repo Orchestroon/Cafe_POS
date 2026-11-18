@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router";
 import { api } from "../api/client";
 import { PAPER_WIDTHS, paperLabel, type PaperWidth, type Receipt } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { ErrorBanner, Loading } from "../components/States";
 import { formatDateTime } from "../i18n/format";
+import { pageRule } from "../lib/receiptPage";
 
 const KEY = "receipt.width";
 // Per-device choice (spec 10.3). localStorage may be unavailable, so every access is guarded.
@@ -25,7 +26,6 @@ const saveWidth = (w: PaperWidth) => {
     /* the choice just won't persist */
   }
 };
-const pageRule = (w: PaperWidth) => (w === "a4" ? "@page { size: A4; margin: 12mm; }" : `@page { size: ${w} auto; margin: 2mm; }`);
 
 export function ReceiptPage() {
   const { t } = useTranslation();
@@ -67,13 +67,15 @@ export function ReceiptPage() {
         <div className="receipt-rule" />
         {r.items.map((i, n) => (
           <div key={n} className="receipt-item">
-            <div className="receipt-row"><span>{i.quantity} × {i.name} ({i.variant})</span><span>{money(i.line_total)}</span></div>
+            <div className="receipt-row"><span>{i.quantity} × {i.name} ({i.variant})</span><span>{money(i.line_subtotal)}</span></div>
             {i.modifiers.map((m) => <div key={m} className="receipt-mod">+ {m}</div>)}
+            {i.line_discount !== "0.00" && <div className="receipt-row small receipt-promo"><span>{i.promotions.join(", ") || t("receipt.discount")}</span><span><bdi dir="ltr">-{money(i.line_discount)}</bdi></span></div>}
           </div>
         ))}
         <div className="receipt-rule" />
         <div className="receipt-row"><span>{t("pos.subtotal")}</span><span>{money(r.subtotal)}</span></div>
-        {r.discount_total !== "0.00" && <div className="receipt-row"><span>{t("receipt.discount")}</span><span>-{money(r.discount_total)}</span></div>}
+        {r.promotions.map((a) => <div key={a.promotion_id} className="receipt-row small"><span>{a.name}</span><span><bdi dir="ltr">-{money(a.amount)}</bdi></span></div>)}
+        {r.discount_total !== "0.00" && <div className="receipt-row"><span>{t("receipt.discount")}</span><span><bdi dir="ltr">-{money(r.discount_total)}</bdi></span></div>}
         {r.tax.enabled && <div className="receipt-row"><span>{r.tax.label} {r.tax.rate}%{r.tax.inclusive ? ` (${t("pos.included")})` : ""}</span><span>{money(r.tax.amount)}</span></div>}
         <div className="receipt-row receipt-total"><span>{t("pos.total")}</span><span>{money(r.total)} {r.currency}</span></div>
         <div className="receipt-rule" />

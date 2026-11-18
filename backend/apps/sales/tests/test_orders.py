@@ -129,7 +129,10 @@ def test_receipt_shape_and_values(org, barista_c, sold):
             "quantity": 1,
             "modifiers": ["Oat Milk", "Extra Shot"],
             "unit_price": "120.00",
+            "line_subtotal": "120.00",
+            "line_discount": "0.00",
             "line_total": "120.00",
+            "promotions": [],
         }
     ]
     assert rc["subtotal"] == "120.00" and rc["total"] == "120.00" and rc["discount_total"] == "0.00"

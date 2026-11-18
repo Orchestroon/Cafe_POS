@@ -7,6 +7,7 @@ from apps.catalog.views import CategoryViewSet, ProductViewSet, VariantViewSet
 from apps.expenses.views import ExpenseViewSet
 from apps.inventory import views as inv
 from apps.modifiers.views import ModifierGroupViewSet, ModifierOptionViewSet
+from apps.promotions.views import PromotionViewSet
 from apps.purchasing.views import PurchaseViewSet, SupplierPaymentViewSet, SupplierViewSet
 from apps.reports.views import REPORT_VIEWS
 from apps.sales import views as sales
@@ -23,6 +24,7 @@ router.register("products", ProductViewSet, basename="product")
 router.register("variants", VariantViewSet, basename="variant")
 router.register("modifier-groups", ModifierGroupViewSet, basename="modifier-group")
 router.register("modifier-options", ModifierOptionViewSet, basename="modifier-option")
+router.register("promotions", PromotionViewSet, basename="promotion")
 router.register("orders", sales.OrderViewSet, basename="order")
 router.register("refunds", sales.RefundLedgerView, basename="refund")
 router.register("payments", sales.PaymentLedgerView, basename="payment")

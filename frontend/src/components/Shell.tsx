@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthContext";
 import { setLang } from "../i18n";
 import { confirmLeave } from "../lib/unsaved";
@@ -59,7 +59,7 @@ export function Shell(): ReactNode {
     { to: "/pos", label: t("nav.pos"), short: t("nav.short.pos"), icon: "pos", section: "daily", mobile: true },
     { to: "/orders", label: t("nav.orders"), short: t("nav.short.orders"), icon: "receipt", section: "daily", mobile: true },
     { to: "/expenses", label: t("nav.expenses"), icon: "wallet", section: "daily" },
-    { to: "/admin/products", label: t("nav.menuRecipes"), short: t("nav.short.products"), icon: "cup", section: "menu", admin: true, mobile: true, match: ["/admin/products", "/admin/modifiers", "/admin/categories"] },
+    { to: "/admin/products", label: t("nav.menuRecipes"), short: t("nav.short.products"), icon: "cup", section: "menu", admin: true, mobile: true, match: ["/admin/products", "/admin/modifiers", "/admin/categories", "/admin/promotions"] },
     { to: "/admin/inventory", label: t("nav.inventory"), short: t("nav.short.inventory"), icon: "box", section: "menu", admin: true, mobile: true },
     { to: "/admin/purchases", label: t("nav.buying"), icon: "cart", section: "menu", admin: true, match: ["/admin/purchases", "/admin/suppliers"] },
     { to: "/admin/shifts", label: t("nav.shifts"), icon: "clock", section: "manage", admin: true },

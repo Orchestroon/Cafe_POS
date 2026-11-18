@@ -5,7 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router";
 import { api, ApiError } from "../api/client";
 import { needsRecipe, type Balance, type Category, type Ingredient, type ModifierGroup, type Product, type ProductSetup, type RecipeWarning, type Unit } from "../api/types";
 import { useAuth } from "../auth/AuthContext";

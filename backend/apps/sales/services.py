@@ -1,3 +1,5 @@
+from django.utils import timezone
+
 from apps.core.exceptions import ApiError
 from apps.inventory.models import StockBalance
 from apps.inventory.services import cost_missing
@@ -15,10 +17,19 @@ def to_requests(items) -> list[ItemRequest]:
     ]
 
 
-def price_and_consume(org, requests):
-    """The calculation quote and checkout share: (priced order, consumption per item, required)."""
+def price_and_consume(org, requests, promotion_ids=()):
+    """The calculation quote and checkout share: (priced order, consumption per item, required).
+    `promotion_ids` are the manual promotions tapped; the server decides what applies."""
     variants, options = loader.load(org, requests)
-    priced = pricing.price_order(requests, variants, options, loader.load_tax(org))
+    settings = loader.load_settings(org)
+    priced = pricing.price_order(
+        requests,
+        variants,
+        options,
+        loader.load_tax(org, settings),
+        loader.load_promotions(org, timezone.now(), settings),
+        frozenset(promotion_ids),
+    )
     consumptions = [consumption.consume_item(p) for p in priced.items]
     required = consumption.aggregate(consumptions)
     _require_costs(org, required)
@@ -48,6 +59,8 @@ def quote_payload(priced, required, warnings) -> dict:
         "tax_total": str(priced.tax_total),
         "total": str(priced.total),
         "tax": priced.tax.snapshot(),
+        "promotions": [{**a, "amount": str(a["amount"])} for a in priced.applied],
+        "selectable": [{**s, "gain": str(s["gain"])} for s in priced.selectable],
         "items": [
             {
                 "variant_id": str(p.variant.id),
@@ -56,7 +69,13 @@ def quote_payload(priced, required, warnings) -> dict:
                 "quantity": p.request.quantity,
                 "unit_price": str(p.unit_price),
                 "unit_discount": str(p.unit_discount),
+                "line_subtotal": str(p.line_subtotal),
+                "line_discount": str(p.line_discount),
                 "line_total": str(p.line_total),
+                "promotions": [
+                    {"id": r["promotion_id"], "name": r["name"], "amount": r["amount"]}
+                    for r in p.promotions
+                ],
                 "modifiers": [
                     {
                         "option_id": m["option_id"],
@@ -81,8 +100,8 @@ def quote_payload(priced, required, warnings) -> dict:
     }
 
 
-def quote(org, items) -> dict:
+def quote(org, items, promotion_ids=()) -> dict:
     """Read-only: no locks, no writes, no shift needed (spec 8.3)."""
-    priced, _, required = price_and_consume(org, to_requests(items))
+    priced, _, required = price_and_consume(org, to_requests(items), promotion_ids)
     available = loader.read_balances(org, list(required))
     return quote_payload(priced, required, consumption.stock_warnings(required, available))

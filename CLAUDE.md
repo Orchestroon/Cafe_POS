@@ -11,9 +11,9 @@ Work one sprint at a time and stop for owner approval at the end of each sprint.
 - Frontend (from `frontend/`): `npm run typecheck && npm run lint && npm run build`.
 
 ## UI/UX rule (persistent)
-- Preserve the visual theme, colors, typography and layout shell from `legacy/index.html` and `legacy/css/style.css` (Growl Tech tokens, Instrument Sans, sidebar/top-bar/bottom-nav shell).
-- Convert physical left/right CSS properties to logical properties (RTL support) as the styles are ported.
-- Do NOT copy legacy business logic or flows from `legacy/js/app.js` / `legacy/js/store.js`. `legacy/` is a read-only reference; never edit it.
+- Preserve the visual theme, colors, typography and layout shell already ported in `frontend/src/styles/` (Growl Tech tokens in `theme.css`, Instrument Sans, Cairo for Arabic, JetBrains Mono, sidebar/top-bar/bottom-nav shell). Fonts are self-hosted (`@fontsource`), never loaded from a CDN.
+- Use CSS logical properties only (RTL support).
+- The old static prototype `legacy/` was removed in Sprint 6 (it is still in git history before that commit). Never copy business logic from it.
 
 ## Git
 - Never include `Co-Authored-By` trailers (or any other attribution lines) in git commit messages.

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { api } from "../api/client";
 import type { Shift } from "../api/types";
 import { useAuth } from "../auth/AuthContext";

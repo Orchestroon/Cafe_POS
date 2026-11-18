@@ -30,6 +30,14 @@
 .pos-cart-foot { padding: 12px 16px; border-block-start: 1px solid var(--border-light); display: grid; gap: 8px; }
 .totals-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 14px; }
 .totals-row.grand { font-size: 20px; font-weight: 800; color: var(--text-heading); border-block-start: 1px solid var(--border-light); margin-block-start: 4px; padding-block-start: 8px; }
+.cart-line-total { display: flex; flex-direction: column; align-items: flex-end; }
+.cart-line-was { font-weight: 400; font-size: 12px; color: var(--text-muted); }
+.cart-line-promo, .order-promo { font-size: 12px; font-weight: 600; color: var(--status-success-text); margin-block-start: 2px; }
+.totals-promo { color: var(--status-success-text); }
+.promo-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.promo-chip { min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1px dashed var(--brand-terracotta); background: var(--brand-terracotta-light); color: var(--text-heading); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.promo-chip.on { border-style: solid; background: var(--brand-terracotta); color: #fff; }
+.promo-chip:disabled { opacity: .5; cursor: not-allowed; }
 .pos-cartbar { display: none; }
 
 .stepper { display: inline-flex; align-items: center; gap: 4px; }
@@ -88,6 +96,7 @@
 .receipt-row { display: flex; justify-content: space-between; gap: 8px; }
 .receipt-row.small { font-size: .9em; }
 .receipt-mod { padding-inline-start: 1.2em; font-size: .92em; }
+.receipt-promo { padding-inline-start: 1.2em; font-style: italic; }
 .receipt-total { font-weight: 800; font-size: 1.2em; }
 .receipt-banner { text-align: center; font-weight: 800; font-size: 1.6em; border: 3px solid #000; padding: 4px; margin-block-end: 8px; letter-spacing: .15em; }
 .receipt-banner.small { font-size: 1em; border-width: 1px; }

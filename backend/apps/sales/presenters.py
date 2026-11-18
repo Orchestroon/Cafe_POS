@@ -93,6 +93,7 @@ def order_detail(order, *, admin):
             "line_discount": str(i.line_discount),
             "line_total": str(i.line_total),
             "modifiers": i.modifiers_snapshot,
+            "promotions": i.promotion_snapshot or [],
         }
         if admin:  # recipes and consumption are business internals
             row["recipe"] = i.recipe_snapshot
@@ -114,9 +115,18 @@ def order_detail(order, *, admin):
         "tax": order.tax_snapshot,
         "note": order.note,
         "items": items,
+        "promotions": promotions_list(order),
         "payments": [payment_dict(p) for p in order.payments.all()],
         "refund": refund_dict(order),
     }
+
+
+def promotions_list(order):
+    """What was applied to the order (snapshots, so editing a promotion changes nothing here)."""
+    return [
+        {"promotion_id": str(p.promotion_id), "name": p.name_snapshot, "amount": str(p.amount)}
+        for p in order.promotions.all()
+    ]
 
 
 def receipt(order):
@@ -141,12 +151,16 @@ def receipt(order):
                 "quantity": i.quantity,
                 "modifiers": [m["option_label"] for m in i.modifiers_snapshot],
                 "unit_price": str(i.unit_price),
+                "line_subtotal": str(i.line_subtotal),
+                "line_discount": str(i.line_discount),
                 "line_total": str(i.line_total),
+                "promotions": [p["name"] for p in i.promotion_snapshot or []],
             }
             for i in order.items.all()
         ],
         "subtotal": str(order.subtotal),
         "discount_total": str(order.discount_total),
+        "promotions": promotions_list(order),
         "tax": {
             "enabled": tax["enabled"],
             "label": tax["label"],

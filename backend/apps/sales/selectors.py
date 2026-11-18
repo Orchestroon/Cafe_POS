@@ -86,6 +86,6 @@ def get_order(user, pk):
     return (
         Order.objects.filter(organization=user.organization, pk=pk)
         .select_related("cashier", "refund__actor", "stock_return__created_by")
-        .prefetch_related("payments", "items", "refund__lines")
+        .prefetch_related("payments", "items", "promotions", "refund__lines")
         .first()
     )

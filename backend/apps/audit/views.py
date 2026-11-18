@@ -42,6 +42,7 @@ def _resolvers(tz):
     from apps.expenses.models import Expense
     from apps.inventory.models import Ingredient, StockAdjustment
     from apps.modifiers.models import ModifierGroup, ModifierOption
+    from apps.promotions.models import Promotion
     from apps.purchasing.models import Purchase, Supplier, SupplierPayment
     from apps.sales.models import Order, Refund
     from apps.shifts.models import CashierShift
@@ -57,6 +58,7 @@ def _resolvers(tz):
         (Product, (), lambda p: p.name),
         (Category, (), lambda c: c.name),
         (ModifierGroup, (), lambda g: g.name),
+        (Promotion, (), lambda p: p.name),
         (ModifierOption, ("group",), lambda o: f"{o.group.name}: {o.label}"),
         (
             CashierShift,

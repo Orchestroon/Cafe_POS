@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router";
 import { api } from "../api/client";
 import type { OrderDetail, Unit } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
@@ -43,7 +43,7 @@ export function OrderDetailPage() {
             <tbody>
               {o.items.map((i) => (
                 <tr key={i.id}>
-                  <td>{i.product_name} · {i.variant_label}{i.modifiers.length > 0 && <div className="form-hint">{i.modifiers.map((m) => m.option_label).join(", ")}</div>}</td>
+                  <td>{i.product_name} · {i.variant_label}{i.modifiers.length > 0 && <div className="form-hint">{i.modifiers.map((m) => m.option_label).join(", ")}</div>}{i.promotions.map((a) => <div className="form-hint order-promo" key={a.promotion_id}>{a.name} <bdi dir="ltr">−{formatMoney(a.amount, cur)}</bdi></div>)}</td>
                   <td className="num">{i.quantity}</td><td className="num">{formatMoney(i.unit_price, cur)}</td><td className="num">{formatMoney(i.line_total, cur)}</td>
                 </tr>
               ))}
@@ -52,6 +52,7 @@ export function OrderDetailPage() {
         </div>
         <div className="totals" style={{ marginTop: 12 }}>
           <div className="totals-row"><span>{t("pos.subtotal")}</span><span>{formatMoney(o.subtotal, cur)}</span></div>
+          {o.promotions.map((a) => <div className="totals-row totals-promo" key={a.promotion_id}><span>{a.name}</span><span><bdi dir="ltr">−{formatMoney(a.amount, cur)}</bdi></span></div>)}
           {o.tax.enabled && <div className="totals-row"><span>{o.tax.label} {o.tax.rate}%</span><span>{formatMoney(o.tax_total, cur)}</span></div>}
           <div className="totals-row grand"><span>{t("pos.total")}</span><span>{formatMoney(o.total, cur)}</span></div>
         </div>

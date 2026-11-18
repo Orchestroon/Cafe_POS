@@ -1,6 +1,7 @@
 """Turns database rows into the plain data the pure engines use (one fixed set of queries)."""
 
 from collections import defaultdict
+from zoneinfo import ZoneInfo
 
 from django.db.models import Prefetch
 
@@ -8,6 +9,8 @@ from apps.catalog.models import ProductVariant, RecipeLine
 from apps.inventory.models import StockBalance
 from apps.inventory.services import lock_balances
 from apps.modifiers.models import ModifierEffect, ModifierOption, ProductModifierGroup
+from apps.promotions.models import Promotion
+from apps.promotions.schedule import is_live
 from apps.tenancy.models import OrganizationSettings
 from apps.tenancy.seed import default_location
 
@@ -15,14 +18,20 @@ from .domain import (
     EffectData,
     GroupData,
     OptionData,
+    PromotionData,
     RecipeLineData,
+    SlotData,
     TaxConfig,
     VariantData,
 )
 
 
-def load_tax(org) -> TaxConfig:
-    s = OrganizationSettings.objects.get(organization=org)
+def load_settings(org) -> OrganizationSettings:
+    return OrganizationSettings.objects.get(organization=org)
+
+
+def load_tax(org, s=None) -> TaxConfig:
+    s = s or load_settings(org)
     return TaxConfig(s.tax_enabled, s.tax_rate, s.prices_include_tax, s.tax_label)
 
 
@@ -80,6 +89,7 @@ def load(org, requests):
             linked_groups=tuple(groups[v.product_id]),
             recipe=tuple(recipes[v.pk]),
             track_stock=v.track_stock,
+            category_id=v.product.category_id,
         )
         for v in rows
     }
@@ -124,3 +134,32 @@ def read_balances(org, ingredient_ids) -> dict:
 def locked_balances(org, ingredient_ids) -> dict:
     """Checkout: lock in ingredient_id order. Returns {ingredient_id (UUID): StockBalance}."""
     return lock_balances(org, sorted(ingredient_ids))
+
+
+def load_promotions(org, now, settings) -> list[PromotionData]:
+    """The active promotions whose schedule is live at `now` (café-local wall clock, spec 8.12)."""
+    local = now.astimezone(ZoneInfo(settings.timezone))
+    rows = Promotion.objects.filter(organization=org, is_active=True).prefetch_related(
+        "variants", "categories", "slots__variants"
+    )
+    return [
+        PromotionData(
+            id=p.pk,
+            name=p.name,
+            kind=p.kind,
+            auto_apply=p.auto_apply,
+            created_at=p.created_at,
+            scope=p.scope,
+            discount_type=p.discount_type,
+            value=p.discount_value,
+            combo_price=p.combo_price,
+            variant_ids=frozenset(v.pk for v in p.variants.all()),
+            category_ids=frozenset(c.pk for c in p.categories.all()),
+            slots=tuple(
+                SlotData(s.quantity, s.category_id, frozenset(v.pk for v in s.variants.all()))
+                for s in p.slots.all()
+            ),
+        )
+        for p in rows
+        if is_live(p.starts_on, p.ends_on, p.days_of_week, p.window_start, p.window_end, local)
+    ]

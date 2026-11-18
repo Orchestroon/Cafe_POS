@@ -16,6 +16,11 @@ class CartItemSerializer(StrictSerializerMixin, serializers.Serializer):
 
 class QuoteSerializer(StrictSerializerMixin, serializers.Serializer):
     items = CartItemSerializer(many=True, allow_empty=True, max_length=100)
+    # Manual promotions the cashier tapped. The server decides what applies; unknown or expired ids
+    # are ignored (the total check then reports any price change).
+    promotion_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False, default=list, max_length=20
+    )
 
 
 class PaymentInputSerializer(StrictSerializerMixin, serializers.Serializer):
@@ -35,6 +40,9 @@ class CheckoutSerializer(StrictSerializerMixin, serializers.Serializer):
     items = CartItemSerializer(many=True, allow_empty=True, max_length=100)
     payments = PaymentInputSerializer(many=True, allow_empty=True, max_length=10)
     expected_total = _StringDecimalField(max_digits=12, decimal_places=2)
+    promotion_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False, default=list, max_length=20
+    )
     note = serializers.CharField(max_length=300, required=False, allow_blank=True, default="")
 
 

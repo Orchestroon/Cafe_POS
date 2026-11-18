@@ -18,6 +18,7 @@ from apps.modifiers.models import (
     ModifierOption,
     ModifierOptionPrice,
 )
+from apps.promotions.models import Promotion
 from apps.purchasing.models import Purchase, PurchaseItem, Supplier, SupplierPayment
 from apps.sales.models import Order, Payment, Refund, RefundLine
 from apps.shifts.models import CashierShift, CashMovement
@@ -103,6 +104,12 @@ MATRIX = [
     ("GET", "reports/shifts", ADMIN),
     ("GET", "reports/money-in-out", ADMIN),
     ("GET", "reports/profit", ADMIN),
+    ("GET", "reports/promotions", ADMIN),
+    ("GET", "promotions", BOTH),
+    ("POST", "promotions", ADMIN),
+    ("GET", "promotions/variant-costs", ADMIN),
+    ("GET", "promotions/{promotion}", BOTH),
+    ("PATCH", "promotions/{promotion}", ADMIN),
     ("GET", "audit-events", ADMIN),
     ("GET", "ingredients", ADMIN),
     ("POST", "ingredients", ADMIN),
@@ -144,6 +151,14 @@ def ids(org, admin, barista):
         tax_snapshot={"enabled": False, "rate": "0.00", "inclusive": False, "label": "VAT"},
         idempotency_key="11111111-1111-1111-1111-111111111111",
     )
+    promo = Promotion.objects.create(
+        organization=org,
+        name="Ten",
+        kind="discount",
+        scope="order",
+        discount_type="percentage",
+        discount_value="10.00",
+    )
     supplier = Supplier.objects.create(organization=org, name="Dairy Co")
     purchase = Purchase.objects.create(
         organization=org, purchased_on="2026-11-10", created_by=admin, total="0.00"
@@ -176,6 +191,7 @@ def ids(org, admin, barista):
         idempotency_key="22222222-2222-2222-2222-222222222222",
     )
     return {
+        "promotion": promo.id,
         "cash_movement": move.id,
         "supplier": supplier.id,
         "purchase": purchase.id,
@@ -225,6 +241,7 @@ def snapshot():
             PurchaseItem,
             Expense,
             CashMovement,
+            Promotion,
         )
     }
 

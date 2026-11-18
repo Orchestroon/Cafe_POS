@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { api } from "../api/client";
 import { needsRecipe, type Category, type CheckoutResult, type LastClosed, type Product, type Quote, type Shift, type StockWarning } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
@@ -35,16 +35,18 @@ export function Pos() {
   const [sheet, setSheet] = useState<{ product: Product; line?: CartLine } | null>(null);
   const [payOpen, setPayOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  // Manual promotions the cashier tapped. The server decides what applies; this is only a request.
+  const [picked, setPicked] = useState<string[]>([]);
   // B1: the open-shift popup can be dismissed; the POS then stays locked until a shift is open.
   const [shiftDialog, setShiftDialog] = useState(true);
   // Step 2: the Barista runs the whole shift from here (orders/refund, pay from drawer, shift/close).
   const [panel, setPanel] = useState<"orders" | "expense" | "shift" | null>(null);
   useEffect(() => saveCart(userId, cart), [userId, cart]);
-  const { phase, start, retry, busy, reset } = useCheckout(userId, () => { setCart([]); setCartOpen(false); });
+  const { phase, start, retry, busy, reset } = useCheckout(userId, () => { setCart([]); setPicked([]); setCartOpen(false); });
 
   // Quote: debounced ~300 ms after every cart change; the screen shows server totals only.
   const items = useMemo(() => toApiItems(cart), [cart]);
-  const itemsKey = JSON.stringify(items);
+  const itemsKey = JSON.stringify({ items, promotion_ids: picked });
   const [qKey, setQKey] = useState(itemsKey);
   useEffect(() => {
     const id = setTimeout(() => setQKey(itemsKey), 300);
@@ -52,9 +54,10 @@ export function Pos() {
   }, [itemsKey]);
   const quote = useQuery({
     queryKey: ["quote", qKey],
-    enabled: cart.length > 0,
+    // not while the debounced key still describes an empty cart (the server would answer EMPTY_CART)
+    enabled: cart.length > 0 && (JSON.parse(qKey) as { items: unknown[] }).items.length > 0,
     placeholderData: keepPreviousData,
-    queryFn: () => api.post<Quote>("/orders/quote", { items: JSON.parse(qKey) }),
+    queryFn: () => api.post<Quote>("/orders/quote", JSON.parse(qKey)),
   });
   const q = cart.length > 0 ? quote.data : undefined;
   const fresh = cart.length > 0 && qKey === itemsKey && !quote.isFetching && !quote.isError && !!q;
@@ -62,8 +65,13 @@ export function Pos() {
   const confirmPayment = (payments: Payments) => {
     if (!q || !fresh) return; // only ever pay the total the server just quoted
     setPayOpen(false);
-    start({ items, payments, expected_total: q.total });
+    start({ items, payments, expected_total: q.total, promotion_ids: picked });
   };
+
+  // A tapped offer the server no longer applies (ended, or not helpful) is ignored by it; the
+  // chips show what is really applied, so a stale id is harmless.
+  const clearCart = () => { setCart([]); setPicked([]); };
+  const togglePick = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
   // ---- cart editing ---------------------------------------------------------------------------
   const upsert = (line: CartLine) => {
@@ -86,7 +94,7 @@ export function Pos() {
   // A close or a refund must not race a sale whose result is not known yet.
   const panelsLocked = phase.kind === "checking" || phase.kind === "unconfirmed";
   const openPanel = (p: "orders" | "expense" | "shift") => (panelsLocked ? false : setPanel(p));
-  const lineTotal = (i: number) => (fresh && q?.items[i] ? formatMoney(q.items[i].line_total, currency) : "…");
+  const priced = (i: number) => (fresh ? q?.items[i] : undefined);
   const count = cart.reduce((n, l) => n + l.quantity, 0);
 
   // B2: POS shortcuts (page layer; they pause while any popup is open).
@@ -113,7 +121,7 @@ export function Pos() {
     removeLast: () => (selling && last ? setCart(cart.slice(0, -1)) : false),
     clearCart: () => {
       if (!selling || cart.length === 0) return false;
-      if (window.confirm(t("pos.clearConfirm"))) setCart([]);
+      if (window.confirm(t("pos.clearConfirm"))) clearCart();
     },
   });
 
@@ -172,13 +180,21 @@ export function Pos() {
                   <div className="cart-line-main">
                     <div className="cart-line-name">{l.productName} · {l.variantLabel}</div>
                     {labels.length > 0 && <div className="cart-line-mods">{labels.join(", ")}</div>}
+                    {priced(i)?.promotions.map((a) => <div className="cart-line-promo" key={a.id}>{a.name} <bdi dir="ltr">−{formatMoney(a.amount, currency)}</bdi></div>)}
                     <div className="cart-line-actions">
                       <Stepper value={l.quantity} disabled={!selling} onChange={(n) => setQty(l.id, n)} />
                       {p && <button className="btn btn-outline btn-sm" disabled={!selling} onClick={() => setSheet({ product: p, line: l })}>{t("common.edit")}</button>}
                       <button className="btn btn-outline btn-sm" disabled={!selling} onClick={() => setCart(cart.filter((x) => x.id !== l.id))}>{t("common.remove")}</button>
                     </div>
                   </div>
-                  <div className="cart-line-total">{lineTotal(i)}</div>
+                  <div className="cart-line-total">
+                    {priced(i) ? (
+                      <>
+                        {priced(i)!.promotions.length > 0 && <s className="cart-line-was">{formatMoney(priced(i)!.line_subtotal, currency)}</s>}
+                        {formatMoney(priced(i)!.line_total, currency)}
+                      </>
+                    ) : "…"}
+                  </div>
                 </div>
               );
             })}
@@ -186,13 +202,25 @@ export function Pos() {
           <div className="pos-cart-foot">
             {quote.isError && <ErrorBanner error={quote.error} />}
             {q && q.stock_warnings.length > 0 && <StockBanner warnings={q.stock_warnings} />}
+            {q && fresh && q.selectable.length > 0 && (
+              <div className="promo-chips" role="group" aria-label={t("pos.offers")}>
+                <span className="form-hint">{t("pos.offers")}</span>
+                {q.selectable.map((s) => (
+                  <button key={s.id} type="button" className={`promo-chip${s.selected ? " on" : ""}`} aria-pressed={s.selected} disabled={!selling}
+                    title={s.selected && s.gain === "0.00" ? t("pos.offerNotBetter") : undefined} onClick={() => togglePick(s.id)}>
+                    {s.name}{s.gain !== "0.00" && ` −${formatMoney(s.gain, currency)}`}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="totals">
               <div className="totals-row"><span>{t("pos.subtotal")}</span><span>{q && fresh ? formatMoney(q.subtotal, currency) : "…"}</span></div>
+              {q && fresh && q.promotions.map((a) => <div className="totals-row totals-promo" key={a.id}><span>{a.name}</span><span><bdi dir="ltr">−{formatMoney(a.amount, currency)}</bdi></span></div>)}
               {q && fresh && q.tax.enabled && <div className="totals-row"><span>{q.tax.label} {q.tax.rate}%{q.tax.inclusive ? ` (${t("pos.included")})` : ""}</span><span>{formatMoney(q.tax_total, currency)}</span></div>}
               <div className="totals-row grand"><span>{t("pos.total")}</span><span>{q && fresh ? formatMoney(q.total, currency) : "…"}</span></div>
             </div>
             <button className="btn btn-primary btn-block" disabled={!canPay} onClick={() => setPayOpen(true)}>{t("pos.pay")}<Kbd k="F2" /></button>
-            {cart.length > 0 && <button className="btn btn-ghost btn-block" disabled={!selling} onClick={() => setCart([])}>{t("pos.clear")}</button>}
+            {cart.length > 0 && <button className="btn btn-ghost btn-block" disabled={!selling} onClick={clearCart}>{t("pos.clear")}</button>}
           </div>
         </aside>
       </div>
@@ -300,6 +328,7 @@ function Success({ result, currency, onPrint, onNew }: { result: CheckoutResult;
       <div className="success-mark" aria-hidden="true">✓</div>
       <h2>{t("pos.sold")}</h2>
       <div className="pay-total"><span>{t("pos.invoice")}</span><strong className="mono">{result.invoice_no}</strong></div>
+      {result.promotions.map((a) => <div className="pay-total" key={a.id}><span>{a.name}</span><strong><bdi dir="ltr">−{formatMoney(a.amount, currency)}</bdi></strong></div>)}
       <div className="pay-total"><span>{t("pos.total")}</span><strong>{formatMoney(result.total, currency)}</strong></div>
       <div className="pay-total"><span>{t("pos.change")}</span><strong>{formatMoney(result.change_due, currency)}</strong></div>
       {result.stock_warnings.length > 0 && <StockBanner warnings={result.stock_warnings} />}

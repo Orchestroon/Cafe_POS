@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { NavLink } from "react-router-dom";
+import { NavLink } from "react-router";
 import { confirmLeave } from "../lib/unsaved";
 
 /** Tab strip for a merged admin page, same look as the Reports tabs. Every tab is its own URL. */
@@ -13,10 +13,10 @@ export function SectionTabs({ tabs }: { tabs: { to: string; label: string }[] })
   );
 }
 
-/** Menu & Recipes: products, modifiers, categories. */
+/** Menu & Recipes: products, modifiers, categories, promotions. */
 export function MenuTabs() {
   const { t } = useTranslation();
-  return <SectionTabs tabs={[{ to: "/admin/products", label: t("nav.products") }, { to: "/admin/modifiers", label: t("nav.modifiers") }, { to: "/admin/categories", label: t("nav.categories") }]} />;
+  return <SectionTabs tabs={[{ to: "/admin/products", label: t("nav.products") }, { to: "/admin/modifiers", label: t("nav.modifiers") }, { to: "/admin/categories", label: t("nav.categories") }, { to: "/admin/promotions", label: t("nav.promotions") }]} />;
 }
 
 /** Buying & Suppliers: purchases, suppliers. */

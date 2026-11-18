@@ -63,7 +63,8 @@
       "daily": "العمل اليومي",
       "menu": "القائمة والمخزون",
       "manage": "الإدارة"
-    }
+    },
+    "promotions": "العروض والخصومات"
   },
   "roles": {
     "admin": "مدير",
@@ -479,7 +480,9 @@
     "ordersNoteAdmin": "كل الطلبات، الأحدث أولًا. ابحث برقم الفاتورة للعثور على طلب.",
     "noRecipe": "بدون وصفة — اسأل المدير",
     "openShiftLast": "آخر وردية لك أُغلقت في {{time}} وكان المعدود {{amount}}.",
-    "clearConfirm": "تفريغ السلة بالكامل؟"
+    "clearConfirm": "تفريغ السلة بالكامل؟",
+    "offers": "العروض",
+    "offerNotBetter": "هناك عرض أفضل مطبق بالفعل"
   },
   "receipt": {
     "paper": "الورق",
@@ -679,7 +682,8 @@
       "purchases-expenses": "المشتريات والمصروفات",
       "shifts": "الورديات",
       "money-in-out": "الداخل والخارج",
-      "profit": "الأرباح"
+      "profit": "الأرباح",
+      "promotions": "العروض"
     },
     "stockNote": "الأرصدة هي الحالية. نطاق التاريخ يؤثر على عمود المستهلك فقط.",
     "orders": "الطلبات",
@@ -744,7 +748,7 @@
       "card_fees": "عمولة البطاقات (يحتفظ بها البنك)"
     },
     "profitRows": {
-      "sales": "المبيعات (قبل الضريبة)",
+      "sales": "المبيعات بعد الخصومات (قبل الضريبة)",
       "refunds": "الاستردادات",
       "net_sales": "صافي المبيعات",
       "cost_of_sales": "تكلفة المباع",
@@ -752,7 +756,9 @@
       "stock_losses": "الخسائر (هالك، عجز الجرد)",
       "general_expenses": "المصروفات",
       "net_profit": "صافي الربح",
-      "card_fees": "عمولة البطاقات"
+      "card_fees": "عمولة البطاقات",
+      "sales_before_discounts": "المبيعات قبل الخصومات",
+      "promotion_discounts": "خصومات العروض"
     },
     "margin": "هامش {{pct}}%",
     "purchasesInfo": "مخزون مشترى في هذه الفترة: {{amount}} (يصبح تكلفة عند بيعه أو فقده، لذلك لا يُخصم هنا).",
@@ -778,7 +784,13 @@
     "per100Title": "من كل 100 مبيعات",
     "per100": "{{cost}} تكلفة المباع · {{losses}} خسائر · {{expenses}} مصروفات · {{profit}} ربح",
     "returnedInfo": "مخصوم منها {{amount}} أُرجعت للمخزون بعد الاستردادات.",
-    "stockAddedInfo": "مخزون أُضيف بالجرد أو بأرصدة افتتاحية لاحقة: {{amount}} (ليس ربحًا)."
+    "stockAddedInfo": "مخزون أُضيف بالجرد أو بأرصدة افتتاحية لاحقة: {{amount}} (ليس ربحًا).",
+    "promoNote": "ما خصمه كل عرض في الفترة. قد يشترك أكثر من عرض في طلب واحد، لذلك لا يظهر ربح كل عرض على حدة: تقرير الأرباح يعرض الربح الفعلي بعد الخصومات.",
+    "promoOrders": "طلبات عليها عرض",
+    "promoTotal": "إجمالي الخصومات",
+    "promoUsed": "الطلبات",
+    "promoManual": "اختارها الكاشير",
+    "promoDiscount": "الخصم الممنوح"
   },
   "audit": {
     "title": "سجل التدقيق",
@@ -837,7 +849,8 @@
       "tenancy_organizationsettings": "الإعدادات",
       "purchasing_supplier": "مورد",
       "shifts_cashmovement": "قيد نقدية",
-      "purchasing_supplierpayment": "دفعة لمورد"
+      "purchasing_supplierpayment": "دفعة لمورد",
+      "promotions_promotion": "عرض"
     },
     "actions": {
       "order_created": "بيع",
@@ -882,7 +895,9 @@
       "order_cost_estimated": "إعادة حساب تكلفة طلب",
       "supplier_payment_created": "دفع لمورد",
       "supplier_payment_voided": "إلغاء دفعة لمورد",
-      "order_stock_returned": "إرجاع مخزون بعد استرداد"
+      "order_stock_returned": "إرجاع مخزون بعد استرداد",
+      "promotion_created": "إضافة عرض",
+      "promotion_updated": "تعديل عرض"
     },
     "sentences": {
       "order_created": "بيع الفاتورة {{invoice}} بمبلغ {{total}} · {{payments}}",
@@ -927,7 +942,9 @@
       "order_cost_estimated": "أُعيد حساب تكلفة الفاتورة {{invoice}}: {{cost}} (تقديرية)",
       "supplier_payment_created": "دفع {{amount}} إلى {{supplier}}، مدفوع من: {{source}}",
       "supplier_payment_voided": "إلغاء دفعة بقيمة {{amount}} إلى {{supplier}} · السبب: «{{reason}}»",
-      "order_stock_returned": "إرجاع مخزون الفاتورة {{invoice}} ({{value}}) · السبب: «{{reason}}»"
+      "order_stock_returned": "إرجاع مخزون الفاتورة {{invoice}} ({{value}}) · السبب: «{{reason}}»",
+      "promotion_created": "إضافة العرض {{name}}",
+      "promotion_updated": "تعديل العرض {{name}}: {{changes}}"
     },
     "fields": {
       "invoice_no": "الفاتورة",
@@ -1016,7 +1033,20 @@
       "total_value": "القيمة",
       "on_credit": "بالآجل",
       "supplier": "المورد",
-      "amount_paid": "المدفوع"
+      "amount_paid": "المدفوع",
+      "scope": "يُطبَّق على",
+      "discount_type": "نوع الخصم",
+      "discount_value": "الخصم",
+      "variant_ids": "الأحجام",
+      "category_ids": "الأقسام",
+      "combo_price": "سعر الكومبو",
+      "slots": "أجزاء الكومبو",
+      "starts_on": "أول يوم",
+      "ends_on": "آخر يوم",
+      "days_of_week": "الأيام (0 = الاثنين)",
+      "window_start": "الساعات من",
+      "window_end": "الساعات إلى",
+      "auto_apply": "يُطبَّق تلقائيًا"
     }
   },
   "shortcuts": {
@@ -1129,5 +1159,98 @@
     "gapHint": "نقدية الفتح مقارنةً بآخر عدّ لنفس الشخص",
     "previousClose": "الإغلاق السابق: {{cash}}",
     "voidWhat": "{{kind}} {{amount}} · “{{reason}}”"
+  },
+  "promos": {
+    "intro": "يطبّق الخادم العروض عند البيع على الكاشير. العروض لا تتراكم: لكل صنف يفوز أفضل عرض، وعرض الطلب كله يفوز فقط إذا منح العميل أكثر. الطلبات السابقة تحتفظ بالعرض الذي بيعت به.",
+    "what": "ماذا يفعل",
+    "when": "متى",
+    "mode": "التطبيق",
+    "auto": "تلقائي",
+    "manual": "يختاره الكاشير",
+    "liveNow": "يعمل الآن",
+    "notNow": "خارج ساعاته الآن",
+    "turnOn": "تشغيل",
+    "turnOff": "إيقاف",
+    "new": "عرض جديد",
+    "edit": "تعديل العرض",
+    "kind": "النوع",
+    "kinds": {
+      "discount": "خصم",
+      "combo": "كومبو (سعر مجمّع)"
+    },
+    "autoApply": "تطبيق تلقائي",
+    "autoHint": "تطبقه شاشة الكاشير تلقائيًا كلما ناسب السلة.",
+    "manualHint": "يختاره الكاشير من شاشة البيع (للكوبونات أو الحالات الخاصة). كل استخدام يُسجَّل.",
+    "discountTitle": "الخصم",
+    "comboTitle": "الكومبو",
+    "scope": "يُطبَّق على",
+    "scopes": {
+      "variant": "أحجام محددة",
+      "category": "قسم",
+      "order": "الطلب كله"
+    },
+    "discountType": "نوع الخصم",
+    "types": {
+      "percentage": "نسبة مئوية (%)",
+      "fixed_amount": "مبلغ ثابت ({{currency}})"
+    },
+    "valuePct": "نسبة الخصم",
+    "valueAmount": "مبلغ الخصم",
+    "scopeHintBase": "يُخصم من السعر العادي للحجم. الإضافات (الحليب، الشوتات) تُحسب كاملة.",
+    "scopeHintOrder": "يُخصم من الطلب كله بما فيه الإضافات. ولا يحل محل عروض الأحجام والكومبو إلا إذا منح العميل أكثر.",
+    "searchSizes": "ابحث في المنتجات",
+    "picked_zero": "لم يُحدد أي حجم",
+    "picked_one": "تم تحديد حجم واحد",
+    "picked_two": "تم تحديد حجمين",
+    "picked_few": "تم تحديد {{count}} أحجام",
+    "picked_many": "تم تحديد {{count}} حجمًا",
+    "picked_other": "تم تحديد {{count}} حجم",
+    "comboPrice": "سعر الكومبو",
+    "comboHint": "يحل محل الأسعار العادية لأصناف الكومبو. الإضافات تُحسب فوقه. ويُطبَّق مرة لكل كومبو كامل في السلة.",
+    "part": "الجزء {{n}}",
+    "qty": "الكمية",
+    "partFrom": "الأصناف من",
+    "anyOfCategory": "أي صنف من قسم",
+    "specificSizes": "أحجام محددة",
+    "pickCategory": "اختر قسمًا",
+    "addPart": "إضافة جزء",
+    "scheduleTitle": "متى يُطبَّق",
+    "startsOn": "أول يوم",
+    "endsOn": "آخر يوم",
+    "days": "أيام الأسبوع",
+    "daysHint": "عدم اختيار أي يوم يعني كل الأيام.",
+    "useWindow": "في ساعات محددة فقط (ساعة السعادة)",
+    "windowFrom": "من",
+    "windowTo": "إلى",
+    "windowHint": "بتوقيت المقهى. يمكن أن تتخطى منتصف الليل (مثلًا من 22:00 إلى 02:00).",
+    "preview": "معاينة",
+    "always": "دائمًا",
+    "wholeOrder": "الطلب كله",
+    "sentence": {
+      "discount": "خصم {{value}} على {{target}}",
+      "combo": "{{parts}} بسعر {{price}}",
+      "between": "من {{from}} إلى {{to}}",
+      "from": "اعتبارًا من {{date}}",
+      "until": "حتى {{date}}"
+    },
+    "status": {
+      "active": "نشط",
+      "scheduled": "مجدول",
+      "expired": "انتهى",
+      "off": "متوقف"
+    },
+    "belowCost": "بعض الأسعار تنخفض عن تكلفة المكونات",
+    "belowCostVariant": "{{name}}: السعر {{full}} يصبح {{price}} بينما تكلفة تحضيره {{cost}}.",
+    "belowCostComboAlways": "سعر الكومبو {{price}} أقل من تكلفة أرخص كومبو ممكن ({{cost}}).",
+    "belowCostComboMaybe": "سعر الكومبو {{price}} أقل من تكلفة أغلى كومبو ممكن ({{cost}}).",
+    "belowCostNote": "يمكنك الحفظ مع ذلك. المحسوب هو الوصفة فقط دون الإضافات.",
+    "unknownCost_zero": "تم فحص كل الأحجام.",
+    "unknownCost_one": "تعذّر فحص حجم واحد لأن تكلفته غير معروفة بعد.",
+    "unknownCost_two": "تعذّر فحص حجمين لأن تكلفتهما غير معروفة بعد.",
+    "unknownCost_few": "تعذّر فحص {{count}} أحجام لأن تكلفتها غير معروفة بعد.",
+    "unknownCost_many": "تعذّر فحص {{count}} حجمًا لأن تكلفتها غير معروفة بعد.",
+    "unknownCost_other": "تعذّر فحص {{count}} حجم لأن تكلفتها غير معروفة بعد.",
+    "errName": "أدخل اسمًا.",
+    "errWindow": "حدّد وقتَي بداية ونهاية الفترة."
   }
 }

@@ -63,7 +63,8 @@
       "daily": "Daily work",
       "menu": "Menu & stock",
       "manage": "Management"
-    }
+    },
+    "promotions": "Promotions"
   },
   "roles": {
     "admin": "Admin",
@@ -467,7 +468,9 @@
     "ordersNoteAdmin": "All orders, newest first. Search an invoice number to find one.",
     "noRecipe": "No recipe — ask an Admin",
     "openShiftLast": "Your last shift closed on {{time}} with {{amount}} counted.",
-    "clearConfirm": "Clear the whole cart?"
+    "clearConfirm": "Clear the whole cart?",
+    "offers": "Offers",
+    "offerNotBetter": "A better offer is already applied"
   },
   "receipt": {
     "paper": "Paper",
@@ -667,7 +670,8 @@
       "purchases-expenses": "Purchases & expenses",
       "shifts": "Shifts",
       "money-in-out": "Money in & out",
-      "profit": "Profit"
+      "profit": "Profit",
+      "promotions": "Promotions"
     },
     "stockNote": "Balances are current. The date range only affects the consumed column.",
     "orders": "Orders",
@@ -724,7 +728,7 @@
       "card_fees": "Card fees (kept by the bank)"
     },
     "profitRows": {
-      "sales": "Sales (before tax)",
+      "sales": "Sales after discounts (before tax)",
       "refunds": "Refunds",
       "net_sales": "Net sales",
       "cost_of_sales": "Cost of what was sold",
@@ -732,7 +736,9 @@
       "stock_losses": "Losses (waste, count shortages)",
       "general_expenses": "Expenses",
       "net_profit": "Net profit",
-      "card_fees": "Card fees"
+      "card_fees": "Card fees",
+      "sales_before_discounts": "Sales before discounts",
+      "promotion_discounts": "Promotion discounts"
     },
     "margin": "Margin {{pct}}%",
     "purchasesInfo": "Stock bought in this period: {{amount}} (it becomes a cost when sold or lost, so it is not subtracted here).",
@@ -746,7 +752,13 @@
     "per100Title": "Out of every 100 sold",
     "per100": "{{cost}} cost of what was sold · {{losses}} losses · {{expenses}} expenses · {{profit}} profit",
     "returnedInfo": "Already less {{amount}} returned to stock after refunds.",
-    "stockAddedInfo": "Stock added by counts or later opening balances: {{amount}} (not profit)."
+    "stockAddedInfo": "Stock added by counts or later opening balances: {{amount}} (not profit).",
+    "promoNote": "What each offer took off in the period. Several offers can share one order, so profit per offer is not shown: the Profit report has the real profit after discounts.",
+    "promoOrders": "Orders with an offer",
+    "promoTotal": "Total discounts",
+    "promoUsed": "Orders",
+    "promoManual": "Tapped by the cashier",
+    "promoDiscount": "Discount given"
   },
   "audit": {
     "title": "Audit log",
@@ -801,7 +813,8 @@
       "tenancy_organizationsettings": "Settings",
       "purchasing_supplier": "Supplier",
       "shifts_cashmovement": "Cash entry",
-      "purchasing_supplierpayment": "Supplier payment"
+      "purchasing_supplierpayment": "Supplier payment",
+      "promotions_promotion": "Promotion"
     },
     "actions": {
       "order_created": "Sale",
@@ -846,7 +859,9 @@
       "order_cost_estimated": "Order cost recalculated",
       "supplier_payment_created": "Supplier paid",
       "supplier_payment_voided": "Supplier payment voided",
-      "order_stock_returned": "Stock returned after a refund"
+      "order_stock_returned": "Stock returned after a refund",
+      "promotion_created": "Promotion added",
+      "promotion_updated": "Promotion changed"
     },
     "sentences": {
       "order_created": "Sold invoice {{invoice}} for {{total}} · {{payments}}",
@@ -891,7 +906,9 @@
       "order_cost_estimated": "Recalculated the cost of invoice {{invoice}}: {{cost}} (estimate)",
       "supplier_payment_created": "Paid {{supplier}} {{amount}}, paid from: {{source}}",
       "supplier_payment_voided": "Voided a payment of {{amount}} to {{supplier}} · Reason: “{{reason}}”",
-      "order_stock_returned": "Put stock of {{invoice}} back ({{value}}) · Reason: “{{reason}}”"
+      "order_stock_returned": "Put stock of {{invoice}} back ({{value}}) · Reason: “{{reason}}”",
+      "promotion_created": "Added the promotion {{name}}",
+      "promotion_updated": "Changed the promotion {{name}}: {{changes}}"
     },
     "fields": {
       "invoice_no": "Invoice",
@@ -980,7 +997,20 @@
       "total_value": "Value",
       "on_credit": "On credit",
       "supplier": "Supplier",
-      "amount_paid": "Paid"
+      "amount_paid": "Paid",
+      "scope": "Applies to",
+      "discount_type": "Discount type",
+      "discount_value": "Discount",
+      "variant_ids": "Sizes",
+      "category_ids": "Categories",
+      "combo_price": "Combo price",
+      "slots": "Combo parts",
+      "starts_on": "First day",
+      "ends_on": "Last day",
+      "days_of_week": "Days (0 = Monday)",
+      "window_start": "Hours from",
+      "window_end": "Hours to",
+      "auto_apply": "Applied automatically"
     }
   },
   "shortcuts": {
@@ -1069,5 +1099,90 @@
     "gapHint": "Opening cash vs. the same person's previous count",
     "previousClose": "Previous close: {{cash}}",
     "voidWhat": "{{kind}} {{amount}} · “{{reason}}”"
+  },
+  "promos": {
+    "intro": "Offers are applied by the server at the POS. They never stack: for each item the best deal wins, and a whole-order offer only wins when it gives the customer more. Past orders keep the offer they were sold with.",
+    "what": "What it does",
+    "when": "When",
+    "mode": "Applied",
+    "auto": "Automatically",
+    "manual": "Cashier taps it",
+    "liveNow": "On right now",
+    "notNow": "Outside its hours right now",
+    "turnOn": "Turn on",
+    "turnOff": "Turn off",
+    "new": "New promotion",
+    "edit": "Edit promotion",
+    "kind": "Type",
+    "kinds": {
+      "discount": "Discount",
+      "combo": "Combo (bundle price)"
+    },
+    "autoApply": "Apply automatically",
+    "autoHint": "The POS applies it by itself whenever it fits the cart.",
+    "manualHint": "The cashier taps it on the POS (for coupons or special cases). Every use is recorded.",
+    "discountTitle": "Discount",
+    "comboTitle": "Combo",
+    "scope": "Applies to",
+    "scopes": {
+      "variant": "Specific sizes",
+      "category": "A category",
+      "order": "The whole order"
+    },
+    "discountType": "Discount type",
+    "types": {
+      "percentage": "Percentage (%)",
+      "fixed_amount": "Fixed amount ({{currency}})"
+    },
+    "valuePct": "Percent off",
+    "valueAmount": "Amount off",
+    "scopeHintBase": "Takes the discount off the size's normal price. Extras (milk, shots) are charged in full.",
+    "scopeHintOrder": "Takes the discount off the whole order, extras included. It replaces size and combo offers only when it gives the customer more.",
+    "searchSizes": "Search products",
+    "picked_one": "{{count}} size selected",
+    "picked_other": "{{count}} sizes selected",
+    "comboPrice": "Combo price",
+    "comboHint": "Replaces the normal prices of the items in the bundle. Extras are charged on top. It applies once for every complete bundle in the cart.",
+    "part": "Part {{n}}",
+    "qty": "Quantity",
+    "partFrom": "Items from",
+    "anyOfCategory": "Any item of a category",
+    "specificSizes": "Specific sizes",
+    "pickCategory": "Choose a category",
+    "addPart": "Add a part",
+    "scheduleTitle": "When it applies",
+    "startsOn": "First day",
+    "endsOn": "Last day",
+    "days": "Days of the week",
+    "daysHint": "None selected means every day.",
+    "useWindow": "Only during certain hours (Happy Hour)",
+    "windowFrom": "From",
+    "windowTo": "To",
+    "windowHint": "Café time. It may pass midnight (for example 22:00 to 02:00).",
+    "preview": "Preview",
+    "always": "Always",
+    "wholeOrder": "the whole order",
+    "sentence": {
+      "discount": "{{value}} off {{target}}",
+      "combo": "{{parts}} for {{price}}",
+      "between": "{{from}} to {{to}}",
+      "from": "From {{date}}",
+      "until": "Until {{date}}"
+    },
+    "status": {
+      "active": "Active",
+      "scheduled": "Scheduled",
+      "expired": "Ended",
+      "off": "Off"
+    },
+    "belowCost": "Some prices drop below what the ingredients cost",
+    "belowCostVariant": "{{name}}: {{full}} becomes {{price}}, but it costs {{cost}} to make.",
+    "belowCostComboAlways": "The combo price {{price}} is below the cost of even the cheapest bundle ({{cost}}).",
+    "belowCostComboMaybe": "The combo price {{price}} is below the cost of the most expensive bundle ({{cost}}).",
+    "belowCostNote": "You can still save it. Only the recipe is counted, not extras.",
+    "unknownCost_one": "{{count}} size has no known cost yet, so it could not be checked.",
+    "unknownCost_other": "{{count}} sizes have no known cost yet, so they could not be checked.",
+    "errName": "Enter a name.",
+    "errWindow": "Set both times of the window."
   }
 }

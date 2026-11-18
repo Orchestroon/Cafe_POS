@@ -1,5 +1,7 @@
 # Sprint 6 plan — Release readiness
 
+> **Superseded (owner, 2026-11-18).** Sprint 6 was re-scoped to **Promotions** and **production readiness** (Caddy stack, hardened settings, `create_admin`, backups and restore test, react-router v7, self-hosted fonts, `legacy/` removal). What was built, decided and checked is in `docs/sprints/sprint-6-report.md`. **Deferred, not built:** tasks 5 (`import_catalog`), 6-8 where they concern the import and the user guide (`USER_GUIDE.md`), the `v1.0.0` tag, and the platform super-admin console. This file is kept as the original draft for the deferred items.
+
 Read: CLAUDE.md, PROGRESS.md, sprint-4-report, spec §4.4, §5.9, §11 (Sprint 6), §12 (AT-21, AT-23, AT-24), §13, §14 (hosting).
 
 Status: **draft, not started.** Moved from Sprint 5 to Sprint 6 by the owner (2026-11-17): Sprint 5 is now the logic review and fixes. This plan is re-checked after Sprint 5, because the import (task 5) and the user guide (task 8) follow the fixed logic. No code until the owner says "approved, start".

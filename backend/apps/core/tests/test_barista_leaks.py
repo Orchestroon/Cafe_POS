@@ -70,7 +70,28 @@ def world(shop, barista_c, org):
     sold = data(r)
     paid = data(checkout(barista_c, [item(shop.small)], [cash("65.00")], "65.00"))
     refunded = data(refund(barista_c, paid["order_id"], "65.00"))
+    from apps.promotions.models import Promotion
+
+    # after the sales above (their totals stay as they were): an automatic and a tap-to-apply offer
+    promo = Promotion.objects.create(
+        organization=org,
+        name="Ten",
+        kind="discount",
+        scope="order",
+        discount_type="percentage",
+        discount_value="10.00",
+    )
+    Promotion.objects.create(
+        organization=org,
+        name="Coupon",
+        kind="discount",
+        scope="order",
+        auto_apply=False,
+        discount_type="percentage",
+        discount_value="20.00",
+    )
     return {
+        "promotion": str(promo.pk),
         "shop": shop,
         "shift": shift["id"],
         "order": sold["order_id"],

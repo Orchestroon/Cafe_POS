@@ -18,7 +18,7 @@ from apps.tenancy.models import OrganizationSettings
 from apps.tenancy.seed import default_location
 
 from . import consumption, loader
-from .models import InvoiceCounter, Order, OrderItem, Payment
+from .models import InvoiceCounter, Order, OrderItem, OrderPromotion, Payment
 from .services import price_and_consume, quote_payload, to_requests
 
 ZERO = Decimal("0.00")
@@ -179,7 +179,9 @@ def place_order(user, data, key) -> tuple[int, dict]:
     org = user.organization
     shift = _lock_shift(user)  # 1. own open shift (row locked until commit)
     requests = to_requests(data["items"])  # 2. non-empty cart
-    priced, consumptions, required = price_and_consume(org, requests)  # 3. fresh DB data
+    priced, consumptions, required = price_and_consume(  # 3. fresh DB data, promotions re-checked
+        org, requests, data.get("promotion_ids", ())
+    )
     expected = q_money(data["expected_total"])  # 4. the client's total must match the server's
     if expected != priced.total:
         available = loader.read_balances(org, list(required))
@@ -237,9 +239,19 @@ def place_order(user, data, key) -> tuple[int, dict]:
             modifiers_snapshot=list(p.modifiers),
             recipe_snapshot=_recipe_snapshot(cons.lines),
             consumption_snapshot=cost_rows,
-            promotion_snapshot=None,
+            promotion_snapshot=list(p.promotions) or None,
         )
         order_items.append((item, cons))
+    for a in priced.applied:  # what was applied, one row per promotion (reports, audit)
+        OrderPromotion.objects.create(
+            organization=org,
+            order=order,
+            promotion_id=a["id"],
+            name_snapshot=a["name"],
+            kind=a["kind"],
+            amount=a["amount"],
+            manual=a["manual"],
+        )
     payments = [  # 9.
         Payment.objects.create(organization=org, order=order, shift=shift, **row)
         for row in pay_rows
@@ -253,6 +265,11 @@ def place_order(user, data, key) -> tuple[int, dict]:
             "invoice_no": invoice_no,
             "total": str(order.total),
             "items": len(order_items),
+            "discount_total": str(order.discount_total),
+            "promotions": [
+                {"promotion_id": a["id"], "name": a["name"], "amount": str(a["amount"])}
+                for a in priced.applied
+            ],
             "payments": [{"method": p.method, "amount": str(p.amount)} for p in payments],
             "shift_id": str(shift.pk),
         },
@@ -266,6 +283,7 @@ def place_order(user, data, key) -> tuple[int, dict]:
         "discount_total": str(order.discount_total),
         "tax_total": str(order.tax_total),
         "total": str(order.total),
+        "promotions": [{**a, "amount": str(a["amount"])} for a in priced.applied],
         "payments": [
             {
                 "method": p.method,

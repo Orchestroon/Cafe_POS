@@ -43,6 +43,7 @@ export interface PendingCheckout {
     items: { variant_id: string; quantity: number; modifier_option_ids: string[] }[];
     payments: Record<string, string>[];
     expected_total: string;
+    promotion_ids?: string[];
   };
 }
 export const loadPending = (userId: string) => read<PendingCheckout>(pendingKey(userId));

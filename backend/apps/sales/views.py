@@ -33,7 +33,13 @@ class QuoteView(APIView):
     def post(self, request):
         ser = QuoteSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        return Response(services.quote(request.user.organization, ser.validated_data["items"]))
+        return Response(
+            services.quote(
+                request.user.organization,
+                ser.validated_data["items"],
+                ser.validated_data["promotion_ids"],
+            )
+        )
 
 
 class CheckoutView(APIView):

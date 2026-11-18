@@ -1,7 +1,7 @@
 # Drip Café POS
 
 Django + DRF backend (`backend/`), React + TypeScript + Vite frontend (`frontend/`).
-Spec: `docs/PROJECT_SPEC.md`. Status: `docs/PROGRESS.md`. `legacy/` is the old static prototype (read-only UI reference).
+Spec: `docs/PROJECT_SPEC.md`. Status: `docs/PROGRESS.md`. The old static prototype `legacy/` was removed in Sprint 6 (see git history).
 
 ## Dev quick start
 ```bash

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { api } from "../api/client";
 import type { Balance, Ingredient, Movement } from "../api/types";
 import { useAuth } from "../auth/AuthContext";

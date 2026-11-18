@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router";
 import { api } from "../api/client";
 import type { AuditEvent, AuditMeta, User } from "../api/types";
 import { actionKey, AREAS, areaOf, details, sentence, type Ctx } from "../audit/describe";
