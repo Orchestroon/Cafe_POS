@@ -12,6 +12,7 @@ import { HistoryLink } from "./AuditLog";
 import { ErrorBanner, Loading } from "../components/States";
 import { addMoney, lineTotal, normMoney, packCostFrom, packQty, toUnits } from "../lib/decimal";
 import { avgFrom, costPer, readable, toBase, unitsFor, validEntry, type EntryUnit } from "../lib/units";
+import { IngredientForm } from "../components/IngredientForm";
 import { PaySupplierDialog } from "../components/PaySupplierDialog";
 import { SupplierDialog } from "./Suppliers";
 import { formatDateTime, formatMoney } from "../i18n/format";
@@ -76,6 +77,7 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
   const [voiding, setVoiding] = useState(false);
   const [paying, setPaying] = useState(false);
   const [addingSupplier, setAddingSupplier] = useState(false);
+  const [addingIngredientFor, setAddingIngredientFor] = useState<string | null>(null); // the line that gets the new ingredient
   const qtyText = (q: string, u: Unit) => { const r = readable(q, u); return `${r.qty} ${t(`units.${r.unit}`)}`; };
   const perText = (avg: string, u: Unit) => { const c = costPer(avg, u); return t("reports.perUnit", { cost: formatMoney(c.amount, cur), unit: t(`units.${c.unit}`) }); };
 
@@ -178,7 +180,7 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
         {purchase && <button className="btn btn-primary" disabled={dirty || save.isPending} onClick={() => setConfirmPost(true)}>{t("purchases.post")}</button>}
       </>} />
       <ErrorBanner error={save.error ?? del.error} />
-      {clientErr && <div className="alert-banner alert-warning" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
+      {clientErr && <div className="alert-banner alert-error" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
       {purchase && dirty && <div className="alert-banner alert-neutral" style={{ marginBottom: 12 }}>{t("purchases.saveFirst")}</div>}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="form-grid">
@@ -230,8 +232,9 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
                 const pack = r.mode === "pack";
                 return (
                   <tr key={r.key}>
-                    <td><select aria-label={t("nav.ingredients")} className="form-select" value={r.ingredient_id} onChange={(e) => setRow(r.key, { ingredient_id: e.target.value })}>
-                      <option value="">—</option>{ings.data?.map((i) => <option key={i.id} value={i.id}>{i.name} ({t(`units.${i.base_unit}`)})</option>)}</select></td>
+                    <td><span className="with-add"><select aria-label={t("nav.ingredients")} className="form-select" value={r.ingredient_id} onChange={(e) => setRow(r.key, { ingredient_id: e.target.value })}>
+                      <option value="">—</option>{ings.data?.map((i) => <option key={i.id} value={i.id}>{i.name} ({t(`units.${i.base_unit}`)})</option>)}</select>
+                      <button type="button" className="btn btn-outline" aria-label={t("purchases.newIngredient")} title={t("purchases.newIngredient")} onClick={() => setAddingIngredientFor(r.key)}>+</button></span></td>
                     <td><select aria-label={t("purchases.entry")} className="form-select" value={r.mode} onChange={(e) => setRow(r.key, { mode: e.target.value as Row["mode"] })}>
                       <option value="qty">{t("purchases.byQty")}</option><option value="pack">{t("purchases.byPack")}</option></select></td>
                     <td>{pack ? (
@@ -262,6 +265,10 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
         </div>
         <div className="totals" style={{ marginTop: 12 }}><div className="totals-row grand"><span>{t("pos.total")}</span><span>{formatMoney(total, cur)}</span></div></div>
       </div>
+      {addingIngredientFor && (
+        <IngredientForm initial={{ base_unit: "g", is_active: true }} onClose={() => setAddingIngredientFor(null)}
+          onSaved={(i) => { qc.setQueryData<Ingredient[]>(["ingredients", "active"], (old) => [...(old ?? []).filter((x) => x.id !== i.id), i].sort((a, b) => a.name.localeCompare(b.name))); setRow(addingIngredientFor, { ingredient_id: i.id }); }} />
+      )}
       {addingSupplier && (
         <SupplierDialog supplier={null} onClose={() => setAddingSupplier(false)}
           onSaved={(s) => { qc.setQueryData<Supplier[]>(["suppliers", "active"], (old) => [...(old ?? []).filter((x) => x.id !== s.id), s]); setH("supplier_id", s.id); }} />
@@ -273,7 +280,7 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
         </>}>
           <p>{head.on_credit ? t("purchases.postWarningCredit", { total: formatMoney(purchase!.total, cur) }) : t("purchases.postWarning", { total: formatMoney(purchase!.total, cur) })}</p>
           {!head.on_credit && head.source === "cash_drawer" && <p className="form-hint">{t("purchases.drawerNote")}</p>}
-          {post.error instanceof NetworkError ? <div className="alert-banner alert-warning" role="alert">{t("purchases.postUnsure")}</div> : <ErrorBanner error={post.error} />}
+          {post.error instanceof NetworkError ? <div className="alert-banner alert-error" role="alert">{t("purchases.postUnsure")}</div> : <ErrorBanner error={post.error} />}
         </Modal>
       )}
     </>

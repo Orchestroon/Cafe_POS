@@ -244,3 +244,27 @@ td.num, th.num { text-align: end; font-variant-numeric: tabular-nums; }
 .order-panel { padding: 8px 12px 14px; background: var(--bg-surface); border-block-end: 1px solid var(--border-light); }
 .drawer .shift-report { box-shadow: none; }
 @media (max-width: 640px) { .drawer { width: 100%; } }
+
+/* Step 4 polish: sidebar, and errors that always look like errors (boxed, accent edge, icon, readable in RTL). */
+.nav-menu { padding: 0 10px; }
+.nav-item { margin-block-end: 2px; }
+.nav-link { position: relative; padding: 9px 12px; transition: background-color .18s ease, color .18s ease, border-color .18s ease; }
+.nav-link svg { transition: opacity .18s ease, color .18s ease; }
+.nav-link:hover svg { opacity: 1; }
+.nav-link:focus-visible { outline: 2px solid var(--brand-terracotta); outline-offset: 1px; }
+/* Active marker on the start edge: logical, so it flips to the right in Arabic. */
+.nav-link::before { content: ""; position: absolute; inset-inline-start: -10px; inset-block: 22% 22%; width: 3px; border-start-end-radius: 3px; border-end-end-radius: 3px; background: var(--brand-terracotta); opacity: 0; transform: scaleY(.3); transition: opacity .18s ease, transform .18s ease; }
+.nav-link.active::before { opacity: 1; transform: scaleY(1); }
+.nav-section-title { padding: 14px 22px 6px; opacity: 1; color: var(--text-sidebar); font-size: 10.5px; }
+.nav-group + .nav-group { margin-block-start: 6px; }
+
+.alert-banner { line-height: 1.5; border-inline-start-width: 4px; }
+.alert-warning { border-inline-start-color: #d97706; }
+.alert-success { border-inline-start-color: #16a34a; }
+.alert-neutral { border-inline-start-color: var(--text-muted); }
+.alert-error { justify-content: flex-start; background: var(--status-alert-bg); border: 1px solid var(--status-alert-border); border-inline-start: 4px solid var(--status-alert-text); color: var(--status-alert-text); font-weight: 500; text-align: start; }
+.alert-error::before { content: "!"; flex: none; display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--status-alert-text); color: #fff; font-size: 12px; font-weight: 700; line-height: 1; }
+.field-error { display: flex; align-items: flex-start; gap: 4px; margin-block-start: 4px; font-size: 12px; font-weight: 600; line-height: 1.4; text-align: start; }
+.field-error::before { content: "⚠"; flex: none; font-size: 11px; line-height: 1.5; }
+.pr-size-tab:disabled { opacity: .45; cursor: not-allowed; }
+@media (max-width: 640px) { .alert-error { flex-direction: row !important; align-items: flex-start !important; } }

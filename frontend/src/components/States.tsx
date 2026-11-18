@@ -17,7 +17,7 @@ export function useErrorText() {
 export function ErrorBanner({ error }: { error: unknown }) {
   const text = useErrorText();
   if (!error) return null;
-  return <div className="alert-banner alert-warning" role="alert" style={{ marginBottom: 12 }}>{text(error)}</div>;
+  return <div className="alert-banner alert-error" role="alert" style={{ marginBottom: 12 }}>{text(error)}</div>;
 }
 
 export function Empty({ children }: { children: React.ReactNode }) {

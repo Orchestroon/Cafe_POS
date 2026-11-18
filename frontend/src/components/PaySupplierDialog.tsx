@@ -50,8 +50,8 @@ export function PaySupplierDialog({ supplier, preselect, onClose }: { supplier: 
       <button className="btn btn-outline" onClick={onClose}>{t("common.cancel")}</button>
       <button className="btn btn-primary" disabled={pay.isPending} onClick={submit}>{pay.error instanceof NetworkError ? t("pos.retry") : t("suppliers.payConfirm", { amount: formatMoney(total, cur) })}</button>
     </>}>
-      {pay.error instanceof NetworkError ? <div className="alert-banner alert-warning" role="alert" style={{ marginBottom: 12 }}>{t("suppliers.payUnsure")}</div> : <ErrorBanner error={pay.error} />}
-      {clientErr && <div className="alert-banner alert-warning" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
+      {pay.error instanceof NetworkError ? <div className="alert-banner alert-error" role="alert" style={{ marginBottom: 12 }}>{t("suppliers.payUnsure")}</div> : <ErrorBanner error={pay.error} />}
+      {clientErr && <div className="alert-banner alert-error" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
       {owed.isLoading ? <Loading /> : (owed.data ?? []).length === 0 ? <p>{t("suppliers.nothingOwed")}</p> : (
         <div className="table-scroll" style={{ marginBottom: 12 }}>
           <table className="erp-table">

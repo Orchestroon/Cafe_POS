@@ -47,7 +47,7 @@ export function ExpenseDialog({ drawerOnly, onClose }: { drawerOnly: boolean; on
       {drawerOnly && <p className="form-hint" style={{ marginBottom: 10 }}>{t("expenses.drawerNote")}</p>}
       <div className="alert-banner alert-neutral" style={{ marginBottom: 10 }}>{t("expenses.stockHint")}</div>
       <ErrorBanner error={save.error} />
-      {clientErr && <div className="alert-banner alert-warning" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
+      {clientErr && <div className="alert-banner alert-error" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
       <Field label={t("expenses.category")} error={fieldError(save.error, "category")}>
         <select className="form-select" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>
           {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{t(`expenses.categories.${c}`)}</option>)}

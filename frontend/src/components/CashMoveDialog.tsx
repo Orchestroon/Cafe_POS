@@ -36,7 +36,7 @@ export function CashMoveDialog({ onClose }: { onClose: () => void }) {
     </>}>
       <p className="form-hint" style={{ marginBottom: 10 }}>{t("cash.note")}</p>
       <ErrorBanner error={save.error} />
-      {clientErr && <div className="alert-banner alert-warning" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
+      {clientErr && <div className="alert-banner alert-error" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
       <div role="radiogroup" aria-label={t("cash.title")} style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         {(["out", "in"] as const).map((k) => (
           <button key={k} type="button" role="radio" aria-checked={kind === k} className={`btn ${kind === k ? "btn-primary" : "btn-outline"}`} onClick={() => setKind(k)}>{t(`cash.${k}`)}</button>

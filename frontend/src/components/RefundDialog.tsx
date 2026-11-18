@@ -38,7 +38,7 @@ export function RefundDialog({ order, onClose }: { order: OrderDetail; onClose: 
       <button className="btn btn-outline" onClick={onClose}>{t("common.cancel")}</button>
       <button className="btn btn-danger" disabled={refund.isPending} onClick={submit}>{refund.error instanceof NetworkError ? t("pos.retry") : t("orders.refundConfirm")}</button>
     </>}>
-      {refund.error instanceof NetworkError ? <div className="alert-banner alert-warning" role="alert" style={{ marginBottom: 12 }}>{t("orders.refundUnsure")}</div> : <ErrorBanner error={refund.error} />}
+      {refund.error instanceof NetworkError ? <div className="alert-banner alert-error" role="alert" style={{ marginBottom: 12 }}>{t("orders.refundUnsure")}</div> : <ErrorBanner error={refund.error} />}
       <div className="totals" style={{ marginBottom: 12 }}>
         <div className="totals-row grand"><span>{t("orders.refundTotal")}</span><span>{formatMoney(order.total, cur)}</span></div>
         {order.payments.map((p) => <div className="totals-row" key={p.method}><span>{t("orders.refundTo", { method: t(`pos.tabs.${p.method}`) })}</span><span>{formatMoney(p.amount, cur)}</span></div>)}

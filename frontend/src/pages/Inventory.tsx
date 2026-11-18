@@ -181,7 +181,7 @@ function Adjust({ initialId, onClose }: { initialId: string; onClose: () => void
     </>}>
       <div className="alert-banner alert-warning" role="note" style={{ marginBottom: 12 }}>{t("inventory.addWarning")}</div>
       <ErrorBanner error={save.error} />
-      {clientErr && <div className="alert-banner alert-warning" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
+      {clientErr && <div className="alert-banner alert-error" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
       {done && <div className="alert-banner alert-success" role="status" style={{ marginBottom: 12 }}>{done}</div>}
       <Field label={t("nav.ingredients")} error={fieldError(save.error, "ingredient_id")}>
         <select className="form-select" value={f.ingredient_id} onChange={(e) => setF({ ...f, ingredient_id: e.target.value })}>

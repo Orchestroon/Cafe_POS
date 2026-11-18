@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ApiError } from "../api/client";
-import type { Unit } from "../api/types";
+import type { Ingredient, Unit } from "../api/types";
 import { Check, Field, fieldError, isDecimal, TextField } from "./Form";
 import { Modal } from "./Modal";
 import { ErrorBanner } from "./States";
@@ -11,7 +11,7 @@ import { ErrorBanner } from "./States";
 export interface IngredientDraft { id?: string; name?: string; base_unit?: Unit; low_stock_threshold?: string | null; is_active?: boolean }
 
 /** New / edit ingredient (Step 3: moved out of the old Ingredients page into Inventory & Stock). */
-export function IngredientForm({ initial, onClose }: { initial: IngredientDraft; onClose: () => void }) {
+export function IngredientForm({ initial, onClose, onSaved }: { initial: IngredientDraft; onClose: () => void; onSaved?: (i: Ingredient) => void }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [f, setF] = useState({
@@ -26,9 +26,9 @@ export function IngredientForm({ initial, onClose }: { initial: IngredientDraft;
         low_stock_threshold: f.threshold.trim() === "" ? null : f.threshold.trim(),
       };
       if (!initial.id) body.base_unit = f.base_unit; // create-only
-      return initial.id ? api.patch(`/ingredients/${initial.id}`, body) : api.post("/ingredients", body);
+      return initial.id ? api.patch<Ingredient>(`/ingredients/${initial.id}`, body) : api.post<Ingredient>("/ingredients", body);
     },
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["ingredients"] }); void qc.invalidateQueries({ queryKey: ["balances"] }); onClose(); },
+    onSuccess: (i) => { void qc.invalidateQueries({ queryKey: ["ingredients"] }); void qc.invalidateQueries({ queryKey: ["balances"] }); onSaved?.(i); onClose(); },
   });
   const submit = () => {
     const e: Record<string, string> = {};

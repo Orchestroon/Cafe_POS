@@ -118,7 +118,7 @@ function ReturnStockDialog({ order, onClose }: { order: OrderDetail; onClose: ()
     </>}>
       <p className="form-hint" style={{ marginBottom: 10 }}>{t("orders.returnNote")}</p>
       <ErrorBanner error={save.error} />
-      {clientErr && <div className="alert-banner alert-warning" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
+      {clientErr && <div className="alert-banner alert-error" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
       <table className="erp-table">
         <thead><tr><th>{t("nav.ingredients")}</th><th className="num">{t("orders.used")}</th><th className="num">{t("orders.giveBack")}</th></tr></thead>
         <tbody>{[...used.entries()].map(([id, u]) => (

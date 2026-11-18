@@ -40,7 +40,7 @@ function SettingsForm({ initial }: { initial: Settings }) {
     <>
       <PageHeader title={t("nav.settings")} actions={<button className="btn btn-primary" disabled={save.isPending} onClick={submit}>{t("common.save")}</button>} />
       <ErrorBanner error={save.error} />
-      {clientErr && <div className="alert-banner alert-warning" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
+      {clientErr && <div className="alert-banner alert-error" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
       {saved && <div className="alert-banner alert-success" role="status" style={{ marginBottom: 12 }}>{t("settings.saved")}</div>}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-header"><div className="card-title">{t("settings.business")}</div></div>

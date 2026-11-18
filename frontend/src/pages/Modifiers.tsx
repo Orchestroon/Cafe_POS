@@ -78,7 +78,7 @@ function GroupFields({ group, onSaved }: { group?: ModifierGroup; onSaved: (g: M
     <>
       <ErrorBanner error={save.error} />
       {group?.slot_warnings && group.slot_warnings.length > 0 && (
-        <div className="alert-banner alert-warning" role="alert" style={{ marginBottom: 12 }}>
+        <div className="alert-banner alert-error" role="alert" style={{ marginBottom: 12 }}>
           {t("modifiers.slotWarningsText", { slot: group.replacement_slot })}: {group.slot_warnings.map((w) => `${w.product_name} · ${w.variant_label}`).join(", ")}
         </div>
       )}
@@ -173,7 +173,7 @@ function OptionEditor({ groupId, option, onClose }: { groupId: string; option?: 
   return (
     <Modal title={option ? t("modifiers.editOption") : t("modifiers.addOption")} onClose={onClose} footer={<><button className="btn btn-outline" onClick={onClose}>{t("common.cancel")}</button><button className="btn btn-primary" disabled={save.isPending} onClick={submit}>{t("common.save")}</button></>}>
       <ErrorBanner error={save.error} />
-      {clientErr && <div className="alert-banner alert-warning" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
+      {clientErr && <div className="alert-banner alert-error" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
       <div className="form-grid">
         <TextField label={t("modifiers.label")} value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })} error={fieldError(save.error, "label")} />
         <TextField label={t("modifiers.price")} inputMode="decimal" value={f.price_delta} onChange={(e) => setF({ ...f, price_delta: e.target.value })} error={fieldError(save.error, "price_delta")} />

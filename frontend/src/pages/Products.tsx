@@ -46,6 +46,16 @@ function fromSetup(p: ProductSetup): Draft {
   };
 }
 
+const PRESET_SIZES = ["M", "L", "XL"];
+const hasSize = (sizes: Size[], label: string) => sizes.some((s) => s.label.trim().toLowerCase() === label.toLowerCase());
+/** The preset sizes this product does not have yet. */
+const missingPreset = (sizes: Size[]) => PRESET_SIZES.filter((x) => !hasSize(sizes, x));
+/** Auto name for "+ Add size": M, then L, then XL; after that empty (shown as "New size"). */
+const nextSizeName = (sizes: Size[]) => missingPreset(sizes)[0] ?? "";
+/** A product with one default size nobody has touched yet: the preset replaces it instead of adding to it. */
+const untouchedDefault = (sizes: Size[], defaultLabel: string) =>
+  sizes.length === 1 && !sizes[0].id && sizes[0].label === defaultLabel && !sizes[0].price.trim() && !sizes[0].sku.trim() && sizes[0].lines.length === 0;
+
 /** Waste as the server stores it: "5" → "5.00". */
 const wasteStr = (w: string) => { const n = toUnits(w, 2); return `${n / 100n}.${String(n % 100n).padStart(2, "0")}`; };
 
@@ -312,7 +322,13 @@ function Editor({ id, initial, ingredients, groups, balances, categories, onBack
               {s.track_stock && s.lines.length === 0 && <span className="pr-dot" title={t("products.noRecipeHint")} aria-label={t("products.noRecipe")} />}
             </button>
           ))}
-          <button className="pr-size-tab add" onClick={() => { set({ sizes: [...d.sizes, { ...newSize(""), track_stock: ptype !== "none" }] }); setTab(d.sizes.length); }}>{t("products.addSizeTab")}</button>
+          <button className="pr-size-tab add" onClick={() => { set({ sizes: [...d.sizes, { ...newSize(nextSizeName(d.sizes)), track_stock: ptype !== "none" }] }); setTab(d.sizes.length); }}>{t("products.addSizeTab")}</button>
+          <button className="pr-size-tab add" disabled={missingPreset(d.sizes).length === 0} title={t("products.sizePresetHint")} onClick={() => {
+            const fresh = untouchedDefault(d.sizes, t("products.defaultSize"));
+            const add = missingPreset(d.sizes).map((label) => ({ ...newSize(label), track_stock: fresh ? d.sizes[0].track_stock : ptype !== "none" }));
+            set({ sizes: fresh ? add : [...d.sizes, ...add] });
+            setTab(fresh ? 0 : d.sizes.length);
+          }}>{t("products.sizePreset")}</button>
         </div>
         {size && (
           <div className="pr-grid-4">
@@ -340,7 +356,7 @@ function Editor({ id, initial, ingredients, groups, balances, categories, onBack
           )}
           {size.track_stock && size.lines.some((l) => l.ingredient_id) && <RecipeCostBar size={size} ings={ings} unitCostOf={unitCostOf} />}
           {size.track_stock && (size.lines.length === 0 || (ptype === "stock" && !size.lines[0]?.ingredient_id)) && <div className="alert-banner alert-warning" role="status" style={{ marginTop: 10 }}>{t("products.noRecipeHint")}</div>}
-          {slotWarnings.map((g) => <div key={g.id} className="alert-banner alert-warning" role="alert" style={{ marginTop: 8 }}>{t("recipe.slotMissing", { group: g.name, slot: g.replacement_slot })}</div>)}
+          {slotWarnings.map((g) => <div key={g.id} className="alert-banner alert-error" role="alert" style={{ marginTop: 8 }}>{t("recipe.slotMissing", { group: g.name, slot: g.replacement_slot })}</div>)}
           <div className="alert-banner alert-success pr-info"><span aria-hidden="true">✓</span> {t("products.recipeInfo")}</div>
         </div>
       )}
