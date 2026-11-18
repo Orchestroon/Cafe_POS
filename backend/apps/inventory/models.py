@@ -65,7 +65,14 @@ class StockAdjustment(TenantModel):
             models.CheckConstraint(
                 condition=Q(kind="opening_balance") | ~Q(reason=""),
                 name="adjustment_reason_required",
-            )
+            ),
+            # D21/D22: stock never comes in with an unknown cost. IS NOT NULL is explicit: a NULL
+            # would make a bare "> 0" check pass.
+            models.CheckConstraint(
+                condition=~Q(kind="opening_balance")
+                | Q(total_value__isnull=False, total_value__gt=0, qty_delta__gt=0),
+                name="opening_balance_has_value",
+            ),
         ]
 
 

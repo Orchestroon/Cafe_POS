@@ -353,6 +353,7 @@ def test_a_whole_day_every_pound_and_gram(admin_c, barista_c, costed):
         "/api/v1/expenses",
         {"category": "supplies", "description": "Ice", "amount": "15.00"},
         format="json",
+        headers={"Idempotency-Key": str(uuid.uuid4())},
     )
     assert r.status_code == 201
     buy(admin_c, milk, "1", "1000", "33.33", post=False)  # a draft moves nothing
@@ -365,6 +366,7 @@ def test_a_whole_day_every_pound_and_gram(admin_c, barista_c, costed):
             "payment_method": "transfer",
         },  # noqa: E501
         format="json",
+        headers={"Idempotency-Key": str(uuid.uuid4())},
     )
     admin_c.post(
         "/api/v1/inventory/adjustments",

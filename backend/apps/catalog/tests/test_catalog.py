@@ -1,6 +1,8 @@
+import importlib
 import threading
 
 import pytest
+from django.apps import apps as django_apps
 from django.db import connection
 
 from apps.audit.models import AuditEvent
@@ -98,17 +100,49 @@ def test_validation_money_strings_uniqueness(admin_c):
     assert ProductVariant.objects.count() == 3
 
 
-def test_blank_sku_allowed_multiple_times(admin_c):
+def test_a_blank_sku_gets_the_next_automatic_code(admin_c):
+    """D22: SKU-00001, SKU-00002 ... for sizes saved without one; a typed SKU is kept."""
+    _, prod = make_latte(admin_c)  # three typed SKUs: they do not use up numbers
+    url = f"/api/v1/products/{prod['id']}/variants"
+    skus = []
+    for label, sku in [("A", ""), ("B", None), ("C", "MY-CODE")]:
+        body = {"label": label, "price": "1.00"} | ({} if sku is None else {"sku": sku})
+        r = admin_c.post(url, body, format="json")
+        assert r.status_code == 201
+        skus.append(data(r)["sku"])
+    assert skus == ["SKU-00001", "SKU-00002", "MY-CODE"]
+
+
+def test_an_automatic_code_skips_a_number_a_typed_sku_already_took(admin_c):
     _, prod = make_latte(admin_c)
     url = f"/api/v1/products/{prod['id']}/variants"
-    assert (
-        admin_c.post(url, {"label": "A", "price": "1.00", "sku": ""}, format="json").status_code
-        == 201
-    )
-    assert (
-        admin_c.post(url, {"label": "B", "price": "1.00", "sku": ""}, format="json").status_code
-        == 201
-    )
+    admin_c.post(url, {"label": "A", "price": "1.00", "sku": "SKU-00001"}, format="json")
+    r = admin_c.post(url, {"label": "B", "price": "1.00"}, format="json")
+    assert data(r)["sku"] == "SKU-00002"
+
+
+def test_clearing_a_sku_gives_a_new_code_and_other_edits_keep_it(admin_c):
+    _, prod = make_latte(admin_c)
+    url = f"/api/v1/products/{prod['id']}/variants"
+    v = data(admin_c.post(url, {"label": "A", "price": "1.00"}, format="json"))
+    edit = admin_c.patch(f"/api/v1/variants/{v['id']}", {"price": "2.00"}, format="json")
+    assert data(edit)["sku"] == v["sku"] == "SKU-00001"
+    cleared = admin_c.patch(f"/api/v1/variants/{v['id']}", {"sku": ""}, format="json")
+    assert data(cleared)["sku"] == "SKU-00002"
+
+
+def test_the_setup_screen_path_also_numbers_blank_skus(admin_c):
+    cat = data(admin_c.post("/api/v1/categories", {"name": "Hot"}, format="json"))
+    body = {
+        "product": {"category_id": cat["id"], "name": "Tea"},
+        "variants": [
+            {"label": "S", "price": "10.00", "sku": "", "track_stock": False},
+            {"label": "L", "price": "12.00", "sku": "TEA-L", "track_stock": False},
+        ],
+    }
+    r = admin_c.post("/api/v1/products/setup", body, format="json")
+    assert r.status_code == 201, r.content
+    assert sorted(ProductVariant.objects.values_list("sku", flat=True)) == ["SKU-00001", "TEA-L"]
 
 
 def test_product_modifier_group_links_replace_and_audit(admin_c, org):
@@ -217,3 +251,23 @@ def test_concurrent_price_edits_audit_a_consistent_chain(org, admin):
         for e in events
     ]
     assert chain[0][0] == "10.00" and chain[1][0] == chain[0][1]  # 2nd "before" = 1st "after"
+
+
+def test_the_sku_backfill_numbers_old_sizes_oldest_first_and_resumes_the_counter(admin_c):
+    from apps.core.models import Sequence
+
+    make_latte(admin_c)  # LATTE-Small / Large / XL
+    ProductVariant.objects.filter(label="Small").update(sku=None)
+    ProductVariant.objects.filter(label="XL").update(sku="SKU-00001")  # typed, takes number 1
+    ProductVariant.objects.filter(label="Large").update(sku="")
+    Sequence.objects.all().delete()
+    importlib.import_module("apps.catalog.migrations.0004_auto_sku").give_skus(django_apps, None)
+    got = dict(ProductVariant.objects.values_list("label", "sku"))
+    assert got == {"Small": "SKU-00002", "Large": "SKU-00003", "XL": "SKU-00001"}
+    assert Sequence.objects.get(name="sku").last_number == 3
+    r = admin_c.post(
+        f"/api/v1/products/{ProductVariant.objects.first().product_id}/variants",
+        {"label": "New", "price": "1.00"},
+        format="json",
+    )
+    assert data(r)["sku"] == "SKU-00004"

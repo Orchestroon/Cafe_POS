@@ -2,6 +2,7 @@ from django.db import models
 from django.db.models import Q
 
 from apps.core.models import TenantModel
+from apps.core.sequences import next_number
 
 
 class Category(TenantModel):
@@ -40,6 +41,19 @@ class ProductVariant(TenantModel):
     # B3: True = the size must have a recipe to be sold. False ("No stock tracking", e.g. a service
     # item) = it sells with no stock deduction and must keep an empty recipe.
     track_stock = models.BooleanField(default=True)
+
+    def save(self, *args, **kwargs):
+        """D22: a size with no SKU gets the next SKU-00001 code; a typed SKU is kept as it is."""
+        update_fields = kwargs.get("update_fields")
+        if not self.sku and (update_fields is None or "sku" in update_fields):
+            while True:  # skip a number a typed SKU already took
+                sku = f"SKU-{next_number(self.organization_id, 'sku'):05d}"
+                if not ProductVariant.objects.filter(
+                    organization_id=self.organization_id, sku=sku
+                ).exists():
+                    break
+            self.sku = sku
+        super().save(*args, **kwargs)
 
     class Meta:
         ordering = ["sort_order", "price"]

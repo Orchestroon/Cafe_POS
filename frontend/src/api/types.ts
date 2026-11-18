@@ -73,14 +73,14 @@ export interface Supplier { id: string; name: string; phone: string; notes: stri
 export interface SupplierPayment {
   id: string; supplier: { id: string; name: string }; amount: string; source: PaySource; payment_method: PayMethod; note: string;
   status: "posted" | "voided"; paid_at: string; created_by: Person | null; void_reason: string; voided_at: string | null; voided_by: Person | null;
-  lines: { purchase_id: string; supplier_invoice_no: string; purchased_on: string; amount: string }[];
+  lines: { purchase_id: string; receipt_no: string; supplier_invoice_no: string; purchased_on: string; amount: string }[];
 }
 export interface PurchaseItem {
   id?: string; ingredient_id: string; ingredient_name?: string; unit?: Unit; qty: string; unit_cost: string; line_total?: string;
   pack_label: string; pack_count: string | null; pack_size: string | null; pack_cost?: string | null;
 }
 export interface Purchase {
-  id: string; supplier: { id: string; name: string } | null; supplier_invoice_no: string; purchased_on: string; status: "draft" | "posted" | "voided";
+  id: string; supplier: { id: string; name: string } | null; receipt_no: string; supplier_invoice_no: string; purchased_on: string; status: "draft" | "posted" | "voided";
   payment_method: PayMethod; source: PaySource; notes: string; total: string; on_credit: boolean; amount_paid: string; owed: string; posted_at: string | null; posted_by: Person | null; created_by: Person | null; items: PurchaseItem[];
   void_reason: string; voided_at: string | null; voided_by: Person | null;
 }

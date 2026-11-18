@@ -1,14 +1,17 @@
+import importlib
 import threading
 import uuid
 from decimal import Decimal
 
 import pytest
+from django.apps import apps as django_apps
 from django.db import connection
 
 from apps.audit.models import AuditEvent
 from apps.core.models import IdempotencyRecord
 from apps.expenses.models import Expense
 from apps.inventory.models import StockMovement
+from apps.purchasing import services
 from apps.purchasing.models import Purchase
 from apps.sales.tests.conftest import balance, close_shift, open_shift
 from conftest import client_for, data, make_user
@@ -331,3 +334,82 @@ def test_post_creates_a_missing_balance_row_instead_of_a_500(admin_c, shop):
     r = post_it(admin_c, pid)
     assert r.status_code == 200, r.content
     assert balance(ing) == Decimal("12000.000")
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        {"source": "cash_drawer"},  # external -> drawer: would have posted with no shift locked
+        {"on_credit": True},  # paid now -> credit with no supplier: an unpayable debt
+    ],
+)
+def test_a_draft_edited_while_posting_is_a_409_and_writes_nothing(admin_c, shop, monkeypatch, edit):
+    """The post decides the shift lock and the supplier check from an unlocked read; an edit that
+    lands before the row lock must be refused, not posted on stale values (Step 1, point 2)."""
+    pid = data(draft(admin_c, shop))["id"]
+    before = balance(shop.ing["Whole Milk"])
+    real, calls = services.get_purchase, []
+
+    def racing(org, pk, lock=False):
+        found = real(org, pk, lock)
+        if not lock and not calls:  # the unlocked read; the edit commits right after it
+            calls.append(1)
+            Purchase.objects.filter(pk=pk).update(**edit)
+        return found
+
+    monkeypatch.setattr(services, "get_purchase", racing)
+    r = post_it(admin_c, pid)
+    assert r.status_code == 409 and r.json()["error"]["code"] == "PURCHASE_CHANGED"
+    assert Purchase.objects.get().status == "draft"
+    assert balance(shop.ing["Whole Milk"]) == before
+    assert not StockMovement.objects.filter(movement_type="purchase").exists()
+    assert not Expense.objects.exists() and not IdempotencyRecord.objects.exists()
+
+
+def test_a_purchase_gets_its_own_number_when_posted_not_before(admin_c, shop):
+    """D22: PUR-00001 at post (gapless, kept if voided); the supplier invoice stays optional."""
+    a = data(draft(admin_c, shop))["id"]
+    b = data(draft(admin_c, shop, supplier_invoice_no="INV-77"))["id"]
+    assert data(admin_c.get(f"/api/v1/purchases/{a}"))["receipt_no"] == ""  # a draft: none yet
+    first, second = data(post_it(admin_c, b)), data(post_it(admin_c, a))
+    assert (first["receipt_no"], second["receipt_no"]) == ("PUR-00001", "PUR-00002")
+    assert first["supplier_invoice_no"] == "INV-77" and second["supplier_invoice_no"] == ""
+    assert Expense.objects.get(purchase_id=b).description == "Purchase PUR-00001"
+    assert (
+        AuditEvent.objects.get(action="purchase.posted", entity_id=b).summary["receipt_no"]
+        == "PUR-00001"
+    )
+    admin_c.post(f"/api/v1/purchases/{b}/void", {"reason": "wrong"}, format="json")
+    third = data(post_it(admin_c, data(draft(admin_c, shop))["id"]))
+    assert third["receipt_no"] == "PUR-00003"  # a void does not give its number back
+    assert data(admin_c.get(f"/api/v1/purchases/{b}"))["receipt_no"] == "PUR-00001"
+
+
+def test_a_failed_post_does_not_use_up_a_purchase_number(admin_c, shop):
+    pid = data(draft(admin_c, shop, source="cash_drawer"))["id"]
+    assert post_it(admin_c, pid).status_code == 409  # no open shift
+    assert not Purchase.objects.exclude(receipt_no="").exists()
+    open_shift(admin_c, "1000.00")
+    assert data(post_it(admin_c, pid))["receipt_no"] == "PUR-00001"  # no gap
+
+
+def test_a_client_cannot_set_the_purchase_number(admin_c, shop):
+    r = draft(admin_c, shop, receipt_no="PUR-99999")
+    assert r.status_code == 400
+
+
+def test_the_receipt_backfill_numbers_posted_and_voided_in_posting_order(admin_c, shop):
+    from apps.core.models import Sequence
+
+    ids = [data(draft(admin_c, shop))["id"] for _ in range(3)]
+    for pid in ids[:2]:
+        post_it(admin_c, pid)
+    admin_c.post(f"/api/v1/purchases/{ids[0]}/void", {"reason": "wrong"}, format="json")
+    Purchase.objects.update(receipt_no="")
+    Sequence.objects.all().delete()
+    importlib.import_module("apps.purchasing.migrations.0004_receipt_no").number_posted_purchases(
+        django_apps, None
+    )
+    got = {str(p.pk): p.receipt_no for p in Purchase.objects.all()}
+    assert got == {ids[0]: "PUR-00001", ids[1]: "PUR-00002", ids[2]: ""}  # the draft stays blank
+    assert Sequence.objects.get(name="purchase").last_number == 2

@@ -35,6 +35,8 @@ class Purchase(TenantModel):
     supplier = models.ForeignKey(
         Supplier, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
     )
+    # D22: our own number, PUR-00001, given when the purchase is posted (gapless, kept if voided).
+    receipt_no = models.CharField(max_length=20, blank=True)
     supplier_invoice_no = models.CharField(max_length=60, blank=True)
     purchased_on = models.DateField()
     status = models.CharField(max_length=6, choices=Status.choices, default=Status.DRAFT)
@@ -71,6 +73,11 @@ class Purchase(TenantModel):
             ),
             models.CheckConstraint(
                 condition=Q(on_credit=True) | Q(amount_paid=0), name="purchase_paid_only_credit"
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "receipt_no"],
+                condition=~Q(receipt_no=""),
+                name="uniq_purchase_receipt_no",
             ),
         ]
 

@@ -29,11 +29,11 @@ export function Purchases() {
         </div>
         <ListState loading={q.isLoading} error={q.error} empty={q.data?.data.length === 0}>
           <table className="erp-table">
-            <thead><tr><th>{t("common.date")}</th><th>{t("purchases.supplier")}</th><th>{t("purchases.invoiceNo")}</th><th>{t("common.status")}</th><th className="num">{t("pos.total")}</th><th /></tr></thead>
+            <thead><tr><th>{t("purchases.receiptNo")}</th><th>{t("common.date")}</th><th>{t("purchases.supplier")}</th><th>{t("purchases.invoiceNo")}</th><th>{t("common.status")}</th><th className="num">{t("pos.total")}</th><th /></tr></thead>
             <tbody>
               {q.data?.data.map((p) => (
                 <tr key={p.id}>
-                  <td>{p.purchased_on}</td><td>{p.supplier?.name ?? "—"}</td><td>{p.supplier_invoice_no}</td>
+                  <td className="mono">{p.receipt_no || "—"}</td><td>{p.purchased_on}</td><td>{p.supplier?.name ?? "—"}</td><td>{p.supplier_invoice_no}</td>
                   <td><span className={`badge ${p.status === "posted" ? "badge-active" : p.status === "voided" ? "badge-off" : "badge-draft"}`}>{t(`purchases.${p.status}`)}</span></td>
                   <td className="num">{formatMoney(p.total, cur)}</td>
                   <td><div className="row-actions"><Link className="btn btn-outline btn-sm" to={`/admin/purchases/${p.id}`}>{p.status === "draft" ? t("common.edit") : t("shift.details")}</Link></div></td>

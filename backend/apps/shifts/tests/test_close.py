@@ -215,16 +215,19 @@ def test_close_racing_cash_refunds_never_loses_a_refund(org, shop):
     assert Refund.objects.filter(shift=shift).count() == ok
 
 
+def _expense(c, body):  # every call is a new attempt, so a new Idempotency-Key
+    return c.post(
+        "/api/v1/expenses", body, format="json", headers={"Idempotency-Key": str(uuid.uuid4())}
+    )
+
+
 @pytest.mark.django_db(transaction=True)
 def test_close_racing_drawer_expenses_never_loses_an_expense(org):
     user = make_user(org, "racer", "barista")
     c = client_for(user)
     s = open_shift(c, "100.00")
     body = {"category": "supplies", "description": "Ice", "amount": "10.00"}
-    jobs = [
-        lambda: ("exp", client_for(user).post("/api/v1/expenses", body, format="json").status_code)
-        for _ in range(5)
-    ]
+    jobs = [lambda: ("exp", _expense(client_for(user), body).status_code) for _ in range(5)]
     jobs.append(lambda: ("close", close_shift(client_for(user), s["id"], "0.00").status_code))
     out = _race(jobs)
     ok = sum(1 for k, code in out if k == "exp" and code == 201)
@@ -242,7 +245,7 @@ def test_close_racing_expense_voids_keeps_the_snapshot_true(org, admin):
     c = client_for(user)
     s = open_shift(c, "100.00")
     body = {"category": "supplies", "description": "Ice", "amount": "10.00"}
-    ids = [c.post("/api/v1/expenses", body, format="json").json()["data"]["id"] for _ in range(4)]
+    ids = [_expense(c, body).json()["data"]["id"] for _ in range(4)]
     jobs = [
         lambda i=i: (
             "void",

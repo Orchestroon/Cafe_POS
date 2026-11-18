@@ -96,7 +96,7 @@ def create_purchase_expense(actor, purchase, shift) -> Expense:
         organization=actor.organization,
         type=Expense.Type.PURCHASE,
         category=Expense.Category.PURCHASE,
-        description=f"Purchase {purchase.supplier_invoice_no}".strip() or "Purchase",
+        description=f"Purchase {purchase.receipt_no}".strip(),
         amount=purchase.total,
         payment_method=purchase.payment_method,
         source=purchase.source,

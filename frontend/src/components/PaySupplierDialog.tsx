@@ -55,9 +55,9 @@ export function PaySupplierDialog({ supplier, preselect, onClose }: { supplier: 
       {owed.isLoading ? <Loading /> : (owed.data ?? []).length === 0 ? <p>{t("suppliers.nothingOwed")}</p> : (
         <div className="table-scroll" style={{ marginBottom: 12 }}>
           <table className="erp-table">
-            <thead><tr><th>{t("common.date")}</th><th>{t("purchases.invoiceNo")}</th><th className="num">{t("suppliers.owed")}</th><th className="num">{t("suppliers.payNow")}</th></tr></thead>
+            <thead><tr><th>{t("common.date")}</th><th>{t("purchases.receiptNo")}</th><th className="num">{t("suppliers.owed")}</th><th className="num">{t("suppliers.payNow")}</th></tr></thead>
             <tbody>{owed.data?.map((p) => (
-              <tr key={p.id}><td>{p.purchased_on}</td><td>{p.supplier_invoice_no || "—"}</td><td className="num">{formatMoney(p.owed, cur)}</td>
+              <tr key={p.id}><td>{p.purchased_on}</td><td>{[p.receipt_no, p.supplier_invoice_no].filter(Boolean).join(" · ") || "—"}</td><td className="num">{formatMoney(p.owed, cur)}</td>
                 <td><div className="inline-pair">
                   <input aria-label={t("suppliers.payNow")} className="form-input inline-input num" inputMode="decimal" value={value(p)} onChange={(e) => setAmounts({ ...amounts, [p.id]: e.target.value })} />
                   <button type="button" className="btn btn-outline btn-sm" onClick={() => setAmounts({ ...amounts, [p.id]: p.owed })}>{t("suppliers.all")}</button>
@@ -106,12 +106,12 @@ export function SupplierPaymentsDialog({ supplier, onClose }: { supplier: { id: 
       {q.isLoading ? <Loading /> : (q.data ?? []).length === 0 ? <p>{t("common.empty")}</p> : (
         <div className="table-scroll">
           <table className="erp-table">
-            <thead><tr><th>{t("common.date")}</th><th className="num">{t("expenses.amount")}</th><th>{t("expenses.source")}</th><th>{t("purchases.invoiceNo")}</th><th /></tr></thead>
+            <thead><tr><th>{t("common.date")}</th><th className="num">{t("expenses.amount")}</th><th>{t("expenses.source")}</th><th>{t("purchases.receiptNo")}</th><th /></tr></thead>
             <tbody>{q.data?.map((p) => (
               <tr key={p.id} className={p.status === "voided" ? "row-voided" : ""}>
                 <td>{p.paid_at.slice(0, 10)}</td><td className="num">{formatMoney(p.amount, cur)}</td>
                 <td>{t(`expenses.sources.${p.source}`)} · {t(`expenses.methods.${p.payment_method}`)}{p.status === "voided" && <div className="form-hint">{t("expenses.voidedBecause", { reason: p.void_reason })}</div>}</td>
-                <td>{p.lines.map((l) => l.supplier_invoice_no || l.purchased_on).join(t("audit.listSep"))}</td>
+                <td>{p.lines.map((l) => l.receipt_no || l.supplier_invoice_no || l.purchased_on).join(t("audit.listSep"))}</td>
                 <td>{p.status === "posted" && <button className="btn btn-outline btn-sm" onClick={() => setVoiding(p)}>{t("expenses.void")}</button>}</td>
               </tr>
             ))}</tbody>

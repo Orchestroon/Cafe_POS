@@ -5,6 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
+from apps.core import idempotency
 from apps.core.pagination import EnvelopePagination
 from apps.core.permissions import PolicyPermission
 from apps.core.policy import has_perm
@@ -42,10 +43,22 @@ class ExpenseViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewsets.Ge
 
     @extend_schema(request=ExpenseCreateSerializer, responses={201: OpenApiTypes.OBJECT})
     def create(self, request):
+        key = idempotency.parse_key(request)
         ser = ExpenseCreateSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        exp = services.create_expense(request.user, ser.validated_data)
-        return Response(services.expense_dict(exp), status=201)
+        data = ser.validated_data
+        result = idempotency.run_idempotent(
+            organization=request.user.organization,
+            user=request.user,
+            scope="expense",
+            key=key,
+            payload=request.data,
+            handler=lambda: (
+                201,
+                services.expense_dict(services.create_expense(request.user, data)),
+            ),
+        )
+        return Response(result.body, status=result.status, headers=result.headers())
 
     @extend_schema(request=ExpenseVoidSerializer, responses=OpenApiTypes.OBJECT)
     @action(detail=True, methods=["post"], url_path="void")

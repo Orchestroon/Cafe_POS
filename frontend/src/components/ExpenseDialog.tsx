@@ -1,14 +1,16 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api } from "../api/client";
+import { api, NetworkError } from "../api/client";
 import { EXPENSE_CATEGORIES, type Expense, type PayMethod, type PaySource } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { Field, fieldError, isDecimal, TextField } from "./Form";
 import { Modal } from "./Modal";
 import { ErrorBanner } from "./States";
+import { newKey } from "../lib/uuid";
 
-/** `drawerOnly` ("Pay from drawer"): cash from the user's own open shift. Otherwise an Admin picks
+/** One Idempotency-Key per attempt, kept on a network error so a retry never pays twice.
+ * `drawerOnly` ("Pay from drawer"): cash from the user's own open shift. Otherwise an Admin picks
  * the source and method. The server forces a Barista's expense onto their own shift either way (D10). */
 export function ExpenseDialog({ drawerOnly, onClose }: { drawerOnly: boolean; onClose: () => void }) {
   const { t } = useTranslation();
@@ -19,11 +21,13 @@ export function ExpenseDialog({ drawerOnly, onClose }: { drawerOnly: boolean; on
   const [source, setSource] = useState<PaySource>(drawerOnly ? "cash_drawer" : "external");
   const [method, setMethod] = useState<PayMethod>("cash");
   const [clientErr, setClientErr] = useState("");
+  const key = useRef(newKey());
   const save = useMutation({
-    mutationFn: () => api.post<Expense>("/expenses", {
+    mutationFn: () => api.postIdempotent<Expense>("/expenses", {
       category: f.category, description: f.description.trim(), amount: f.amount.trim(),
       ...(admin ? { source, payment_method: source === "cash_drawer" ? "cash" : method } : {}),
-    }),
+    }, key.current),
+    onError: (e) => { if (!(e instanceof NetworkError)) key.current = newKey(); },
     onSuccess: () => {
       for (const k of ["expenses", "shift"]) void qc.invalidateQueries({ queryKey: [k] });
       onClose();
@@ -38,7 +42,7 @@ export function ExpenseDialog({ drawerOnly, onClose }: { drawerOnly: boolean; on
   return (
     <Modal title={drawerOnly ? t("expenses.payFromDrawer") : t("expenses.new")} onClose={onClose} footer={<>
       <button className="btn btn-outline" onClick={onClose}>{t("common.cancel")}</button>
-      <button className="btn btn-primary" disabled={save.isPending} onClick={submit}>{t("common.save")}</button>
+      <button className="btn btn-primary" disabled={save.isPending} onClick={submit}>{save.error instanceof NetworkError ? t("pos.retry") : t("common.save")}</button>
     </>}>
       {drawerOnly && <p className="form-hint" style={{ marginBottom: 10 }}>{t("expenses.drawerNote")}</p>}
       <div className="alert-banner alert-neutral" style={{ marginBottom: 10 }}>{t("expenses.stockHint")}</div>

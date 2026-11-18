@@ -35,6 +35,7 @@ def payment_dict(p) -> dict:
         "lines": [
             {
                 "purchase_id": str(line.purchase_id),
+                "receipt_no": line.purchase.receipt_no,
                 "supplier_invoice_no": line.purchase.supplier_invoice_no,
                 "purchased_on": line.purchase.purchased_on.isoformat(),
                 "amount": str(line.amount),

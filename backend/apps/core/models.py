@@ -62,3 +62,16 @@ class IdempotencyRecord(TenantModel):
                 fields=["organization", "scope", "key"], name="uniq_idempotency_org_scope_key"
             )
         ]
+
+
+class Sequence(TenantModel):
+    """Gapless per-café counter (SKU codes, purchase numbers). One locked row per name, bumped in
+    the caller's transaction, so a rolled-back operation gives its number back."""
+
+    name = models.CharField(max_length=30)
+    last_number = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["organization", "name"], name="uniq_sequence")
+        ]

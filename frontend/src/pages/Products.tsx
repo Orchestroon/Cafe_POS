@@ -295,7 +295,7 @@ function Editor({ id, initial, ingredients, groups, balances, categories, onBack
           <div className="pr-grid-4">
             <label className="form-label">{t("products.label")}<input className="form-input" value={size.label} onChange={(e) => setSize({ label: e.target.value })} />{sizeField("label") && <span className="field-error" role="alert">{sizeField("label")}</span>}</label>
             <label className="form-label">{t("products.salePrice")} ({cur})<input className="form-input num" inputMode="decimal" value={size.price} onChange={(e) => setSize({ price: e.target.value })} />{sizeField("price") && <span className="field-error" role="alert">{sizeField("price")}</span>}</label>
-            <label className="form-label">{t("products.code")}<input className="form-input mono" value={size.sku} onChange={(e) => setSize({ sku: e.target.value })} />{sizeField("sku") && <span className="field-error" role="alert">{sizeField("sku")}</span>}</label>
+            <label className="form-label">{t("products.code")}<input className="form-input mono" placeholder={t("products.skuAuto")} value={size.sku} onChange={(e) => setSize({ sku: e.target.value })} />{sizeField("sku") && <span className="field-error" role="alert">{sizeField("sku")}</span>}</label>
             <label className="check-row pr-check"><input type="checkbox" checked={size.is_active} onChange={(e) => setSize({ is_active: e.target.checked })} /> {t("products.sizeActive")}</label>
           </div>
         )}

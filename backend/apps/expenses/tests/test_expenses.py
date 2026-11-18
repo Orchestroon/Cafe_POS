@@ -13,8 +13,13 @@ pytestmark = pytest.mark.django_db
 BODY = {"category": "supplies", "description": "Ice bags", "amount": "30.00"}
 
 
-def post(c, **over):
-    return c.post("/api/v1/expenses", {**BODY, **over}, format="json")
+def post(c, key=None, **over):
+    return c.post(
+        "/api/v1/expenses",
+        {**BODY, **over},
+        format="json",
+        headers={"Idempotency-Key": key or str(uuid.uuid4())},
+    )
 
 
 def void(c, pk, reason="entered twice"):
@@ -211,3 +216,61 @@ def test_admin_drawer_expense_cannot_be_back_dated(admin_c):
         admin_c, source="cash_drawer", paid_at=(timezone.now() - timedelta(days=1)).isoformat()
     )
     assert r.status_code == 400 and Expense.objects.count() == 0
+
+
+# --- Step 1: Idempotency-Key (scope "expense") --------------------------------------------------
+
+
+def test_an_expense_needs_an_idempotency_key(barista_c, shift):
+    r = barista_c.post("/api/v1/expenses", BODY, format="json")
+    assert r.status_code == 400 and r.json()["error"]["code"] == "IDEMPOTENCY_KEY_REQUIRED"
+    r = barista_c.post(
+        "/api/v1/expenses", BODY, format="json", headers={"Idempotency-Key": "not-a-uuid"}
+    )
+    assert r.status_code == 400 and r.json()["error"]["code"] == "IDEMPOTENCY_KEY_REQUIRED"
+    assert Expense.objects.count() == 0
+
+
+def test_a_retry_with_the_same_key_replays_and_creates_one_expense(barista_c, shift):
+    key = str(uuid.uuid4())
+    first = post(barista_c, key)
+    second = post(barista_c, key)
+    assert first.status_code == second.status_code == 201
+    assert "Idempotent-Replayed" not in first.headers
+    assert second.headers["Idempotent-Replayed"] == "true"
+    assert data(first) == data(second)
+    assert (
+        Expense.objects.count() == 1
+        and AuditEvent.objects.filter(action="expense.created").count() == 1
+    )
+    assert (
+        barista_c.get("/api/v1/shifts/current").json()["data"]["totals"]["expected_cash"] == "70.00"
+    )  # taken out of the drawer once, not twice
+
+
+def test_the_same_key_with_another_body_is_a_conflict(barista_c, shift):
+    key = str(uuid.uuid4())
+    assert post(barista_c, key).status_code == 201
+    r = post(barista_c, key, amount="31.00")
+    assert r.status_code == 409 and r.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    assert Expense.objects.count() == 1
+
+
+def test_the_same_key_from_another_user_is_a_conflict(org, barista_c, shift):
+    key = str(uuid.uuid4())
+    assert post(barista_c, key).status_code == 201
+    other = client_for(make_user(org, "barista2", "barista"))
+    open_shift(other, "0.00")
+    r = post(other, key)
+    assert r.status_code == 409 and r.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    assert Expense.objects.count() == 1
+
+
+def test_a_failed_expense_leaves_no_record_so_the_same_key_can_retry(barista_c):
+    key = str(uuid.uuid4())
+    r = post(barista_c, key)  # no open shift
+    assert r.status_code == 409 and r.json()["error"]["code"] == "SHIFT_NOT_OPEN"
+    open_shift(barista_c, "100.00")
+    r = post(barista_c, key)
+    assert r.status_code == 201 and "Idempotent-Replayed" not in r.headers
+    assert Expense.objects.count() == 1

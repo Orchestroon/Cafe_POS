@@ -1,4 +1,5 @@
 import threading
+import uuid
 from decimal import Decimal
 
 import pytest
@@ -510,3 +511,39 @@ def test_concurrent_opening_balances_apply_once(org, admin):
     assert sorted(statuses) == [201, 400]
     assert StockBalance.objects.get(ingredient=ing).qty == D("100")
     assert StockMovement.objects.filter(ingredient=ing).count() == 1
+
+
+@pytest.mark.parametrize(
+    ("qty", "value"), [("0.000", "5.00"), ("5.000", "0.00"), ("5.000", "-1.00")]
+)
+def test_the_opening_service_itself_refuses_stock_without_a_cost(admin, admin_c, qty, value):
+    """Step 1: the rule holds for any caller of the service, not only the API serializer."""
+    from apps.core.exceptions import ApiError
+    from apps.inventory.services import set_opening_balances
+
+    a = new_ing(admin_c, "A", "g")
+    item = {"ingredient_id": uuid.UUID(a["id"]), "qty": D(qty), "total_value": D(value)}
+    with pytest.raises(ApiError) as e:
+        set_opening_balances(admin, [item])
+    assert e.value.code == "VALIDATION_ERROR" and not StockMovement.objects.exists()
+
+
+@pytest.mark.parametrize(("qty", "value"), [("5.000", None), ("5.000", "0.00"), ("0.000", "5.00")])
+def test_the_database_refuses_an_opening_balance_without_a_value(admin, admin_c, qty, value):
+    """Step 1: the last line of defence, below the serializer and the service."""
+    from django.db import IntegrityError, transaction
+
+    a = new_ing(admin_c, "A", "g")
+    bal = StockBalance.objects.get(ingredient_id=a["id"])
+    with pytest.raises(IntegrityError), transaction.atomic():
+        StockAdjustment.objects.create(
+            organization=admin.organization,
+            ingredient_id=a["id"],
+            location=bal.location,
+            kind=StockAdjustment.Kind.OPENING,
+            qty_delta=D(qty),
+            total_value=None if value is None else D(value),
+            reason="Opening balance",
+            created_by=admin,
+        )
+    assert not StockAdjustment.objects.exists()

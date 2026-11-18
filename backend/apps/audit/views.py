@@ -71,6 +71,7 @@ def _resolvers(tz):
                 x
                 for x in (
                     p.supplier.name if p.supplier_id else "",
+                    p.receipt_no,
                     p.supplier_invoice_no,
                     p.purchased_on.isoformat(),
                 )

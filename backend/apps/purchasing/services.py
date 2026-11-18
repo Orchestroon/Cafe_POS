@@ -7,6 +7,7 @@ from django.utils import timezone
 from apps.audit.services import record
 from apps.core.exceptions import ApiError
 from apps.core.money import q_avg, q_cost, q_money, q_qty
+from apps.core.sequences import next_number
 from apps.expenses.models import Expense
 from apps.expenses.services import create_purchase_expense, void_purchase_expense
 from apps.inventory.models import Ingredient, StockBalance, StockMovement
@@ -33,6 +34,7 @@ def purchase_dict(p) -> dict:
     return {
         "id": str(p.pk),
         "supplier": {"id": str(p.supplier_id), "name": p.supplier.name} if p.supplier_id else None,
+        "receipt_no": p.receipt_no,
         "supplier_invoice_no": p.supplier_invoice_no,
         "purchased_on": p.purchased_on.isoformat(),
         "status": p.status,
@@ -211,6 +213,14 @@ def post_purchase(actor, pk, key) -> tuple[int, dict]:
     p = get_purchase(org, pk, lock=True)
     if p.status == Purchase.Status.POSTED:
         raise ApiError("PURCHASE_ALREADY_POSTED", "This purchase is already posted.", 409)
+    if (p.on_credit, p.source, p.supplier_id) != (seen.on_credit, seen.source, seen.supplier_id):
+        # A draft edit slipped in between the unlocked read and the lock: the shift lock and the
+        # supplier check above were decided on stale values. Nothing is written; reload and retry.
+        raise ApiError(
+            "PURCHASE_CHANGED",
+            "This purchase was changed while posting. Reload it and post again.",
+            409,
+        )
     items = list(p.items.select_related("ingredient"))
     if not items:
         raise _bad("items", "A purchase needs at least one item.")
@@ -244,6 +254,9 @@ def post_purchase(actor, pk, key) -> tuple[int, dict]:
             occurred_at=now,
         )
         movement_ids.append(str(mv.pk))
+    p.receipt_no = (
+        f"PUR-{next_number(org.pk, 'purchase'):05d}"  # D22: gapless, rolls back with a failed post
+    )
     # Paid now: one expense, today. On credit: no money goes out until a supplier payment.
     expense = None if p.on_credit else create_purchase_expense(actor, p, shift)
     p.status, p.posted_at, p.posted_by = Purchase.Status.POSTED, now, actor
@@ -253,6 +266,7 @@ def post_purchase(actor, pk, key) -> tuple[int, dict]:
         "purchase.posted",
         p,
         {
+            "receipt_no": p.receipt_no,
             "total": str(p.total),
             "items": len(items),
             "source": p.source,

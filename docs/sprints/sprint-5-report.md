@@ -2,7 +2,7 @@
 
 Plan: `docs/sprints/sprint-5-plan.md` (approved by the owner 2026-11-17). Logic, explained for the owner: `docs/SYSTEM_LOGIC.md`. Spec: new decision **D21** (Section 2), plus Sections 7, 8.7, 8.9, 8.13, 9.
 
-Status: **implemented, waiting for your manual test and approval.** Nothing is committed yet (your rule). Branch `sprint-5-logic`, which also carries the uncommitted D20 work.
+Status: **implemented, waiting for your manual test and approval.** Branch `sprint-5-logic`: D20 and Sprint 5 are committed together in `27a39a2` ("Adding new fixes", already pushed to `origin/sprint-5-logic`; you chose to keep it as one commit instead of splitting D20 out). Step 1 (below) is committed on top and not pushed.
 
 ## Your rule for this sprint
 > "I sell for 100, all my costs are 90, so I made 10. Nothing may enter the system without knowing what it cost and where it came from."
@@ -57,4 +57,13 @@ Status: **implemented, waiting for your manual test and approval.** Nothing is c
 - [ ] Arabic: switch to عربي and look over the new texts.
 
 ## Next
-After your approval: commits (D20 separate from Sprint 5, descriptive messages), then push. Then Sprint 6 (release readiness), whose plan is re-checked against this sprint (the catalog import must take opening stock **with its value**).
+After your approval of the manual test: push, then merge into `main`. Then Sprint 6 (release readiness), whose plan is re-checked against this sprint (the catalog import must take opening stock **with its value**).
+
+## Step 1 follow-up (D22, 2026-11-18)
+Review of the 5 logic points, then built on top of `27a39a2`:
+- **Expense creation is idempotent** (scope `expense`); the dialog keeps its key on a network error, so a double click or a retry never pays twice.
+- **Purchase post race:** if the draft's source, credit flag or supplier changes before the row lock, the post returns 409 `PURCHASE_CHANGED` and writes nothing.
+- **Automatic codes:** a size saved without a SKU gets `SKU-00001`...; a purchase gets `PUR-00001` when posted (gapless, kept if voided; the supplier invoice number stays optional). Old sizes and posted/voided purchases were numbered by migration.
+- **Opening balance:** quantity and total value above zero are checked by the serializer, the service and a database check (`opening_balance_has_value`).
+- **Dev DB:** `27a39a2` left 6 opening rows from 2026-11-10 with no value in the dev DB (the re-seed in Q-D had not reached it). The new migrations were verified on that real data, then the DB was backed up (`db-backups/drip-before-step1-reseed-20261118.sql`), reset and re-seeded.
+- Checks: 735 backend tests (714 before), 29 unit tests, i18n check; Playwright e2e was **not run** for Step 1 (two attempts failed on network errors while installing packages; no test ran). Run it before pushing.

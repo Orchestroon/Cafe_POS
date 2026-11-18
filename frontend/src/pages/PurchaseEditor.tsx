@@ -131,7 +131,7 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
   if (posted) {
     return (
       <>
-        <PageHeader title={t("purchases.viewTitle")} subtitle={`${purchase.purchased_on} · ${purchase.supplier?.name ?? "—"}`} actions={<><Link className="btn btn-outline" to="/admin/purchases">{t("orders.back")}</Link><HistoryLink entityType="purchasing.purchase" entityId={purchase.id} />
+        <PageHeader title={t("purchases.viewTitle")} subtitle={`${purchase.receipt_no ? `${purchase.receipt_no} · ` : ""}${purchase.purchased_on} · ${purchase.supplier?.name ?? "—"}`} actions={<><Link className="btn btn-outline" to="/admin/purchases">{t("orders.back")}</Link><HistoryLink entityType="purchasing.purchase" entityId={purchase.id} />
           {purchase.status === "posted" && <button className="btn btn-outline" onClick={() => setVoiding(true)}>{t("purchases.void")}</button>}</>} />
         <div className="card">
           <div className="alert-banner alert-success" style={{ marginBottom: 12 }}>{t("purchases.postedNote", { time: purchase.posted_at ? formatDateTime(purchase.posted_at, tz) : "", by: purchase.posted_by?.display_name ?? "" })}</div>

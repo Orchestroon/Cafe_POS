@@ -2,6 +2,8 @@
 admin-only data. One list of forbidden keys, one recursive check, every shared route (taken from
 the permission matrix, so a new shared route is scanned automatically)."""
 
+import uuid
+
 import pytest
 
 from apps.core.tests.test_permissions_matrix import BOTH, MATRIX
@@ -104,6 +106,7 @@ def test_write_responses_a_barista_gets_have_no_admin_data(world, barista_c):
         "/api/v1/expenses",
         {"category": "supplies", "description": "Ice", "amount": "5.00"},
         format="json",
+        headers={"Idempotency-Key": str(uuid.uuid4())},
     )
     assert e.status_code == 201 and leaks(e.json()) == []
     c = barista_c.post(

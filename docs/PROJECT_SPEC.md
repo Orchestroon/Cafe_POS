@@ -112,6 +112,7 @@ Drip Café needs a web-based **POS for day-to-day sales**, not a demo.
 | D19 | Money review | **Owner, 2026-11-16 — "every pound in or out":** (1) a pack purchase costs exactly packs × pack price; (2) an ingredient used by a recipe or option cannot be switched off; (3) top products count a sale on its day and a refund on its day; (4) a **Money in & out** report; (5a) the gap between a person's previous count and their next opening is shown; (5b) **cash taken out / put in** of the drawer during a shift (Barista and Admin, own shift; Admin cancels while the shift is open); (6) a posted purchase can be **voided** (Admin, reason); (8) **cost and profit now** (brought in from Section 3.4): weighted average cost per ingredient, the cost saved on every sale, a **Profit** report, stock value. Supplier/inventory/ingredient cycle review is the next step. | Final |
 | D20 | Missing costs | **Owner, 2026-11-17 — "how can profit be 100%?":** (1) when any order in the period has no saved cost, the Profit report shows cost, gross profit, margin and net profit as **"can't calculate"** (null), never as 0 / 100 %, and names the ingredients that still have no price (net profit also when a stock change has no cost); (2) a one-time migration fills each ingredient's average cost from purchases posted before D19 (replayed with the D19 rules; balances that already have an average are kept; the stock ledger is not changed); (3) an Admin can **recalculate** the cost of past orders sold without one (`POST /orders/recost?from=&to=`): rows without a cost get today's average cost marked `estimated`, rows that had a cost keep it, the order gets `cost_estimated = true`, each order is audited `order.cost_estimated`; an order with any ingredient still without a price is left untouched; running it again changes nothing. **Part (3) removed by D21 (Sprint 5 P8).** | Final |
 | D21 | Profit cycle (Sprint 5) | **Owner, 2026-11-17 — "I sell for 100, all my costs are 90, so I made 10. Nothing may enter the system without knowing what it cost and where it came from":** (1) the typed `reference_unit_cost` is removed; an ingredient's only cost is its weighted average (L1); (2) stock comes in only by a purchase, an opening balance **with its total value** (any time; a reason once the ingredient has stock, Q-E) or a count surplus; adjustments only take stock out (L2); a count surplus or opening balance is **never profit** (Q-A); (3) an ingredient with no average cost cannot be sold (422 `COST_MISSING`) nor adjusted; (4) a purchase line is quantity + total paid (or by pack); the cost per unit is computed (L4); (5) **buying on credit** with partial supplier payments (P4); (6) a **card fee %** saved on each card payment (Q-C); (7) packaging is part of the recipe (Q-B); (8) **return to stock** after a refund, at the cost it left at (P7); (9) the Profit report reads sales − cost of sales − losses − expenses (by category) − card fees = net profit, with "out of every 100"; (10) expense categories add salaries, card fees, marketing, taxes & fees; (11) **Recalculate cost** (D20 part 3) is removed (P8). P1 (per-person drawer) and P9 (posting day) unchanged. Details: `docs/sprints/sprint-5-plan.md`, `docs/SYSTEM_LOGIC.md`. | Final |
+| D22 | Step 1 (Sprint 5 follow-up) | **Owner, 2026-11-18:** (1) creating an **expense** is idempotent (scope `expense`, `Idempotency-Key` required): a double click or a retry never pays twice; (2) a purchase post refuses with 409 `PURCHASE_CHANGED` when the draft's source, credit flag or supplier changed between the first read and the row lock; (3) a size saved without a SKU gets `SKU-00001`, `SKU-00002`... (typed SKUs are kept); (4) a purchase gets its own number `PUR-00001` **when it is posted** (gapless, kept if voided; drafts have none); `supplier_invoice_no` stays optional; old sizes and posted/voided purchases are numbered by a migration; (5) an opening balance line always needs a quantity and a total value above zero (serializer, service and a database check; the dev DB was reset and re-seeded on 2026-11-18 so no value-less opening rows remain). | Final |
 
 ---
 
@@ -331,11 +332,12 @@ If the existing frontend repo has a different shape, propose the move in the Spr
   - checkout
   - refund
   - purchase post
+  - cash movement, supplier payment, expense creation (D19, D21, D22)
 
   Rules:
   - The `Idempotency-Key` header is required (UUID). If missing, return 400 `IDEMPOTENCY_KEY_REQUIRED`.
   - The record is `IdempotencyRecord(organization, scope, key, request_hash, response_status, response_body, user, created_at)` with `unique(organization, scope, key)`.
-  - `scope` is one of `checkout`, `refund:<order_id>`, `purchase_post:<purchase_id>`.
+  - `scope` is one of `checkout`, `refund:<order_id>`, `purchase_post:<purchase_id>`, `cash_movement`, `supplier_payment`, `expense` (D22).
   - `request_hash` is SHA-256 of the canonical JSON body (sorted keys) plus the scope.
   - The record is inserted inside the same transaction as the business write. On success, the response is stored.
   - Failures roll back everything, including the record, so the client may retry with the same key.
@@ -478,7 +480,7 @@ Every model below except `Organization` inherits `TenantModel` (`id` UUID, `orga
 |---|---|---|
 | `Category` | name, sort_order, is_active | unique(org, name) |
 | `Product` | category, name, description (blank), sort_order, is_active | unique(org, name) |
-| `ProductVariant` | product, label, sku (nullable), price (money ≥ 0), sort_order, is_active, **track_stock** (bool, default true) | unique(product, label); unique(org, sku) where sku not null. **B3 (owner, 2026-11-11):** `track_stock = true` → the size must have at least one recipe line to be sold; `false` ("No stock tracking") → it sells with no deduction and must keep an empty recipe. API adds read-only `has_recipe`. |
+| `ProductVariant` | product, label, sku (auto `SKU-00001` when saved blank, D22; a typed SKU is kept), price (money ≥ 0), sort_order, is_active, **track_stock** (bool, default true) | unique(product, label); unique(org, sku) where sku not null. **B3 (owner, 2026-11-11):** `track_stock = true` → the size must have at least one recipe line to be sold; `false` ("No stock tracking") → it sells with no deduction and must keep an empty recipe. API adds read-only `has_recipe`. |
 | `RecipeLine` | variant (FK CASCADE is acceptable only because recipes are replaced wholesale and history lives in snapshots), ingredient, base_qty (qty ≥ 0), waste_pct (decimal 5,2 in 0–100), slot_key (slug, nullable) | unique(variant, ingredient); unique(variant, slot_key) where slot_key not null |
 
 A product is sellable only if it and its category are active and it has at least one active variant. A tracked variant with no recipe is not sellable (422 `RECIPE_MISSING`); the till greys it out.
@@ -539,7 +541,7 @@ Constraint: **partial unique (user) where status = 'open'**.
 | Model | Fields | Constraints / notes |
 |---|---|---|
 | `Supplier` | name, phone (blank), notes (blank), is_active | unique(org, name) |
-| `Purchase` | supplier (nullable), supplier_invoice_no (blank), purchased_on (date), status (`draft`/`posted`/`voided`), payment_method (`cash`/`card`/`transfer`), source (`external`/`cash_drawer`), notes, total, **on_credit, amount_paid (D21)**, posted_at, posted_by, created_by | Editable and deletable only while `draft`. Check: 0 ≤ amount_paid ≤ total; amount_paid = 0 unless on_credit |
+| `Purchase` | supplier (nullable), **receipt_no (D22, `PUR-00001`, set at post, unique per café when set)**, supplier_invoice_no (blank), purchased_on (date), status (`draft`/`posted`/`voided`), payment_method (`cash`/`card`/`transfer`), source (`external`/`cash_drawer`), notes, total, **on_credit, amount_paid (D21)**, posted_at, posted_by, created_by | Editable and deletable only while `draft`. Check: 0 ≤ amount_paid ≤ total; amount_paid = 0 unless on_credit |
 | `PurchaseItem` | purchase, ingredient, qty (base units, > 0), unit_cost (decimal 12,4 per base unit, shown only), line_total (the truth: what was paid), pack_label (blank), pack_count (nullable), pack_size (nullable), pack_cost (nullable) | Pack fields are an input convenience: `qty = pack_count × pack_size` |
 | `SupplierPayment` | supplier, amount (> 0), source, payment_method, shift (nullable), note, status (`posted`/`voided`), void_reason, voided_at, voided_by, created_by | D21 (P4). Check: source=`cash_drawer` ⇒ shift and cash |
 | `SupplierPaymentLine` | payment, purchase, amount (> 0) | unique(payment, purchase) |
@@ -709,8 +711,10 @@ Rules:
      - `type = purchase`, `category = purchase`, `amount = total`.
      - `payment_method` and `source` come from the purchase.
      - If `source = cash_drawer`, the poster's own open shift is required, **an Admin included** (owner, 2026-11-10; otherwise 409 `SHIFT_NOT_OPEN`). The expense is attached to that shift.
+   - Gives the purchase its own number `receipt_no = PUR-00001` (D22: next number of a locked per-café counter, so it is gapless; a voided purchase keeps its number; a draft has none). `supplier_invoice_no` stays optional and is never used as the number.
    - Sets `status = posted`, `posted_at`, `posted_by`.
    - Records an audit event.
+   - **D22:** the draft is re-read under the purchase lock; if `source`, `on_credit` or `supplier` differ from what the shift lock and supplier check were decided on, nothing is written and the call returns 409 `PURCHASE_CHANGED` (the client reloads and posts again).
 3. If the purchase is already posted and the call uses a different key, return 409 `PURCHASE_ALREADY_POSTED`.
 4. **A line is what was bought and what was paid [D21, L4]:** either `qty` (base units; the UI converts kg/L) + `line_total`, or by pack: `pack_count`, `pack_size` and `pack_cost`, with `line_total = pack_count × pack_cost` exactly. `unit_cost` is never sent: it is computed and only shown (4 dp). A pack line without its price, both a pack price and a line total, or a line without a quantity or price is 400.
 5. **Average cost [D19]:** posting sets each ingredient's `avg_cost = (on_hand × avg + qty × cost) / (on_hand + qty)`, where `cost = line_total / qty` (6 dp). With nothing on hand (zero or negative) or no known cost, the purchase cost becomes the average. Every stock movement stores the `unit_cost` it was made at.
@@ -718,6 +722,8 @@ Rules:
 6. **Void [D19]:** `POST /purchases/{id}/void {reason}` (Admin). Writes `purchase_void` movements taking the stock back out (it may go negative), takes the purchase out of the average (`(on_hand × avg − qty × cost) / (on_hand − qty)`, kept unchanged if nothing would be left or the result would be negative), voids its expense, sets `status = voided` with reason, who and when, and records `purchase.voided`. A draft (422 `draft`), an already voided purchase (409 `voided`), a drawer purchase whose shift is **closed** (422 `shift_closed`), or a credit purchase that still has supplier payments (409 `has_payments`, D21) is refused (`PURCHASE_NOT_VOIDABLE`). Lock order: the expense's shift → purchase → balances.
 
 ### 8.8 Expenses
+
+- `POST /expenses` is idempotent (scope `expense`, D22): `Idempotency-Key` is required (400 `IDEMPOTENCY_KEY_REQUIRED`); the same key and body replays the stored 201, another body or another user is 409 `IDEMPOTENCY_CONFLICT`; a failed create (e.g. 409 `SHIFT_NOT_OPEN`) stores nothing, so the key can be retried.
 
 - **Admin:** any source and method.
 - **Barista [D10]:**
@@ -739,6 +745,7 @@ Rules:
   - The reason is mandatory.
 - **Opening balance [D21, L3/Q-E]:** `POST /inventory/opening-balances {items:[{ingredient_id, qty, total_value}], reason}`.
   - `total_value` (> 0) is required: the cost per unit is `total_value / qty`, weighted into the average like a purchase.
+  - **D22:** every line needs `qty > 0` and `total_value > 0`, checked by the serializer, again by the service (so seed or import code cannot bypass it) and by the database check `opening_balance_has_value`.
   - Allowed any time; `reason` is required when an ingredient already has movements (400 `reason`).
   - Creates `opening_balance` movements. Never creates an expense [D15] and is never profit.
 - **Return to stock [D21, P7]:** `POST /orders/{id}/return-stock {reason, lines:[{ingredient_id, qty}]}` (Admin): only a refunded order (422 `STOCK_RETURN_NOT_ALLOWED`), once (409), each ingredient at most what the order consumed (400). `refund_return` movements at the cost each ingredient left at (consumption snapshot); the average is recalculated; the Profit report lowers the cost of sales by that value. Audited `order.stock_returned`.
@@ -828,6 +835,7 @@ All reports are Admin-only and are derived from persisted records only. Period f
 | 409 | `REFUND_ALREADY_APPLIED` | Order already refunded |
 | 409 | `PURCHASE_ALREADY_POSTED` | Re-post with a different key |
 | 409 | `PURCHASE_NOT_EDITABLE` | Editing or deleting a posted purchase |
+| 409 | `PURCHASE_CHANGED` | D22: the draft's source, credit flag or supplier changed while it was being posted; reload and post again |
 | 422 | `EMPTY_CART` | No items |
 | 422 | `INVALID_QUANTITY` | Quantity outside 1–99 |
 | 422 | `ITEM_UNAVAILABLE` | Inactive variant, product or category |

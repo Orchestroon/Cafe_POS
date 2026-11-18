@@ -20,7 +20,9 @@ def report(c, name, **params):
 
 def new_expense(c, **over):
     body = {"category": "supplies", "description": "Ice", "amount": "30.00", **over}
-    r = c.post("/api/v1/expenses", body, format="json")
+    r = c.post(
+        "/api/v1/expenses", body, format="json", headers={"Idempotency-Key": str(uuid.uuid4())}
+    )
     assert r.status_code == 201, r.content
     return data(r)["id"]
 

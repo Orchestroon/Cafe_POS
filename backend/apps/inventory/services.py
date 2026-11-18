@@ -199,6 +199,15 @@ def set_opening_balances(actor, items, reason=""):
     ids = [i["ingredient_id"] for i in items]
     if len(set(ids)) != len(ids):
         raise ApiError("VALIDATION_ERROR", "Duplicate ingredient.", 400)
+    # Step 1: stock never comes in with an unknown cost, whoever calls this service (seed, import).
+    # A service check, not a DB constraint: opening rows from before D21 have no value.
+    if any(q_qty(i["qty"]) <= 0 or q_money(i["total_value"]) <= 0 for i in items):
+        raise ApiError(
+            "VALIDATION_ERROR",
+            "Validation failed.",
+            400,
+            {"fields": {"items": "Every line needs a quantity and a total value above zero."}},
+        )
     balances = _lock_balances(org, sorted(ids))
     unknown = [str(i) for i in ids if i not in balances]
     if unknown:
