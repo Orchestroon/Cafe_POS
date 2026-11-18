@@ -107,6 +107,21 @@ def test_a_barista_sees_only_their_own_expenses_an_admin_all(org, barista_c, adm
     )
 
 
+def test_expenses_filter_by_shift_id(org, barista_c, shift):
+    def count(sid):
+        return barista_c.get(f"/api/v1/expenses?shift_id={sid}").json()["meta"]["total_count"]
+
+    post(barista_c)
+    assert count(shift["id"]) == 1
+    assert count(uuid.uuid4()) == 0
+    assert barista_c.get("/api/v1/expenses?shift_id=nope").status_code == 400
+    # another barista's shift id never shows their rows to this barista
+    other = client_for(make_user(org, "barista2", "barista"))
+    other_shift = open_shift(other, "0.00")
+    post(other, description="Milk run")
+    assert count(other_shift["id"]) == 0
+
+
 def test_a_voided_expense_is_excluded_from_the_open_shifts_expected_cash(barista_c, admin_c, shift):
     eid = data(post(barista_c))["id"]
     assert (

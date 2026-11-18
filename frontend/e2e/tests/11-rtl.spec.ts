@@ -17,7 +17,7 @@ test("switching to Arabic mirrors the shell and translates it", async ({ page })
   expect(font).toMatch(/^"?Cairo/);
   await page.evaluate(() => document.fonts.ready);
   expect(await page.evaluate(() => document.fonts.check("16px Cairo", "نقطة البيع"))).toBe(true);
-  for (const path of ["/", "/pos", "/orders", "/shift", "/admin/products", "/admin/reports/sales-summary", "/admin/audit"]) {
+  for (const path of ["/", "/pos", "/orders", "/admin/products", "/admin/reports/sales-summary", "/admin/audit"]) {
     await page.goto(path);
     await expect(page.locator(".view-container")).not.toBeEmpty();
     await expectNoSideScroll(page);

@@ -9,12 +9,15 @@ test("AT-18: close a shift; expected, counted and difference are stored; C2 show
   await b.post("/shifts/open", { opening_cash: "200.00" });
   await sellSmallCash(b); // +65 cash → expected 265.00
 
-  await page.goto("/shift");
-  await page.getByRole("button", { name: "Close shift" }).first().click();
+  // Step 2: the shift is closed from the Shift & Close panel on the POS.
+  await page.goto("/pos");
+  await page.getByRole("button", { name: /Shift & Close/ }).click();
+  await page.getByRole("dialog", { name: "Shift & Close" }).getByRole("button", { name: "Close shift" }).click();
   const dlg = page.getByRole("dialog", { name: "Close shift" });
   await dlg.getByLabel("Counted cash").fill("260.00");
   await dlg.getByRole("button", { name: "Close shift" }).click();
-  await expect(page.getByText(/Shortage/)).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Shift & Close" })).toBeHidden();
+  await expect(page.getByText("No open shift. Open your shift to start selling.")).toBeVisible();
 
   const closed = (await (await api("admin")).get("/shifts", { status: "closed" })).data[0];
   expect([closed.expected_cash, closed.actual_cash, closed.difference]).toEqual(["265.00", "260.00", "-5.00"]);

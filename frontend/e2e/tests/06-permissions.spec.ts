@@ -8,7 +8,7 @@ test("AT-19: a barista is blocked from admin pages and admin APIs, with no side 
     await page.goto(path);
     await expect(page.getByRole("heading", { name: "403" })).toBeVisible();
   }
-  await expect(page.locator(".sidebar")).not.toContainText("Audit log");
+  await expect(page.locator(".sidebar")).toHaveCount(0); // Step 2: a Barista has no sidebar at all
 
   const b = await api("barista1");
   const a = await api("admin");

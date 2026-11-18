@@ -11,8 +11,9 @@ test.describe("barista", () => {
     const b = await api("barista1");
     await ensureShift(b);
     const before = (await b.get("/shifts/current")).data.totals.expected_cash as string;
-    await page.goto("/shift");
-    await page.getByRole("button", { name: "Cash out / in" }).click();
+    await page.goto("/pos");
+    await page.getByRole("button", { name: /Shift & Close/ }).click();
+    await page.getByRole("dialog", { name: "Shift & Close" }).getByRole("button", { name: "Cash out / in" }).click();
     const dlg = page.getByRole("dialog", { name: "Cash out / in" });
     await dlg.getByRole("radio", { name: "Taken out" }).click();
     await dlg.getByLabel("Amount").fill("50.00");

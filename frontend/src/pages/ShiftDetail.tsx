@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { Shift } from "../api/types";
+import { useAuth } from "../auth/AuthContext";
 import { CloseShiftDialog } from "../components/CloseShiftDialog";
 import { PageHeader } from "../components/PageHeader";
 import { HistoryLink } from "./AuditLog";
@@ -15,6 +16,7 @@ import { ErrorBanner, Loading } from "../components/States";
 export function ShiftDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams();
+  const { me } = useAuth();
   const q = useQuery({ queryKey: ["shift", id], queryFn: () => api.get<Shift>(`/shifts/${id}`) });
   const [closing, setClosing] = useState(false);
   if (q.isLoading) return <Loading />;
@@ -23,7 +25,7 @@ export function ShiftDetailPage() {
   return (
     <>
       <PageHeader title={t("shift.report")} actions={<>
-        <Link className="btn btn-outline no-print" to="/shift">{t("orders.back")}</Link>
+        <Link className="btn btn-outline no-print" to={me?.user.role === "admin" ? "/admin/shifts" : "/pos"}>{t("orders.back")}</Link>
         <span className="no-print"><HistoryLink entityType="shifts.cashiershift" entityId={s.id} /></span>
         <button className="btn btn-outline no-print" onClick={() => window.print()}>{t("receipt.print")}</button>
         {s.status === "open" && <button className="btn btn-primary no-print" onClick={() => setClosing(true)}>{t("shift.closeShift")}</button>}

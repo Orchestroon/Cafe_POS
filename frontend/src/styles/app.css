@@ -208,3 +208,27 @@ td.num, th.num { text-align: end; font-variant-numeric: tabular-nums; }
   .orders-table { display: none; }
   .order-cards { display: block; }
 }
+
+/* Step 2: single-screen POS. No sidebar for a Barista (or an Admin on /pos): the top bar carries the
+   logo, user and logout. Drawers slide in from the end edge (logical properties, so RTL mirrors). */
+.no-sidebar .main-content { margin-inline-start: 0; }
+.top-logo { height: 28px; width: auto; background: var(--bg-sidebar); padding: 4px 8px; border-radius: var(--radius-sm); }
+.top-user { display: flex; align-items: center; gap: 8px; }
+.top-user .avatar-circle { width: 32px; height: 32px; font-size: 12px; }
+.top-user-name { font-size: 13px; font-weight: 600; color: var(--text-heading); white-space: nowrap; }
+@media (max-width: 640px) { .top-user-name { display: none; } .no-sidebar .top-bar { padding-inline: 12px; } .top-bar-right { gap: 6px; } }
+.shift-bar-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-inline-start: auto; }
+.drawer-overlay { position: fixed; inset: 0; z-index: 900; display: flex; justify-content: flex-end; background: rgba(20, 16, 14, 0.5); backdrop-filter: blur(2px); }
+.drawer { display: flex; flex-direction: column; width: min(520px, 100%); height: 100%; background: var(--bg-app); border-inline-start: 1px solid var(--border-medium); box-shadow: var(--shadow-lg); animation: drawerIn .2s ease-out; }
+[dir="rtl"] .drawer { animation-name: drawerInRtl; }
+@keyframes drawerIn { from { transform: translateX(32px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes drawerInRtl { from { transform: translateX(-32px); opacity: 0; } to { transform: none; opacity: 1; } }
+.drawer-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 16px 20px; background: var(--bg-surface); border-block-end: 1px solid var(--border-light); }
+.drawer-body { flex: 1; overflow-y: auto; padding: 16px 20px 24px; }
+.drawer-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block-start: 12px; }
+.drawer-subtitle { margin-block: 16px 8px; }
+.order-cards.drawer-orders { display: block; }
+.drawer-orders .order-card { width: 100%; background: none; border: 0; border-block-end: 1px solid var(--border-light); font: inherit; color: inherit; text-align: start; }
+.order-panel { padding: 8px 12px 14px; background: var(--bg-surface); border-block-end: 1px solid var(--border-light); }
+.drawer .shift-report { box-shadow: none; }
+@media (max-width: 640px) { .drawer { width: 100%; } }

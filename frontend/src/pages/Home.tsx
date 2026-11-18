@@ -70,7 +70,7 @@ function Dashboard() {
       </div>
       <h3 className="section-title" style={{ marginTop: 20 }}>{t("home.shortcuts")}</h3>
       <div className="metrics-grid">
-        {(["pos", "orders", "shift", "expenses"] as const).map((k) => (
+        {(["pos", "orders", "expenses"] as const).map((k) => (
           <Link key={k} to={`/${k}`} className="metric-card" style={{ textDecoration: "none" }}><div className="metric-title">{t(`nav.${k}`)}</div></Link>
         ))}
         {(["products", "modifiers", "categories", "ingredients", "inventory", "suppliers", "purchases", "shifts", "audit", "users", "settings"] as const).map((k) => (

@@ -1,28 +1,27 @@
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { landingPath } from "../lib/layout";
 import { ErrorBanner } from "../components/States";
 import { TextField } from "../components/Form";
 
 export function Login() {
   const { t } = useTranslation();
   const { me, login } = useAuth();
-  const nav = useNavigate();
   const loc = useLocation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  if (me) return <Navigate to="/" replace />;
+  if (me) return <Navigate to={landingPath(me.user.role, (loc.state as { from?: string } | null)?.from)} replace />;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await login(username, password);
-      nav((loc.state as { from?: string } | null)?.from ?? "/", { replace: true });
+      await login(username, password); // the redirect below runs once the session is set
     } catch (err) {
       setError(err);
     } finally {

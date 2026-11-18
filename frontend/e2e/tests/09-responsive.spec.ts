@@ -36,9 +36,11 @@ for (const lang of ["en", "ar"] as const) {
       await expectNoSideScroll(page);
       await shot("orders");
 
-      await page.goto("/shift");
+      // Step 2: Shift & Close and Orders / Refund are panels on the POS now.
+      await page.goto("/pos");
       await loaded(page);
-      await expect(page.locator(".view-header h2")).toBeVisible();
+      await page.getByRole("button", { name: /Shift & Close|الوردية والإغلاق/ }).click();
+      await expect(page.locator(".drawer .shift-report")).toBeVisible();
       await expectNoSideScroll(page);
       await shot("shift");
 

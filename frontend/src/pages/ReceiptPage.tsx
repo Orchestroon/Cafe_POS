@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { PAPER_WIDTHS, paperLabel, type PaperWidth, type Receipt } from "../api/types";
+import { useAuth } from "../auth/AuthContext";
 import { ErrorBanner, Loading } from "../components/States";
 import { formatDateTime } from "../i18n/format";
 
@@ -31,6 +32,7 @@ export function ReceiptPage() {
   const { id } = useParams();
   const [params] = useSearchParams();
   const reprint = params.get("reprint") === "1";
+  const { me } = useAuth();
   const q = useQuery({ queryKey: ["receipt", id], queryFn: () => api.get<Receipt>(`/orders/${id}/receipt`) });
   const [device, setDevice] = useState<PaperWidth | null>(readWidth);
   if (q.isLoading) return <Loading />;
@@ -42,7 +44,7 @@ export function ReceiptPage() {
     <div className="receipt-page">
       <style>{pageRule(width)}</style>
       <div className="receipt-toolbar">
-        <Link className="btn btn-outline" to={`/orders/${id}`}>{t("orders.back")}</Link>
+        <Link className="btn btn-outline" to={me?.user.role === "barista" ? "/pos" : `/orders/${id}`}>{t("orders.back")}</Link>
         <label className="form-label" style={{ margin: 0 }}>{t("receipt.paper")}
           <select className="form-select" value={width} onChange={(e) => { const w = e.target.value as PaperWidth; saveWidth(w); setDevice(w); }}>
             {PAPER_WIDTHS.map((w) => <option key={w} value={w}>{paperLabel(w)}</option>)}

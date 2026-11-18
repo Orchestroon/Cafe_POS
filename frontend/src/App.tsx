@@ -20,7 +20,6 @@ import { ReceiptPage } from "./pages/ReceiptPage";
 import { Products } from "./pages/Products";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ShiftDetailPage } from "./pages/ShiftDetail";
-import { ShiftPage } from "./pages/ShiftPage";
 import { Suppliers } from "./pages/Suppliers";
 import { Users } from "./pages/Users";
 
@@ -34,7 +33,7 @@ export default function App() {
           <Route path="pos" element={<Pos />} />
           <Route path="orders" element={<Orders />} />
           <Route path="orders/:id" element={<OrderDetailPage />} />
-          <Route path="shift" element={<ShiftPage />} />
+          <Route path="shift" element={<Navigate to="/pos" replace />} />
           <Route path="shift/:id" element={<ShiftDetailPage />} />
           <Route path="expenses" element={<Expenses />} />
           <Route path="admin" element={<RequireAdmin />}>

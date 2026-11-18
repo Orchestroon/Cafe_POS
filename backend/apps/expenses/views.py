@@ -1,8 +1,10 @@
+import uuid
+
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from apps.core import idempotency
@@ -32,6 +34,11 @@ class ExpenseViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewsets.Ge
         for field in ("status", "category", "source", "type"):
             if p.get(field):
                 qs = qs.filter(**{field: p[field]})
+        if shift_id := p.get("shift_id"):  # the POS lists the current shift's drawer expenses
+            try:
+                qs = qs.filter(shift_id=uuid.UUID(shift_id))
+            except ValueError:
+                raise ValidationError({"shift_id": "Not a valid id."}) from None
         if rng := parse_range(p, org_timezone(user.organization), default_today=False):
             qs = qs.filter(paid_at__gte=rng[2], paid_at__lt=rng[3])
         return qs

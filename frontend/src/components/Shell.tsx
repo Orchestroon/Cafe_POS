@@ -4,6 +4,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { setLang } from "../i18n";
 import { confirmLeave } from "../lib/unsaved";
+import { isBareLayout } from "../lib/layout";
 import { Alerts } from "./Alerts";
 import { moveFocus, useShortcuts } from "../lib/shortcuts";
 import { ShortcutsHelp } from "./ShortcutsHelp";
@@ -46,13 +47,15 @@ export function Shell(): ReactNode {
   const navigate = useNavigate();
   const nav = (to: string) => { if (confirmLeave()) navigate(to); };
   const isAdmin = me?.user.role === "admin";
+  // Step 2: no sidebar for a Barista, nor for an Admin on the POS (full tablet width).
+  const bare = isBareLayout(me?.user.role, loc.pathname);
+  const onPos = loc.pathname === "/pos";
   const tz = me?.settings.timezone ?? "UTC";
 
   const items: Item[] = [
     { to: "/", label: t("nav.home"), icon: "home", section: "daily" },
     { to: "/pos", label: t("nav.pos"), short: t("nav.short.pos"), icon: "pos", section: "daily", mobile: true },
     { to: "/orders", label: t("nav.orders"), short: t("nav.short.orders"), icon: "receipt", section: "daily", mobile: true },
-    { to: "/shift", label: t("nav.shift"), short: t("nav.short.shift"), icon: "clock", section: "daily", mobile: !isAdmin },
     { to: "/expenses", label: t("nav.expenses"), icon: "wallet", section: "daily" },
     { to: "/admin/products", label: t("nav.products"), short: t("nav.short.products"), icon: "cup", section: "menu", admin: true, mobile: true },
     { to: "/admin/modifiers", label: t("nav.modifiers"), icon: "sliders", section: "menu", admin: true },
@@ -83,8 +86,9 @@ export function Shell(): ReactNode {
   useShortcuts({
     help: () => setHelp(true),
     goPos: () => nav("/pos"),
-    goOrders: () => nav("/orders"),
-    goShift: () => nav("/shift"),
+    // On the POS these two open the Orders and Shift drawers (the page registers them).
+    goOrders: () => (onPos ? false : nav("/orders")),
+    goShift: () => (onPos ? false : nav("/pos")),
     goHome: () => (isAdmin ? nav("/") : false),
     search: () => {
       const el = document.querySelector<HTMLInputElement>('.view-container [data-shortcut="search"]');
@@ -104,8 +108,8 @@ export function Shell(): ReactNode {
   });
 
   return (
-    <div id="app" className={open ? "sidebar-open" : ""}>
-      <aside className="sidebar">
+    <div id="app" className={`${open && !bare ? "sidebar-open" : ""}${bare ? " no-sidebar" : ""}`.trim()}>
+      {!bare && <aside className="sidebar">
         <div className="brand-header">
           <div className="brand-logo-icon"><img src="/growl-logo.png" alt="Growl Tech" style={{ width: 140, height: "auto", display: "block" }} /></div>
           <div className="brand-text"><span>{t("app.tagline")}</span></div>
@@ -154,32 +158,45 @@ export function Shell(): ReactNode {
             <button className="btn btn-outline btn-sm" onClick={() => { if (confirmLeave()) void logout().then(() => navigate("/login")); }}>{t("nav.logout")}</button>
           </div>
         </div>
-      </aside>
-      <div className="sidebar-backdrop" onClick={go} />
+      </aside>}
+      {!bare && <div className="sidebar-backdrop" onClick={go} />}
       <main className="main-content">
         <header className="top-bar">
           <div className="top-bar-left">
-            <button className="mobile-menu-btn" onClick={() => setOpen(true)} aria-label={t("nav.menu")}>{icon(ICONS.menu)}</button>
-            <div className="breadcrumbs"><span>{t("nav.workspace")}</span><span>/</span><span className="current">{current?.label}</span></div>
+            {!bare && <button className="mobile-menu-btn" onClick={() => setOpen(true)} aria-label={t("nav.menu")}>{icon(ICONS.menu)}</button>}
+            {bare && <img className="top-logo" src="/growl-logo.png" alt="Growl Tech" />}
+            {isAdmin && onPos && <button className="btn btn-outline btn-sm" onClick={() => nav("/")}>{t("nav.backToDashboard")}</button>}
+            {!bare && <div className="breadcrumbs"><span>{t("nav.workspace")}</span><span>/</span><span className="current">{current?.label}</span></div>}
           </div>
           <div className="top-bar-right">
             <span className="top-date">{today}</span>
             <button className="top-icon-btn" onClick={() => setHelp(true)} aria-label={t("shortcuts.title")} title={t("shortcuts.hint")}>{icon(ICONS.help)}</button>
             {isAdmin && <Alerts icon={icon(ICONS.bell)} onGo={(to) => nav(to)} />}
             <button className="lang-btn" onClick={() => setLang(i18n.language === "ar" ? "en" : "ar")}>{i18n.language === "ar" ? "EN" : "عربي"}</button>
+            {bare && (
+              <>
+                <div className="top-user" title={t(`roles.${me?.user.role}`)}>
+                  <div className="avatar-circle">{initials}</div>
+                  <span className="top-user-name">{me?.user.display_name || me?.user.username}</span>
+                </div>
+                <button className="btn btn-outline btn-sm" onClick={() => { if (confirmLeave()) void logout().then(() => navigate("/login")); }}>{t("nav.logout")}</button>
+              </>
+            )}
           </div>
         </header>
         <section className="view-container"><Outlet /></section>
         {help && <ShortcutsHelp onClose={() => setHelp(false)} />}
       </main>
-      <nav className="mobile-bottom-nav">
-        {items.filter((i) => i.mobile).map((i) => (
-          <button key={i.to} className={`mobile-nav-btn${current?.to === i.to ? " active" : ""}`} onClick={() => nav(i.to)}>
-            {icon(ICONS[i.icon])}<span>{i.short ?? i.label}</span>
-          </button>
-        ))}
-        <button className="mobile-nav-btn" onClick={() => setOpen(true)}>{icon(ICONS.menu)}<span>{t("nav.menu")}</span></button>
-      </nav>
+      {!bare && (
+        <nav className="mobile-bottom-nav">
+          {items.filter((i) => i.mobile).map((i) => (
+            <button key={i.to} className={`mobile-nav-btn${current?.to === i.to ? " active" : ""}`} onClick={() => nav(i.to)}>
+              {icon(ICONS[i.icon])}<span>{i.short ?? i.label}</span>
+            </button>
+          ))}
+          <button className="mobile-nav-btn" onClick={() => setOpen(true)}>{icon(ICONS.menu)}<span>{t("nav.menu")}</span></button>
+        </nav>
+      )}
     </div>
   );
 }

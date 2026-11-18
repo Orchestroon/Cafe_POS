@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { needsRecipe, type Category, type CheckoutResult, type LastClosed, type Product, type Quote, type Shift, type StockWarning } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
@@ -10,6 +10,7 @@ import { Modal } from "../components/Modal";
 import { ErrorBanner, Loading } from "../components/States";
 import { formatDateTime, formatMoney } from "../i18n/format";
 import { loadCart, saveCart, sellableProducts, toApiItems, type CartLine } from "../pos/cart";
+import { ExpensesDrawer, OrdersDrawer, ShiftDrawer } from "../pos/Drawers";
 import { PaymentDialog, type Payments } from "../pos/PaymentDialog";
 import { ProductSheet, Stepper } from "../pos/ProductSheet";
 import { useCheckout } from "../pos/useCheckout";
@@ -36,6 +37,8 @@ export function Pos() {
   const [cartOpen, setCartOpen] = useState(false);
   // B1: the open-shift popup can be dismissed; the POS then stays locked until a shift is open.
   const [shiftDialog, setShiftDialog] = useState(true);
+  // Step 2: the Barista runs the whole shift from here (orders/refund, pay from drawer, shift/close).
+  const [panel, setPanel] = useState<"orders" | "expense" | "shift" | null>(null);
   useEffect(() => saveCart(userId, cart), [userId, cart]);
   const { phase, start, retry, busy, reset } = useCheckout(userId, () => { setCart([]); setCartOpen(false); });
 
@@ -80,6 +83,9 @@ export function Pos() {
   // While a sale is unresolved the cart is frozen: no new sale, no edits (spec 10.2 rule 3).
   const selling = !!shift.data && !busy;
   const canPay = selling && fresh && cart.length > 0;
+  // A close or a refund must not race a sale whose result is not known yet.
+  const panelsLocked = phase.kind === "checking" || phase.kind === "unconfirmed";
+  const openPanel = (p: "orders" | "expense" | "shift") => (panelsLocked ? false : setPanel(p));
   const lineTotal = (i: number) => (fresh && q?.items[i] ? formatMoney(q.items[i].line_total, currency) : "…");
   const count = cart.reduce((n, l) => n + l.quantity, 0);
 
@@ -88,6 +94,8 @@ export function Pos() {
   useShortcuts({
     pay: () => (canPay ? setPayOpen(true) : false),
     openShift: () => (shift.data === null ? setShiftDialog(true) : false),
+    goOrders: () => openPanel("orders"),
+    goShift: () => openPanel("shift"),
     allCategories: () => setCat(""),
     category: (e) => {
       const c = activeCats[digitIndex(e)];
@@ -115,7 +123,7 @@ export function Pos() {
   return (
     <>
       <ErrorBanner error={shift.error ?? products.error} />
-      <ShiftBar shift={shift.data ?? null} tz={tz} currency={currency} onOpen={() => setShiftDialog(true)} />
+      <ShiftBar shift={shift.data ?? null} tz={tz} currency={currency} onOpen={() => setShiftDialog(true)} locked={panelsLocked} onPanel={openPanel} />
       {phase.kind === "unconfirmed" && (
         <div className="alert-banner alert-warning" role="alert" style={{ marginBottom: 12 }}>
           {t("pos.unconfirmed")} <button className="btn btn-primary btn-sm" onClick={retry}>{t("pos.retry")}</button>
@@ -196,6 +204,9 @@ export function Pos() {
       </div>
 
       {shift.data === null && shiftDialog && <OpenShift currency={currency} tz={tz} onClose={() => setShiftDialog(false)} />}
+      {panel === "orders" && <OrdersDrawer onClose={() => setPanel(null)} />}
+      {panel === "expense" && <ExpensesDrawer shift={shift.data ?? null} onClose={() => setPanel(null)} />}
+      {panel === "shift" && <ShiftDrawer shift={shift.data ?? null} onClose={() => setPanel(null)} />}
       {sheet && <ProductSheet product={sheet.product} line={sheet.line} currency={currency} onAdd={upsert} onClose={() => setSheet(null)} />}
       {payOpen && q && fresh && <PaymentDialog total={q.total} currency={currency} onConfirm={confirmPayment} onClose={() => setPayOpen(false)} />}
       {phase.kind === "checking" && <Modal title={t("pos.checking")} onClose={() => undefined}><div className="centered-state" role="status">{t("pos.checkingText")}</div></Modal>}
@@ -210,12 +221,21 @@ export function Pos() {
   );
 }
 
-function ShiftBar({ shift, tz, currency, onOpen }: { shift: Shift | null; tz: string; currency: string; onOpen: () => void }) {
+function ShiftBar({ shift, tz, currency, onOpen, locked, onPanel }: { shift: Shift | null; tz: string; currency: string; onOpen: () => void; locked: boolean; onPanel: (p: "orders" | "expense" | "shift") => void }) {
   const { t } = useTranslation();
+  const hint = locked ? t("pos.panelLocked") : undefined;
+  const triggers = (
+    <div className="shift-bar-actions">
+      <button className="btn btn-outline btn-sm" disabled={locked} title={hint} onClick={() => onPanel("orders")}>{t("pos.ordersRefund")}<Kbd k="Alt+O" /></button>
+      <button className="btn btn-outline btn-sm" disabled={locked || !shift} title={hint} onClick={() => onPanel("expense")}>{t("expenses.payFromDrawer")}</button>
+      <button className="btn btn-outline btn-sm" disabled={locked} title={hint} onClick={() => onPanel("shift")}>{t("pos.shiftClose")}<Kbd k="Alt+S" /></button>
+    </div>
+  );
   if (!shift) return (
     <div className="shift-bar off" role="status">
       <span>{t("pos.noShift")}</span>
-      <button className="btn btn-primary btn-sm" style={{ marginInlineStart: "auto" }} onClick={onOpen}>{t("pos.openShift")}<Kbd k="F4" /></button>
+      <button className="btn btn-primary btn-sm" onClick={onOpen}>{t("pos.openShift")}<Kbd k="F4" /></button>
+      {triggers}
     </div>
   );
   return (
@@ -224,7 +244,7 @@ function ShiftBar({ shift, tz, currency, onOpen }: { shift: Shift | null; tz: st
       <span>{t("pos.since", { time: formatDateTime(shift.opened_at, tz) })}</span>
       <span>{t("pos.orders", { count: shift.totals.orders_count })}</span>
       <span>{t("pos.expectedCash")}: {formatMoney(shift.totals.expected_cash, currency)}</span>
-      <Link to="/shift" style={{ marginInlineStart: "auto" }}>{t("pos.manageShift")}</Link>
+      {triggers}
     </div>
   );
 }

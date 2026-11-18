@@ -16,9 +16,14 @@ test("help, page jumps, and a whole sale from the keyboard", async ({ page }) =>
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeHidden();
 
+  // Step 2: on the POS, Alt+O / Alt+S open the Orders and Shift panels instead of changing page.
   await page.keyboard.press("Alt+KeyO");
-  await expect(page).toHaveURL(/\/orders$/);
-  await page.keyboard.press("Alt+KeyP");
+  await expect(page.getByRole("dialog", { name: "Orders / Refund" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Orders / Refund" })).toBeHidden();
+  await page.keyboard.press("Alt+KeyS");
+  await expect(page.getByRole("dialog", { name: "Shift & Close" })).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(page).toHaveURL(/\/pos$/);
 
   await page.keyboard.press("Digit1"); // first category
