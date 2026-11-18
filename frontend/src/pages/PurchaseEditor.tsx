@@ -140,7 +140,7 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
         <div className="card">
           <div className="alert-banner alert-success" style={{ marginBottom: 12 }}>{t("purchases.postedNote", { time: purchase.posted_at ? formatDateTime(purchase.posted_at, tz) : "", by: purchase.posted_by?.display_name ?? "" })}</div>
           {purchase.status === "voided" && <div className="alert-banner alert-warning" role="note" style={{ marginBottom: 12 }}>{t("purchases.voidedNote", { time: purchase.voided_at ? formatDateTime(purchase.voided_at, tz) : "", by: purchase.voided_by?.display_name ?? "", reason: purchase.void_reason })}</div>}
-          <table className="erp-table">
+          <div className="table-scroll"><table className="erp-table">
             <thead><tr><th>{t("nav.ingredients")}</th><th className="num">{t("inventory.qty")}</th><th className="num">{t("purchases.unitCost")}</th><th className="num">{t("pos.total")}</th></tr></thead>
             <tbody>
               {purchase.items.map((i) => {
@@ -151,7 +151,7 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
           <div className="totals" style={{ marginTop: 12 }}>
             <div className="totals-row"><span>{t("purchases.pay")}</span><span>{purchase.on_credit ? t("purchases.onCredit") : `${t(`expenses.sources.${purchase.source}`)} · ${t(`expenses.methods.${purchase.payment_method}`)}`}</span></div>
             <div className="totals-row grand"><span>{t("pos.total")}</span><span>{formatMoney(purchase.total, cur)}</span></div>

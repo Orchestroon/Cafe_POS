@@ -13,13 +13,13 @@ export function ShortcutsHelp({ onClose }: { onClose: () => void }) {
       {GROUPS.map((g) => (
         <section key={g} style={{ marginBottom: 14 }}>
           <h4 style={{ marginBottom: 6 }}>{t(`shortcuts.groups.${g}`)}</h4>
-          <table className="erp-table shortcuts-table">
+          <div className="table-scroll"><table className="erp-table shortcuts-table">
             <tbody>
               {SHORTCUTS.filter((s) => s.group === g).map((s) => (
                 <tr key={`${g}-${s.id}`}><td style={{ width: "40%" }}><kbd className="kbd" dir="ltr">{s.keys}</kbd></td><td>{t(`shortcuts.items.${s.id}`)}</td></tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </section>
       ))}
     </Modal>

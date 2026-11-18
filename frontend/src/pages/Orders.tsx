@@ -47,7 +47,7 @@ export function Orders() {
               </div>
             ))}
           </div>
-          <table className="erp-table orders-table">
+          <div className="table-scroll"><table className="erp-table orders-table">
             <thead><tr><th>{t("pos.invoice")}</th><th>{t("receipt.date")}</th><th>{t("receipt.cashier")}</th><th className="num">{t("orders.items")}</th><th>{t("orders.payment")}</th><th className="num">{t("pos.total")}</th><th>{t("common.status")}</th></tr></thead>
             <tbody>
               {q.data?.data.map((o) => (
@@ -59,7 +59,7 @@ export function Orders() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </ListState>
         <Pager meta={q.data?.meta} page={page} onPage={setPage} />
       </div>

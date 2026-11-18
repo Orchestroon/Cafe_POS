@@ -268,3 +268,73 @@ td.num, th.num { text-align: end; font-variant-numeric: tabular-nums; }
 .field-error::before { content: "⚠"; flex: none; font-size: 11px; line-height: 1.5; }
 .pr-size-tab:disabled { opacity: .45; cursor: not-allowed; }
 @media (max-width: 640px) { .alert-error { flex-direction: row !important; align-items: flex-start !important; } }
+
+/* Step 5: responsive polish (360 / 768 / 1024 / 1440, LTR + RTL). Logical properties only. */
+html, body { overflow-x: clip; }
+.table-scroll, .erp-table-wrap { max-inline-size: 100%; overflow-x: auto; }
+/* Numbers, badges, buttons and action cells never wrap: the table scrolls sideways instead of crushing rows. */
+.erp-table .badge, .erp-table .btn, .erp-table td.num, .erp-table th, .row-actions { white-space: nowrap; }
+.row-actions { flex-wrap: nowrap; }
+/* Line-item rows (purchase lines, recipe quick-add) keep usable control widths inside the scroller. */
+.table-scroll .with-add > select { min-inline-size: 150px; }
+.table-scroll .inline-input { min-inline-size: 84px; }
+.table-scroll .inline-pair .form-select { min-inline-size: 84px; }
+.pos-toolbar, .pos-layout > * { min-inline-size: 0; }
+.cat-tabs { scroll-snap-type: x proximity; scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+.cat-tab { scroll-snap-align: start; white-space: nowrap; }
+.shift-bar > * { min-inline-size: 0; }
+
+/* Tabs (Reports, SectionTabs, generic): one scrollable row instead of a wall of wrapped tabs. */
+@media (max-width: 768px) {
+  .report-nav, .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+  .report-nav .tab, .tabs .tab { flex: none; white-space: nowrap; min-block-size: 44px; display: inline-flex; align-items: center; }
+  .form-grid { grid-template-columns: 1fr; }
+  .pr-costbar-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 769px) { .pr-costbar-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* Touch targets (>= 44px) on phones and tablets: header, drawer menu, bottom nav, buttons. */
+@media (max-width: 1024px) {
+  .top-icon-btn, .lang-btn, .mobile-menu-btn { min-inline-size: 44px; min-block-size: 44px; }
+  .top-bar .btn, .shift-bar-actions .btn, .drawer-header .btn, .drawer-header button { min-block-size: 44px; }
+  .sidebar .nav-link { min-block-size: 44px; display: flex; align-items: center; }
+  .sidebar-close-btn { min-inline-size: 44px; min-block-size: 44px; }
+  .mobile-nav-btn { min-block-size: 48px; }
+}
+@media (max-width: 768px) { .btn { min-block-size: 44px; } .btn-sm { min-block-size: 40px; } }
+
+/* Top bar: never crowd. Left cluster shrinks (breadcrumb truncates), right cluster keeps its size, and it wraps as a last resort. */
+.top-bar-left { flex: 1 1 auto; min-inline-size: 0; }
+.top-bar-right { flex: none; }
+.top-bar .btn, .lang-btn, .top-user-name { white-space: nowrap; }
+.breadcrumbs { min-inline-size: 0; }
+.breadcrumbs .current { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 640px) {
+  .top-bar { flex-wrap: wrap; row-gap: 6px; }
+  .top-logo { block-size: 24px; }
+  /* Bare (POS) header: drop the shortcuts button on a phone, and the avatar when the Back button needs the room. */
+  .no-sidebar .top-icon-btn { display: none; }
+  .no-sidebar .top-bar:has(.top-bar-left .btn) .top-user { display: none; }
+  .no-sidebar .top-bar .btn-sm { padding-inline: 10px; }
+}
+
+/* POS shift bar: status on its own line, the three actions share the width. */
+@media (max-width: 640px) {
+  .shift-bar-actions { inline-size: 100%; margin-inline-start: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+  .shift-bar-actions .btn { justify-content: center; }
+  .shift-bar-actions .kbd-hint { display: none; }
+}
+
+/* Drawer: full width on phones, sticky header, contained smooth scroll. */
+.drawer { max-inline-size: 100%; }
+.drawer-header { position: sticky; inset-block-start: 0; z-index: 1; }
+.drawer-body { overscroll-behavior: contain; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+@media (max-width: 640px) { .drawer, .drawer.drawer-wide { inline-size: 100%; block-size: 100dvh; } .drawer-body { padding-inline: 14px; } }
+
+/* Modals: side margins, never taller than the screen, inner scroll. */
+@media (max-width: 768px) {
+  .modal-content { max-block-size: 90dvh; overflow-y: auto; margin-inline: auto; }
+  .modal-body { max-block-size: calc(90dvh - 130px); }
+}
+.table-scroll td > select.form-select { min-inline-size: 110px; }
+@media (max-width: 480px) { .no-sidebar .top-bar:has(.top-bar-left .btn) .top-logo { display: none; } }

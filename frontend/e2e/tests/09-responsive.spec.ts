@@ -25,7 +25,8 @@ for (const lang of ["en", "ar"] as const) {
       await loaded(page);
       await expect(page.locator(".product-tile").first()).toBeVisible();
       await expectNoSideScroll(page);
-      if (device === "phone") await expect(page.locator(".pos-cartbar button")).toBeVisible();
+      // The cart is a bottom sheet below 1025px (phone and tablet), a side panel on a desktop.
+      if (viewport.width < 1025) await expect(page.locator(".pos-cartbar button")).toBeVisible();
       else await expect(page.locator(".pos-cart .btn-primary").first()).toBeVisible();
       await shot("pos");
 

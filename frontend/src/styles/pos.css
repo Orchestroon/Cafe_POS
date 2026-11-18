@@ -53,15 +53,21 @@
 .success-mark { width: 56px; height: 56px; margin: 0 auto 8px; border-radius: 50%; display: grid; place-items: center; background: var(--status-success-bg); color: var(--status-success-text); font-size: 30px; }
 .success-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-block-start: 16px; }
 
-/* Phone: products full width, cart as a bottom sheet with a sticky total + pay button. */
-@media (max-width: 760px) {
+/* Phone and tablet (< 1025px): products full width, cart as a full-height bottom sheet with a sticky total + pay button.
+   Product columns: 2 on a phone, 3-5 on a tablet, 4-5 on a desktop (fixed minimums below). */
+@media (max-width: 1024px) {
   .pos-layout { grid-template-columns: minmax(0, 1fr); }
-  .pos-cart { position: fixed; inset-inline: 0; inset-block-end: 0; top: auto; z-index: 60; max-height: 82vh; border-radius: var(--radius-lg) var(--radius-lg) 0 0; transform: translateY(105%); transition: transform .2s ease; }
-  .pos-cart.open { transform: translateY(0); }
-  .pos-cart-close { display: inline-flex; }
+  .pos-cart { position: fixed; inset-inline: 0; inset-block-end: 0; top: auto; z-index: 60; max-block-size: 92dvh; border-radius: var(--radius-lg) var(--radius-lg) 0 0; transform: translateY(105%); transition: transform .2s ease; }
+  .pos-cart.open { transform: translateY(0); block-size: 92dvh; }
+  .pos-cart-head { position: sticky; inset-block-start: 0; background: var(--bg-surface); border-start-start-radius: inherit; border-start-end-radius: inherit; }
+  .pos-cart-close { display: inline-flex; min-inline-size: 44px; min-block-size: 44px; justify-content: center; align-items: center; }
   .pos-cartbar { display: block; position: sticky; inset-block-end: 70px; padding-block: 8px; z-index: 40; }
-  .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .no-sidebar .pos-cartbar { inset-block-end: 8px; }
+  .pos-cartbar .btn { min-block-size: 52px; font-size: 15px; }
+  .product-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 }
+@media (max-width: 640px) { .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1025px) { .product-grid { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); } }
 
 /* Receipt ------------------------------------------------------------------------------------ */
 .receipt-page { min-height: 100vh; background: var(--bg-app); padding: 12px; }

@@ -119,7 +119,7 @@ function ReturnStockDialog({ order, onClose }: { order: OrderDetail; onClose: ()
       <p className="form-hint" style={{ marginBottom: 10 }}>{t("orders.returnNote")}</p>
       <ErrorBanner error={save.error} />
       {clientErr && <div className="alert-banner alert-error" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
-      <table className="erp-table">
+      <div className="table-scroll"><table className="erp-table">
         <thead><tr><th>{t("nav.ingredients")}</th><th className="num">{t("orders.used")}</th><th className="num">{t("orders.giveBack")}</th></tr></thead>
         <tbody>{[...used.entries()].map(([id, u]) => (
           <tr key={id}><td>{u.name}</td><td className="num mono">{fromUnits(u.qty, 3)} {t(`units.${u.unit}`)}</td>
@@ -128,7 +128,7 @@ function ReturnStockDialog({ order, onClose }: { order: OrderDetail; onClose: ()
               <button type="button" className="btn btn-outline btn-sm" onClick={() => setQty({ ...qty, [id]: fromUnits(u.qty, 3) })}>{t("suppliers.all")}</button>
             </div></td></tr>
         ))}</tbody>
-      </table>
+      </table></div>
       <TextField label={t("orders.reason")} value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} />
     </Modal>
   );
