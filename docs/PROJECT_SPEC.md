@@ -890,7 +890,7 @@ Insufficient stock is **not** an error: it returns 200/201 with `stock_warnings`
 | PATCH | `/modifier-options/{id}` | A | Edit option, prices and effects (effects replaced wholesale) |
 | GET, POST | `/ingredients` | A | |
 | PATCH | `/ingredients/{id}` | A | Metadata only |
-| GET | `/inventory/balances` | A | Filters `is_low`, `is_negative`, `search` |
+| GET | `/inventory/balances` | A | Filters `is_low`, `is_negative`, `no_cost` (active ingredients with no average cost, Step 3), `search` |
 | GET | `/inventory/movements` | A | Filters `ingredient_id`, `movement_type`, `from`, `to` |
 | POST | `/inventory/adjustments` | A | Delta or count, with reason |
 | POST | `/inventory/opening-balances` | A | Bulk opening balances with their value (D21) |
@@ -1176,26 +1176,26 @@ As a Barista, source, method and shift are set by the server. As an Admin, you m
 
 ### 10.6 Admin area (`/admin/...`)
 
-- **Dashboard:** today's sales summary, payment split, low/negative stock count, open shifts.
+- **Sidebar (Step 3, owner, 2026-11-18):** one entry per area, each merged page has URL-based tabs like Reports: **Menu & Recipes** (tabs Products & recipes · Modifiers · Categories), **Inventory & Stock**, **Buying & Suppliers** (tabs Purchases · Suppliers), then Register sessions, Reports, Audit log, Team, Settings. Every old URL still works (`/admin/ingredients` redirects to `/admin/inventory`). An Admin's shift detail is `/admin/shifts/:id` (Register sessions stays highlighted; Back returns to where the user came from); a Barista keeps `/shift/:id`.
+- **Dashboard:** today's sales summary, payment split, low/negative stock count, open shifts. No shortcuts grid (the sidebar is the navigation). The cards *Sizes without a recipe*, *Ingredients without a price* and *Low stock* link to the filtered view (`/admin/products?filter=no-recipe`, `/admin/inventory?flag=no-price`, `/admin/inventory?flag=low`); the top-bar alerts use the same links.
 - **Catalog:**
-  - Categories CRUD.
-  - **Products & recipes** (owner design, 2026-11-16): menu list (search by name or code, category filter, price "from …", recipe status) beside one editor: details, product type (Made to order / Stock item = one pcs item × 1 (D18) / No stock tracking), size tabs (price, code (SKU), active per size), per-serving recipe of the selected size (quantity in g/kg or ml/L, converted to the base unit; waste % and slot under "⋯"; stock deduction per line), consumption preview with servings, current stock of each ingredient (one location in v1), linked modifier groups, and one **Save product & recipe** (`/products/.../setup`) with Discard and an unsaved-changes warning.
+  - Categories CRUD. A "+" next to the Category select in the product form creates one in a popup and selects it.
+  - **Products & recipes** (owner design, 2026-11-16): menu list (search by name or code, category filter, price "from …", recipe status) beside one editor: details, product type (Made to order / Stock item = one pcs item × 1 (D18) / No stock tracking), size tabs (price, code (SKU), active per size), per-serving recipe of the selected size (quantity in g/kg or ml/L, converted to the base unit; waste % and slot under "⋯"; stock deduction per line), consumption preview with servings, current stock of each ingredient (one location in v1), linked modifier groups, and one **Save product & recipe** (`/products/.../setup`) with Discard and an unsaved-changes warning. **Recipe cost bar (Step 3):** under the recipe of the selected size, live from the draft: *Estimated recipe cost* (quantity incl. waste × average cost, unit conversions applied), *Sale price*, *Gross profit* and *Gross margin %* (price net of an included tax). A recipe row whose ingredient has no cost shows a "No price yet" badge, and then cost, profit and margin show "—" with the ingredient names, never a partial number or a 0 cost (D20). A note links to the Profit report for net profit.
 - **Modifiers:**
   - Groups CRUD.
   - Options with a per-variant price override table.
   - Effects editor: an "All sizes" row plus per-size rows.
   - Validation messages for missing slots.
-- **Inventory:**
-  - Balances (low/negative highlighted).
-  - Movements ledger with filters.
-  - Adjustment form (delta or count).
-  - Opening balances bulk form.
-- **Suppliers and purchases:**
+- **Inventory & Stock (Step 3: the Ingredients page is merged in):**
+  - One table of every ingredient: quantity, unit, average cost ("No price yet" when none), low-stock threshold, low/negative/inactive badges; filters search and status (all / low / negative / no price). `GET /inventory/balances?no_cost=true` = active ingredients without an average cost.
+  - Actions: **+ New ingredient** and **Edit** (popup), **Adjust / Waste** (popup, delta or count), **Opening balances** (slide-over, bulk form).
+  - Movements tab: ledger with filters.
+- **Buying & Suppliers:** a "+" next to the Supplier select in the purchase form creates a supplier in a popup and selects it.
   - Draft editor with pack helper (`pack_count × pack_size` = qty; the line total is exactly packs × pack price, D19).
   - Post confirmation. A posted purchase can be **voided** with a reason (D19).
 - **Expenses:** list, create, void.
 - **Users:** list, create, deactivate/reactivate, reset password, change role.
-- **Reports:** one page per report with a date-range picker (local dates), totals cards and tables. First tab: **Money in & out**; then **Profit** (D19). The Products editor also shows the cost per serving and margin of the selected size at today's average cost.
+- **Reports:** one page per report with a date-range picker (local dates) and presets *Today*, *Yesterday*, *Last 7 days* (today + the 6 days before) and *This month* (the 1st through today), totals cards and tables. The Stock report has no cashier / shift filter in the UI (balances are current, org-wide); the API still accepts them. First tab: **Money in & out**; then **Profit** (D19). The Products editor also shows the cost per serving and margin of the selected size at today's average cost.
 - **Audit log:** readable for non-technical users (owner, 2026-11-11): each event is a translated sentence (When · Who · What happened · Details); opening a row shows labelled details and Before → After changes. No JSON, no technical action names, no bare ids. Filters: What happened (grouped by area), Who, dates. Record pages link to it ("History").
 - **Settings:** business name, receipt header/footer, paper width, invoice prefix (warn if sales already exist), tax settings.
 

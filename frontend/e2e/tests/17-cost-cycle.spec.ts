@@ -59,14 +59,15 @@ test("an opening balance needs its value; adjustments only take stock out (L2/L3
   const name = `E2E Straw ${randomUUID().slice(0, 6)}`;
   const straw = (await a.post("/ingredients", { name, base_unit: "pcs" })).data;
   await page.goto("/admin/inventory");
-  await page.getByRole("tab", { name: "Opening balances" }).click();
+  await page.getByRole("button", { name: "Opening balances", exact: true }).click(); // slide-over
   await page.getByLabel(`${name} Quantity`).fill("50");
   await page.getByLabel(`${name} Total value`).fill("25");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("Opening balances saved.")).toBeVisible();
   expect((await a.get(`/ingredients/${straw.id}`)).data.avg_cost).toBe("0.500000");
+  await page.keyboard.press("Escape");
 
-  await page.getByRole("tab", { name: "Adjustment" }).click();
+  await page.getByRole("button", { name: "Adjust / Waste", exact: true }).click(); // popup
   await expect(page.getByText(/Stock is never added here/)).toBeVisible();
   await page.getByLabel("Ingredients").selectOption({ value: straw.id });
   await page.getByLabel("Quantity to remove").fill("5");

@@ -5,7 +5,7 @@ import { Link, NavLink, Navigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import {
   MONEY_METHODS, REPORT_NAMES, type MoneyInOut, type MoneyRow, type PaymentBreakdown, type ProfitReport, type PurchasesExpenses, type ReportName,
-  type SalesSummary, type Shift, type ShiftsReport, type StockReport, type TopProducts, type Unit, type User,
+  type SalesSummary, type ShiftsReport, type StockReport, type TopProducts, type Unit,
 } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { PageHeader } from "../components/PageHeader";
@@ -134,29 +134,14 @@ function TopView({ range }: { range: RangeValue }) {
 
 function StockView({ range }: { range: RangeValue }) {
   const { t } = useTranslation();
-  const { m, cur, tz } = useCur();
-  // Sprint 5 P11: the consumed column for one cashier or one shift (balances stay current).
-  const [who, setWho] = useState({ cashier_id: "", shift_id: "" });
-  const users = useQuery({ queryKey: ["users", "all"], queryFn: () => api.all<User>("/users") });
-  const shifts = useQuery({ queryKey: ["shifts", "range", range], queryFn: () => api.all<Shift>("/shifts", { from: range.from, to: range.to }), enabled: !!range.from });
-  const extra = Object.fromEntries(Object.entries(who).filter(([, v]) => v));
-  const q = useReport<StockReport>("stock", range, extra);
+  const { m, cur } = useCur();
+  // Balances are current, org-wide quantities, so no cashier / shift filter here (Step 3). The API still accepts them.
+  const q = useReport<StockReport>("stock", range);
   const d = q.data;
   const per = (avg: string, u: Unit) => { const c = costPer(avg, u); return t("reports.perUnit", { cost: formatMoney(c.amount, cur), unit: t(`units.${c.unit}`) }); };
   const qty = (v: string, u: Unit) => { const r = readable(v, u); return `${r.qty} ${t(`units.${r.unit}`)}`; };
   return (
     <State q={q}>
-      <div className="card toolbar" style={{ marginBottom: 12 }}>
-        <div className="form-group"><label className="form-label">{t("shift.cashier")}
-          <select className="form-select" value={who.cashier_id} onChange={(e) => setWho({ cashier_id: e.target.value, shift_id: "" })}>
-            <option value="">{t("common.all")}</option>{users.data?.map((u) => <option key={u.id} value={u.id}>{u.display_name || u.username}</option>)}
-          </select></label></div>
-        <div className="form-group"><label className="form-label">{t("reports.names.shifts")}
-          <select className="form-select" value={who.shift_id} onChange={(e) => setWho({ ...who, shift_id: e.target.value })}>
-            <option value="">{t("common.all")}</option>
-            {shifts.data?.filter((s) => !who.cashier_id || s.user.id === who.cashier_id).map((s) => <option key={s.id} value={s.id}>{s.user.display_name} · {formatDateTime(s.opened_at, tz)}</option>)}
-          </select></label></div>
-      </div>
       {d && (
         <div className="stat-grid">
           <Stat title={t("reports.stockValue")} value={m(d.stock_value)} meta={d.without_cost_count ? t("reports.withoutCost", { count: d.without_cost_count }) : undefined} alert={d.without_cost_count > 0} />
@@ -226,7 +211,7 @@ function ShiftsView({ range }: { range: RangeValue }) {
                 <td className="num">{m(s.cash_in)}</td><td className="num">{m(s.cash_out)}</td>
                 <td className="num">{s.expected ? m(s.expected) : "—"}</td><td className="num">{s.actual ? m(s.actual) : "—"}</td>
                 <td className={`num${s.difference?.startsWith("-") ? " text-negative" : ""}`}>{s.difference ? m(s.difference) : "—"}</td><td className="num">{s.orders_count}</td>
-                <td><Link className="btn btn-outline btn-sm" to={`/shift/${s.id}`}>{t("shift.details")}</Link></td></tr>
+                <td><Link className="btn btn-outline btn-sm" to={`/admin/shifts/${s.id}`}>{t("shift.details")}</Link></td></tr>
             ))}</tbody>
           </table></div>
         </>

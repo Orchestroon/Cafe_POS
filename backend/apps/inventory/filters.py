@@ -10,6 +10,7 @@ from .models import StockBalance, StockMovement
 class BalanceFilter(df.FilterSet):
     is_low = df.BooleanFilter(method="f_low")
     is_negative = df.BooleanFilter(method="f_neg")
+    no_cost = df.BooleanFilter(method="f_no_cost")
     search = df.CharFilter(field_name="ingredient__name", lookup_expr="icontains")
 
     class Meta:
@@ -25,6 +26,11 @@ class BalanceFilter(df.FilterSet):
 
     def f_neg(self, qs, name, value):
         return qs.filter(qty__lt=0) if value else qs.filter(qty__gte=0)
+
+    def f_no_cost(self, qs, name, value):
+        # Active ingredients never stocked with a value: the overview's "without a price" card.
+        cond = Q(ingredient__is_active=True, avg_cost__isnull=True)
+        return qs.filter(cond) if value else qs.exclude(cond)
 
 
 class MovementFilter(df.FilterSet):

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { Shift } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
@@ -19,13 +19,17 @@ export function ShiftDetailPage() {
   const { me } = useAuth();
   const q = useQuery({ queryKey: ["shift", id], queryFn: () => api.get<Shift>(`/shifts/${id}`) });
   const [closing, setClosing] = useState(false);
+  const navigate = useNavigate();
+  const loc = useLocation();
+  // Back goes where the user came from (Register sessions, a report, the POS); key "default" = opened directly.
+  const back = () => (loc.key !== "default" ? navigate(-1) : navigate(me?.user.role === "admin" ? "/admin/shifts" : "/pos"));
   if (q.isLoading) return <Loading />;
   if (q.error || !q.data) return <ErrorBanner error={q.error} />;
   const s = q.data;
   return (
     <>
       <PageHeader title={t("shift.report")} actions={<>
-        <Link className="btn btn-outline no-print" to={me?.user.role === "admin" ? "/admin/shifts" : "/pos"}>{t("orders.back")}</Link>
+        <button className="btn btn-outline no-print" onClick={back}>{t("orders.back")}</button>
         <span className="no-print"><HistoryLink entityType="shifts.cashiershift" entityId={s.id} /></span>
         <button className="btn btn-outline no-print" onClick={() => window.print()}>{t("receipt.print")}</button>
         {s.status === "open" && <button className="btn btn-primary no-print" onClick={() => setClosing(true)}>{t("shift.closeShift")}</button>}

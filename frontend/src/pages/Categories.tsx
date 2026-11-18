@@ -6,6 +6,7 @@ import type { Category } from "../api/types";
 import { Check, fieldError, TextField } from "../components/Form";
 import { Modal } from "../components/Modal";
 import { PageHeader } from "../components/PageHeader";
+import { MenuTabs } from "../components/SectionTabs";
 import { Kbd } from "../components/ShortcutsHelp";
 import { ErrorBanner } from "../components/States";
 import { ListState, StatusBadge } from "../components/Table";
@@ -16,7 +17,8 @@ export function Categories() {
   const q = useQuery({ queryKey: ["categories"], queryFn: () => api.all<Category>("/categories", { ordering: "sort_order" }) });
   return (
     <>
-      <PageHeader title={t("nav.categories")} actions={<button className="btn btn-primary" data-shortcut="new" onClick={() => setEditing({ is_active: true, sort_order: 0 })}>{t("common.new")}<Kbd k="N" /></button>} />
+      <PageHeader title={t("nav.menuRecipes")} actions={<button className="btn btn-primary" data-shortcut="new" onClick={() => setEditing({ is_active: true, sort_order: 0 })}>{t("common.new")}<Kbd k="N" /></button>} />
+      <MenuTabs />
       <div className="card">
         <ListState loading={q.isLoading} error={q.error} empty={q.data?.length === 0}>
           <table className="erp-table">
@@ -37,7 +39,8 @@ export function Categories() {
   );
 }
 
-function CategoryForm({ initial, onClose }: { initial: Partial<Category>; onClose: () => void }) {
+/** New / edit category. `onSaved` gets the saved category (the product form's "+" selects it). */
+export function CategoryForm({ initial, onClose, onSaved }: { initial: Partial<Category>; onClose: () => void; onSaved?: (c: Category) => void }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [name, setName] = useState(initial.name ?? "");
@@ -46,9 +49,9 @@ function CategoryForm({ initial, onClose }: { initial: Partial<Category>; onClos
   const save = useMutation({
     mutationFn: () => {
       const body = { name, sort_order: Number(sort) || 0, is_active: active };
-      return initial.id ? api.patch(`/categories/${initial.id}`, body) : api.post("/categories", body);
+      return initial.id ? api.patch<Category>(`/categories/${initial.id}`, body) : api.post<Category>("/categories", body);
     },
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["categories"] }); onClose(); },
+    onSuccess: (c) => { void qc.invalidateQueries({ queryKey: ["categories"] }); onSaved?.(c); onClose(); },
   });
   return (
     <Modal title={initial.id ? t("categories.edit") : t("categories.new")} onClose={onClose}

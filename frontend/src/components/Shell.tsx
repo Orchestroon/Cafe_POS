@@ -33,9 +33,11 @@ const ICONS = {
   help: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01",
 };
 
-type Section = "daily" | "menu" | "buying" | "manage";
-interface Item { to: string; label: string; short?: string; icon: keyof typeof ICONS; section: Section; admin?: boolean; mobile?: boolean }
-const SECTIONS: Section[] = ["daily", "menu", "buying", "manage"];
+type Section = "daily" | "menu" | "manage";
+/** `match`: path prefixes that keep a merged page highlighted on all of its tabs and child routes. */
+interface Item { to: string; label: string; short?: string; icon: keyof typeof ICONS; section: Section; admin?: boolean; mobile?: boolean; match?: string[] }
+const SECTIONS: Section[] = ["daily", "menu", "manage"];
+const isIn = (i: Item, path: string) => (i.match ?? [i.to]).some((m) => (m === "/" ? path === "/" : path === m || path.startsWith(`${m}/`)));
 
 /** App shell (owner design, 2026-11-16): grouped sidebar, workspace card, help + alerts + date in
  *  the top bar. Growl theme. Every navigation asks the unsaved-changes guard first. */
@@ -57,20 +59,16 @@ export function Shell(): ReactNode {
     { to: "/pos", label: t("nav.pos"), short: t("nav.short.pos"), icon: "pos", section: "daily", mobile: true },
     { to: "/orders", label: t("nav.orders"), short: t("nav.short.orders"), icon: "receipt", section: "daily", mobile: true },
     { to: "/expenses", label: t("nav.expenses"), icon: "wallet", section: "daily" },
-    { to: "/admin/products", label: t("nav.products"), short: t("nav.short.products"), icon: "cup", section: "menu", admin: true, mobile: true },
-    { to: "/admin/modifiers", label: t("nav.modifiers"), icon: "sliders", section: "menu", admin: true },
-    { to: "/admin/categories", label: t("nav.categories"), icon: "tag", section: "menu", admin: true },
-    { to: "/admin/ingredients", label: t("nav.ingredients"), icon: "doc", section: "menu", admin: true },
+    { to: "/admin/products", label: t("nav.menuRecipes"), short: t("nav.short.products"), icon: "cup", section: "menu", admin: true, mobile: true, match: ["/admin/products", "/admin/modifiers", "/admin/categories"] },
     { to: "/admin/inventory", label: t("nav.inventory"), short: t("nav.short.inventory"), icon: "box", section: "menu", admin: true, mobile: true },
-    { to: "/admin/suppliers", label: t("nav.suppliers"), icon: "truck", section: "buying", admin: true },
-    { to: "/admin/purchases", label: t("nav.purchases"), icon: "cart", section: "buying", admin: true },
+    { to: "/admin/purchases", label: t("nav.buying"), icon: "cart", section: "menu", admin: true, match: ["/admin/purchases", "/admin/suppliers"] },
     { to: "/admin/shifts", label: t("nav.shifts"), icon: "clock", section: "manage", admin: true },
     { to: "/admin/reports", label: t("nav.reports"), icon: "chart", section: "manage", admin: true },
     { to: "/admin/audit", label: t("nav.audit"), icon: "doc", section: "manage", admin: true },
     { to: "/admin/users", label: t("nav.users"), icon: "users", section: "manage", admin: true },
     { to: "/admin/settings", label: t("nav.settings"), icon: "gear", section: "manage", admin: true },
   ].filter((i) => !i.admin || isAdmin) as Item[];
-  const current = items.find((i) => (i.to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(i.to)));
+  const current = items.find((i) => isIn(i, loc.pathname));
   const initials = (me?.user.display_name || me?.user.username || "?").slice(0, 2).toUpperCase();
   const go = () => setOpen(false);
   const [help, setHelp] = useState(false);
@@ -132,7 +130,7 @@ export function Shell(): ReactNode {
                 <ul className="nav-menu">
                   {list.map((i) => (
                     <li className="nav-item" key={i.to}>
-                      <NavLink to={i.to} end={i.to === "/"} className={({ isActive }) => `nav-link${isActive ? " active" : ""}`} onClick={(e) => { if (!confirmLeave()) e.preventDefault(); else go(); }}>
+                      <NavLink to={i.to} end={i.to === "/"} className={`nav-link${current?.to === i.to ? " active" : ""}`} onClick={(e) => { if (!confirmLeave()) e.preventDefault(); else go(); }}>
                         {icon(ICONS[i.icon])}<span>{i.label}</span>
                       </NavLink>
                     </li>

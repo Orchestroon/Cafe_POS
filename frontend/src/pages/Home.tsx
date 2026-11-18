@@ -56,27 +56,19 @@ function Dashboard() {
         <Stat title={t("home.cashNet")} value={p ? m(p.cash_net) : "…"} />
         <Stat title={t("home.cardNet")} value={p ? m(p.card_net) : "…"} />
         <Stat title={t("home.openShifts")} value={open.data ? open.data.meta.total_count : "…"} />
-        <Link to="/admin/products" style={{ textDecoration: "none" }} title={missing.join(", ")}>
+        <Link to="/admin/products?filter=no-recipe" style={{ textDecoration: "none" }} title={missing.join(", ")}>
           <Stat title={t("home.noRecipe")} value={products.data ? missing.length : "…"} alert={missing.length > 0 || bareOptions.length > 0}
             meta={bareOptions.length > 0 ? t("home.optionsNoIngredient", { count: bareOptions.length }) : missing.length > 0 ? t("home.noRecipeMeta") : undefined} />
         </Link>
-        <Link to="/admin/inventory" style={{ textDecoration: "none" }} title={noPrice.join(", ")}>
+        <Link to="/admin/inventory?flag=no-price" style={{ textDecoration: "none" }} title={noPrice.join(", ")}>
           <Stat title={t("home.noPrice")} value={ings.data ? noPrice.length : "…"} alert={noPrice.length > 0} meta={noPrice.length > 0 ? t("home.noPriceMeta") : undefined} />
         </Link>
         <Link to="/admin/suppliers" style={{ textDecoration: "none" }}>
           <Stat title={t("home.owed")} value={sups.data ? m(owed) : "…"} alert={owed !== "0.00"} />
         </Link>
-        <Stat title={t("home.lowStock")} value={low.data ? low.data.meta.total_count : "…"} alert={!!low.data && low.data.meta.total_count > 0} meta={neg.data ? t("home.negativeCount", { count: neg.data.meta.total_count }) : undefined} />
-      </div>
-      <h3 className="section-title" style={{ marginTop: 20 }}>{t("home.shortcuts")}</h3>
-      <div className="metrics-grid">
-        {(["pos", "orders", "expenses"] as const).map((k) => (
-          <Link key={k} to={`/${k}`} className="metric-card" style={{ textDecoration: "none" }}><div className="metric-title">{t(`nav.${k}`)}</div></Link>
-        ))}
-        {(["products", "modifiers", "categories", "ingredients", "inventory", "suppliers", "purchases", "shifts", "audit", "users", "settings"] as const).map((k) => (
-          <Link key={k} to={`/admin/${k}`} className="metric-card" style={{ textDecoration: "none" }}><div className="metric-title">{t(`nav.${k}`)}</div></Link>
-        ))}
-        <Link to="/admin/reports/sales-summary" className="metric-card" style={{ textDecoration: "none" }}><div className="metric-title">{t("nav.reports")}</div></Link>
+        <Link to="/admin/inventory?flag=low" style={{ textDecoration: "none" }}>
+          <Stat title={t("home.lowStock")} value={low.data ? low.data.meta.total_count : "…"} alert={!!low.data && low.data.meta.total_count > 0} meta={neg.data ? t("home.negativeCount", { count: neg.data.meta.total_count }) : undefined} />
+        </Link>
       </div>
     </>
   );

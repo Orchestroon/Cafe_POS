@@ -1,68 +1,94 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { Balance, Ingredient, Movement } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
+import { Drawer } from "../components/Drawer";
 import { Field, fieldError, TextField } from "../components/Form";
+import { IngredientForm, type IngredientDraft } from "../components/IngredientForm";
+import { Modal } from "../components/Modal";
 import { PageHeader } from "../components/PageHeader";
+import { Kbd } from "../components/ShortcutsHelp";
 import { ErrorBanner } from "../components/States";
 import { ListState, Pager } from "../components/Table";
 import { formatDateTime, formatMoney } from "../i18n/format";
 import { isDec, normMoney, toUnits } from "../lib/decimal";
 import { avgFrom, costPer, readable, toBase, unitsFor, validEntry, type EntryUnit } from "../lib/units";
 
-type Tab = "balances" | "movements" | "adjust" | "opening";
+type Tab = "stock" | "movements";
 
+/** Inventory & Stock (Step 3): one table of every ingredient (quantity, unit, average cost,
+ * low-stock threshold) with New / Edit / Adjust-Waste / Opening balances, plus the Movements ledger. */
 export function Inventory() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<Tab>("balances");
-  const [adjustFor, setAdjustFor] = useState("");
+  const [tab, setTab] = useState<Tab>("stock");
+  const [form, setForm] = useState<IngredientDraft | null>(null);
+  const [adjustFor, setAdjustFor] = useState<string | null>(null); // "" = no ingredient chosen yet
+  const [opening, setOpening] = useState(false);
   return (
     <>
-      <PageHeader title={t("nav.inventory")} />
+      <PageHeader title={t("nav.inventory")} subtitle={t("ingredients.note")} actions={<>
+        <button className="btn btn-outline" onClick={() => setOpening(true)}>{t("inventory.tabs.opening")}</button>
+        <button className="btn btn-outline" onClick={() => setAdjustFor("")}>{t("inventory.adjustWaste")}</button>
+        <button className="btn btn-primary" data-shortcut="new" onClick={() => setForm({ base_unit: "g", is_active: true })}>{t("ingredients.newButton")}<Kbd k="N" /></button>
+      </>} />
       <div className="tabs" role="tablist">
-        {(["balances", "movements", "adjust", "opening"] as Tab[]).map((k) => (
+        {(["stock", "movements"] as Tab[]).map((k) => (
           <button key={k} role="tab" aria-selected={tab === k} className={`tab${tab === k ? " active" : ""}`} onClick={() => setTab(k)}>{t(`inventory.tabs.${k}`)}</button>
         ))}
       </div>
-      {tab === "balances" && <Balances onAdjust={(id) => { setAdjustFor(id); setTab("adjust"); }} />}
+      {tab === "stock" && <Stock onEdit={(b) => setForm({ id: b.ingredient_id, name: b.ingredient_name, base_unit: b.base_unit, low_stock_threshold: b.low_stock_threshold, is_active: b.is_active })} onAdjust={(id) => setAdjustFor(id)} />}
       {tab === "movements" && <Movements />}
-      {tab === "adjust" && <Adjust initialId={adjustFor} />}
-      {tab === "opening" && <Opening />}
+      {form && <IngredientForm initial={form} onClose={() => setForm(null)} />}
+      {adjustFor !== null && <Adjust initialId={adjustFor} onClose={() => setAdjustFor(null)} />}
+      {opening && <Drawer title={t("inventory.tabs.opening")} wide onClose={() => setOpening(false)}><Opening /></Drawer>}
     </>
   );
 }
 
 const useIngredients = () => useQuery({ queryKey: ["ingredients", "all"], queryFn: () => api.all<Ingredient>("/ingredients", { ordering: "name" }) });
 
-function Balances({ onAdjust }: { onAdjust: (id: string) => void }) {
+function Stock({ onEdit, onAdjust }: { onEdit: (b: Balance) => void; onAdjust: (id: string) => void }) {
   const { t } = useTranslation();
+  const { me } = useAuth();
+  const cur = me?.settings.currency ?? "";
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
-  const [flag, setFlag] = useState("");
+  // The status filter lives in the URL so the overview cards and the bell can link straight to it.
+  const [params, setParams] = useSearchParams();
+  const flag = params.get("flag") ?? "";
+  const setFlag = (v: string) => { setPage(1); setParams((p) => { const n = new URLSearchParams(p); if (v) n.set("flag", v); else n.delete("flag"); return n; }, { replace: true }); };
   const q = useQuery({
     queryKey: ["balances", page, search, flag],
-    queryFn: () => api.list<Balance>("/inventory/balances", { page, search, is_low: flag === "low" ? true : undefined, is_negative: flag === "negative" ? true : undefined }),
+    queryFn: () => api.list<Balance>("/inventory/balances", { page, search, is_low: flag === "low" ? true : undefined, is_negative: flag === "negative" ? true : undefined, no_cost: flag === "no-price" ? true : undefined }),
   });
+  const perUnit = (avg: string, b: Balance) => { const c = costPer(avg, b.base_unit); return t("reports.perUnit", { cost: formatMoney(c.amount, cur), unit: t(`units.${c.unit}`) }); };
   return (
     <div className="card">
       <div className="toolbar">
-        <div className="form-group"><label className="form-label">{t("common.search")}</label><input data-shortcut="search" className="form-input" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>
-        <div className="form-group"><label className="form-label">{t("common.status")}</label>
-          <select className="form-select" value={flag} onChange={(e) => { setFlag(e.target.value); setPage(1); }}>
-            <option value="">{t("common.all")}</option><option value="low">{t("inventory.low")}</option><option value="negative">{t("inventory.negative")}</option>
-          </select></div>
+        <div className="form-group"><label className="form-label">{t("common.search")}<input data-shortcut="search" className="form-input" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></label></div>
+        <div className="form-group"><label className="form-label">{t("common.status")}
+          <select className="form-select" value={flag} onChange={(e) => setFlag(e.target.value)}>
+            <option value="">{t("common.all")}</option><option value="low">{t("inventory.low")}</option><option value="negative">{t("inventory.negative")}</option><option value="no-price">{t("ingredients.noCost")}</option>
+          </select></label></div>
       </div>
       <ListState loading={q.isLoading} error={q.error} empty={q.data?.data.length === 0}>
         <table className="erp-table">
-          <thead><tr><th>{t("nav.ingredients")}</th><th className="num">{t("inventory.qty")}</th><th>{t("ingredients.unit")}</th><th className="num">{t("ingredients.threshold")}</th><th /><th /></tr></thead>
+          <thead><tr><th>{t("common.name")}</th><th className="num">{t("inventory.qty")}</th><th>{t("ingredients.unit")}</th><th className="num">{t("ingredients.avgCost")}</th><th className="num">{t("ingredients.threshold")}</th><th /><th /></tr></thead>
           <tbody>
             {q.data?.data.map((b) => (
               <tr key={b.ingredient_id} className={b.is_negative ? "row-negative" : b.is_low ? "row-low" : ""}>
-                <td>{b.ingredient_name}</td><td className="num mono">{b.qty}</td><td>{b.base_unit}</td><td className="num mono">{b.low_stock_threshold ?? "—"}</td>
+                <td>{b.ingredient_name}{!b.is_active && <span className="badge badge-off" style={{ marginInlineStart: 6 }}>{t("common.inactive")}</span>}</td>
+                <td className="num mono">{b.qty}</td><td>{t(`units.${b.base_unit}`)}</td>
+                <td className="num mono">{b.unit_cost === null ? <span className="badge badge-lowstock">{t("ingredients.noCost")}</span> : perUnit(b.unit_cost, b)}</td>
+                <td className="num mono">{b.low_stock_threshold ?? "—"}</td>
                 <td>{b.is_negative ? <span className="badge badge-danger">{t("inventory.negative")}</span> : b.is_low ? <span className="badge badge-pending">{t("inventory.low")}</span> : null}</td>
-                <td><div className="row-actions"><button className="btn btn-outline btn-sm" onClick={() => onAdjust(b.ingredient_id)}>{t("inventory.adjust")}</button></div></td>
+                <td><div className="row-actions">
+                  <button className="btn btn-outline btn-sm" onClick={() => onEdit(b)}>{t("common.edit")}</button>
+                  <button className="btn btn-outline btn-sm" onClick={() => onAdjust(b.ingredient_id)}>{t("inventory.adjust")}</button>
+                </div></td>
               </tr>
             ))}
           </tbody>
@@ -115,11 +141,11 @@ function Movements() {
   );
 }
 
-function Adjust({ initialId }: { initialId: string }) {
+/** Adjust / Waste (Sprint 5 L2): an adjustment only takes stock out (a loss); a count fixes the balance. */
+function Adjust({ initialId, onClose }: { initialId: string; onClose: () => void }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const ings = useIngredients();
-  // Sprint 5 L2: an adjustment only takes stock out (a loss); a count fixes the balance.
   const [f, setF] = useState({ ingredient_id: initialId, mode: "delta", qty: "", unit: "g" as EntryUnit, reason: "" });
   const [clientErr, setClientErr] = useState("");
   const [done, setDone] = useState("");
@@ -149,7 +175,10 @@ function Adjust({ initialId }: { initialId: string }) {
     save.mutate();
   };
   return (
-    <div className="card" style={{ maxWidth: 560 }}>
+    <Modal title={t("inventory.adjustWaste")} onClose={onClose} footer={<>
+      <button className="btn btn-outline" onClick={onClose}>{t("common.close")}</button>
+      <button className="btn btn-primary" disabled={save.isPending} onClick={submit}>{t("common.save")}</button>
+    </>}>
       <div className="alert-banner alert-warning" role="note" style={{ marginBottom: 12 }}>{t("inventory.addWarning")}</div>
       <ErrorBanner error={save.error} />
       {clientErr && <div className="alert-banner alert-warning" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
@@ -174,8 +203,7 @@ function Adjust({ initialId }: { initialId: string }) {
         </Field>
       </div>
       <TextField label={t("inventory.reason")} value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} error={fieldError(save.error, "reason")} />
-      <button className="btn btn-primary" disabled={save.isPending} onClick={submit}>{t("common.save")}</button>
-    </div>
+    </Modal>
   );
 }
 

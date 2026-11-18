@@ -20,10 +20,10 @@ export function Alerts({ icon, onGo }: { icon: ReactNode; onGo: (to: string) => 
   const ings = useQuery({ queryKey: ["ingredients", "all"], queryFn: () => api.all<Ingredient>("/ingredients", { ordering: "name" }), ...opt });
   const noPrice = (ings.data ?? []).filter((i) => i.is_active && i.avg_cost === null).length;
   const items = [
-    { n: neg.data?.meta.total_count ?? 0, text: t("alerts.negative", { count: neg.data?.meta.total_count ?? 0 }), to: "/admin/inventory", bad: true },
-    { n: low.data?.meta.total_count ?? 0, text: t("alerts.low", { count: low.data?.meta.total_count ?? 0 }), to: "/admin/inventory" },
-    { n: noRecipe, text: t("alerts.noRecipe", { count: noRecipe }), to: "/admin/products", bad: true },
-    { n: noPrice, text: t("alerts.noPrice", { count: noPrice }), to: "/admin/inventory", bad: true },
+    { n: neg.data?.meta.total_count ?? 0, text: t("alerts.negative", { count: neg.data?.meta.total_count ?? 0 }), to: "/admin/inventory?flag=negative", bad: true },
+    { n: low.data?.meta.total_count ?? 0, text: t("alerts.low", { count: low.data?.meta.total_count ?? 0 }), to: "/admin/inventory?flag=low" },
+    { n: noRecipe, text: t("alerts.noRecipe", { count: noRecipe }), to: "/admin/products?filter=no-recipe", bad: true },
+    { n: noPrice, text: t("alerts.noPrice", { count: noPrice }), to: "/admin/inventory?flag=no-price", bad: true },
     { n: shifts.data?.meta.total_count ?? 0, text: t("alerts.openShifts", { count: shifts.data?.meta.total_count ?? 0 }), to: "/admin/shifts" },
   ].filter((i) => i.n > 0);
 

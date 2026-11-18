@@ -129,6 +129,17 @@ td.num, th.num { text-align: end; font-variant-numeric: tabular-nums; }
 .pr-deduct { display: flex; flex-direction: column; line-height: 1.3; }
 .pr-deduct strong { color: var(--status-success-text); }
 .pr-add-line { margin-block-start: 12px; }
+.pr-costbar { margin-block-start: 12px; padding: 12px; background: var(--bg-subtle); border: 1px solid var(--border-light); border-radius: var(--radius-md); }
+.pr-costbar-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.pr-costbar-grid > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pr-costbar-grid strong { font-size: 17px; }
+.pr-costbar .alert-banner { margin-block-start: 10px; }
+.pr-costbar .form-hint { margin-block-start: 8px; }
+.pr-costbar .form-hint a { font-weight: 600; color: var(--brand-terracotta); }
+.with-add { display: flex; gap: 6px; align-items: stretch; }
+.with-add > select { flex: 1; min-width: 0; }
+.with-add > .btn { padding-inline: 10px; }
+@media (max-width: 700px) { .pr-costbar-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .pr-info { display: flex; gap: 8px; margin-block-start: 12px; }
 .pr-servings { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-block-end: 8px; }
 .pr-stepper { display: inline-flex; align-items: center; gap: 10px; }
@@ -221,6 +232,7 @@ td.num, th.num { text-align: end; font-variant-numeric: tabular-nums; }
 .drawer-overlay { position: fixed; inset: 0; z-index: 900; display: flex; justify-content: flex-end; background: rgba(20, 16, 14, 0.5); backdrop-filter: blur(2px); }
 .drawer { display: flex; flex-direction: column; width: min(520px, 100%); height: 100%; background: var(--bg-app); border-inline-start: 1px solid var(--border-medium); box-shadow: var(--shadow-lg); animation: drawerIn .2s ease-out; }
 [dir="rtl"] .drawer { animation-name: drawerInRtl; }
+.drawer.drawer-wide { width: min(920px, 100%); }
 @keyframes drawerIn { from { transform: translateX(32px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes drawerInRtl { from { transform: translateX(-32px); opacity: 0; } to { transform: none; opacity: 1; } }
 .drawer-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 16px 20px; background: var(--bg-surface); border-block-end: 1px solid var(--border-light); }

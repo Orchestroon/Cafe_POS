@@ -6,6 +6,7 @@ import type { Supplier } from "../api/types";
 import { Check, fieldError, TextField } from "../components/Form";
 import { Modal } from "../components/Modal";
 import { PageHeader } from "../components/PageHeader";
+import { BuyingTabs } from "../components/SectionTabs";
 import { Kbd } from "../components/ShortcutsHelp";
 import { ErrorBanner } from "../components/States";
 import { ListState, Pager, StatusBadge } from "../components/Table";
@@ -24,7 +25,8 @@ export function Suppliers() {
   const q = useQuery({ queryKey: ["suppliers", page], queryFn: () => api.list<Supplier>("/suppliers", { page }) });
   return (
     <>
-      <PageHeader title={t("nav.suppliers")} actions={<button className="btn btn-primary" data-shortcut="new" onClick={() => setEdit("new")}>{t("common.new")}<Kbd k="N" /></button>} />
+      <PageHeader title={t("nav.buying")} actions={<button className="btn btn-primary" data-shortcut="new" onClick={() => setEdit("new")}>{t("common.new")}<Kbd k="N" /></button>} />
+      <BuyingTabs />
       <div className="card">
         <ListState loading={q.isLoading} error={q.error} empty={q.data?.data.length === 0}>
           <table className="erp-table">
@@ -52,13 +54,14 @@ export function Suppliers() {
   );
 }
 
-function SupplierDialog({ supplier, onClose }: { supplier: Supplier | null; onClose: () => void }) {
+/** New / edit supplier. `onSaved` gets the saved supplier (the purchase form's "+" selects it). */
+export function SupplierDialog({ supplier, onClose, onSaved }: { supplier: Supplier | null; onClose: () => void; onSaved?: (s: Supplier) => void }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [f, setF] = useState({ name: supplier?.name ?? "", phone: supplier?.phone ?? "", notes: supplier?.notes ?? "", is_active: supplier?.is_active ?? true });
   const save = useMutation({
     mutationFn: () => (supplier ? api.patch<Supplier>(`/suppliers/${supplier.id}`, f) : api.post<Supplier>("/suppliers", f)),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["suppliers"] }); onClose(); },
+    onSuccess: (s) => { void qc.invalidateQueries({ queryKey: ["suppliers"] }); onSaved?.(s); onClose(); },
   });
   return (
     <Modal title={supplier ? t("common.edit") : t("common.new")} onClose={onClose} footer={<>

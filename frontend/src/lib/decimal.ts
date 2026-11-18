@@ -82,11 +82,16 @@ export function servingCost(lines: { qty: string; unitCost: string | null }[]): 
   return fromUnits(roundDiv(sum, pow10(7)), 2);
 }
 
+/** A price (2 dp) taken net of an included tax rate (percent); unchanged when no rate. */
+export function netOfTax(price: string, includedTaxRate: string | null = null): string {
+  const p = toUnits(price, 2);
+  return fromUnits(includedTaxRate === null ? p : roundDiv(p * 10000n, 10000n + toUnits(includedTaxRate, 2)), 2);
+}
+
 /** Margin % (1 dp) of a price over a cost. With `includedTaxRate` the price includes that tax and is
  * taken net of it first. Null for a zero price. */
 export function marginPct(price: string, cost: string, includedTaxRate: string | null = null): string | null {
-  let p = toUnits(price, 2);
-  if (includedTaxRate !== null) p = roundDiv(p * 10000n, 10000n + toUnits(includedTaxRate, 2));
+  const p = toUnits(netOfTax(price, includedTaxRate), 2);
   if (p <= 0n) return null;
   return fromUnits(roundDiv((p - toUnits(cost, 2)) * 1000n, p), 1);
 }

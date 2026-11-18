@@ -10,6 +10,7 @@ describe("isBareLayout", () => {
     expect(isBareLayout("admin", "/")).toBe(false);
     expect(isBareLayout("admin", "/orders")).toBe(false);
     expect(isBareLayout("admin", "/admin/products")).toBe(false);
+    expect(isBareLayout("admin", "/admin/shifts/1")).toBe(false); // an Admin's shift detail keeps the sidebar
     expect(isBareLayout("admin", "/posters")).toBe(false);
   });
   it("keeps the sidebar before the user is known", () => {

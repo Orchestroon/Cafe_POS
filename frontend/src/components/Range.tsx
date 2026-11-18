@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth/AuthContext";
+import { presetRange, type Preset } from "../lib/dateRange";
+
+const PRESETS: Preset[] = ["today", "yesterday", "last7", "thisMonth"];
 
 /** Today as a YYYY-MM-DD string in the café's time zone (report filters are local dates). */
 export const localToday = (tz: string) => new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
@@ -21,7 +24,11 @@ export function RangeBar({ value, onChange, children }: { value: RangeValue; onC
     <div className="toolbar">
       <div className="form-group"><label className="form-label">{t("common.from")}<input type="date" className="form-input" value={value.from} max={value.to || undefined} onChange={(e) => onChange({ ...value, from: e.target.value })} /></label></div>
       <div className="form-group"><label className="form-label">{t("common.to")}<input type="date" className="form-input" value={value.to} min={value.from || undefined} onChange={(e) => onChange({ ...value, to: e.target.value })} /></label></div>
-      <button className="btn btn-outline" onClick={() => onChange({ from: today, to: today })}>{t("reports.today")}</button>
+      {PRESETS.map((k) => {
+        const r = presetRange(today, k);
+        const on = r.from === value.from && r.to === value.to;
+        return <button key={k} className={`btn ${on ? "btn-primary" : "btn-outline"}`} aria-pressed={on} onClick={() => onChange(r)}>{t(`reports.presets.${k}`)}</button>;
+      })}
       {children}
     </div>
   );

@@ -41,7 +41,7 @@ export function AdminShifts() {
                   <td className="num">{formatMoney(s.expected_cash ?? s.totals.expected_cash, cur)}</td>
                   <td className="num">{s.actual_cash ? formatMoney(s.actual_cash, cur) : "—"}</td>
                   <td className={`num${s.difference?.startsWith("-") ? " text-negative" : ""}`}>{s.difference ? formatMoney(s.difference, cur) : "—"}</td>
-                  <td><div className="row-actions"><Link className="btn btn-outline btn-sm" to={`/shift/${s.id}`}>{t("shift.details")}</Link></div></td>
+                  <td><div className="row-actions"><Link className="btn btn-outline btn-sm" to={`/admin/shifts/${s.id}`}>{t("shift.details")}</Link></div></td>
                 </tr>
               ))}
             </tbody>

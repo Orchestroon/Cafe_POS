@@ -74,11 +74,11 @@ test.describe("admin", () => {
     await expect(page.getByText("Stock gains")).toHaveCount(0); // stock coming in is never profit (Sprint 5)
   });
 
-  test("the Products screen shows the cost per serving", async ({ page }) => {
+  test("the Products screen shows the recipe cost bar", async ({ page }) => {
     await page.goto("/admin/products");
     await loaded(page);
     await page.locator(".pr-item", { hasText: "Iced Latte" }).click();
-    await expect(page.getByText("Cost per serving")).toBeVisible();
+    await expect(page.getByRole("group", { name: "Recipe cost and margin" })).toContainText("Estimated recipe cost");
   });
 
   for (const [lang, name] of [["en", "money-in-out"], ["ar", "money-in-out"], ["en", "profit"], ["ar", "profit"]] as const) {

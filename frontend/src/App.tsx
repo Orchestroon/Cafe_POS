@@ -1,4 +1,5 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import { useAuth } from "./auth/AuthContext";
 import { RequireAdmin, RequireAuth } from "./auth/guards";
 import { Shell } from "./components/Shell";
 import { AuditLog } from "./pages/AuditLog";
@@ -6,7 +7,6 @@ import { AdminShifts } from "./pages/AdminShifts";
 import { Categories } from "./pages/Categories";
 import { Expenses } from "./pages/Expenses";
 import { Home } from "./pages/Home";
-import { Ingredients } from "./pages/Ingredients";
 import { Inventory } from "./pages/Inventory";
 import { Login } from "./pages/Login";
 import { Modifiers } from "./pages/Modifiers";
@@ -23,6 +23,13 @@ import { ShiftDetailPage } from "./pages/ShiftDetail";
 import { Suppliers } from "./pages/Suppliers";
 import { Users } from "./pages/Users";
 
+/** An Admin's old /shift/:id link lands under Register sessions (a Barista keeps /shift/:id). */
+function ShiftRoute() {
+  const { id } = useParams();
+  const { me } = useAuth();
+  return me?.user.role === "admin" ? <Navigate to={`/admin/shifts/${id}`} replace /> : <ShiftDetailPage />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -34,18 +41,19 @@ export default function App() {
           <Route path="orders" element={<Orders />} />
           <Route path="orders/:id" element={<OrderDetailPage />} />
           <Route path="shift" element={<Navigate to="/pos" replace />} />
-          <Route path="shift/:id" element={<ShiftDetailPage />} />
+          <Route path="shift/:id" element={<ShiftRoute />} />
           <Route path="expenses" element={<Expenses />} />
           <Route path="admin" element={<RequireAdmin />}>
             <Route path="categories" element={<Categories />} />
             <Route path="products" element={<Products />} />
             <Route path="modifiers" element={<Modifiers />} />
-            <Route path="ingredients" element={<Ingredients />} />
+            <Route path="ingredients" element={<Navigate to="/admin/inventory" replace />} />
             <Route path="inventory" element={<Inventory />} />
             <Route path="suppliers" element={<Suppliers />} />
             <Route path="purchases" element={<Purchases />} />
             <Route path="purchases/:id" element={<PurchaseEditor />} />
             <Route path="shifts" element={<AdminShifts />} />
+            <Route path="shifts/:id" element={<ShiftDetailPage />} />
             <Route path="reports" element={<Navigate to="/admin/reports/sales-summary" replace />} />
             <Route path="reports/:name" element={<Reports />} />
             <Route path="users" element={<Users />} />

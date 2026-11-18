@@ -13,6 +13,7 @@ import { ErrorBanner, Loading } from "../components/States";
 import { addMoney, lineTotal, normMoney, packCostFrom, packQty, toUnits } from "../lib/decimal";
 import { avgFrom, costPer, readable, toBase, unitsFor, validEntry, type EntryUnit } from "../lib/units";
 import { PaySupplierDialog } from "../components/PaySupplierDialog";
+import { SupplierDialog } from "./Suppliers";
 import { formatDateTime, formatMoney } from "../i18n/format";
 import { newKey } from "../lib/uuid";
 
@@ -74,6 +75,7 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
   const [confirmPost, setConfirmPost] = useState(false);
   const [voiding, setVoiding] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [addingSupplier, setAddingSupplier] = useState(false);
   const qtyText = (q: string, u: Unit) => { const r = readable(q, u); return `${r.qty} ${t(`units.${r.unit}`)}`; };
   const perText = (avg: string, u: Unit) => { const c = costPer(avg, u); return t("reports.perUnit", { cost: formatMoney(c.amount, cur), unit: t(`units.${c.unit}`) }); };
 
@@ -180,11 +182,16 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
       {purchase && dirty && <div className="alert-banner alert-neutral" style={{ marginBottom: 12 }}>{t("purchases.saveFirst")}</div>}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="form-grid">
-          <Field label={t("purchases.supplier")} error={err("supplier_id")}>
-            <select className="form-select" value={head.supplier_id} onChange={(e) => setH("supplier_id", e.target.value)}>
-              <option value="">—</option>{sups.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </Field>
+          <div className="form-group">
+            <label className="form-label" htmlFor="pu-supplier">{t("purchases.supplier")}</label>
+            <span className="with-add">
+              <select id="pu-supplier" className="form-select" value={head.supplier_id} onChange={(e) => setH("supplier_id", e.target.value)}>
+                <option value="">—</option>{sups.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <button type="button" className="btn btn-outline" aria-label={t("purchases.newSupplier")} title={t("purchases.newSupplier")} onClick={() => setAddingSupplier(true)}>+</button>
+            </span>
+            {err("supplier_id") && <div className="field-error" role="alert">{err("supplier_id")}</div>}
+          </div>
           <TextField label={t("purchases.invoiceNo")} value={head.supplier_invoice_no} maxLength={60} onChange={(e) => setH("supplier_invoice_no", e.target.value)} error={err("supplier_invoice_no")} />
           <TextField label={t("common.date")} type="date" value={head.purchased_on} onChange={(e) => setH("purchased_on", e.target.value)} error={err("purchased_on")} />
           <Field label={t("purchases.paymentTerms")} hint={head.on_credit ? t("purchases.creditHint") : undefined}>
@@ -255,6 +262,10 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
         </div>
         <div className="totals" style={{ marginTop: 12 }}><div className="totals-row grand"><span>{t("pos.total")}</span><span>{formatMoney(total, cur)}</span></div></div>
       </div>
+      {addingSupplier && (
+        <SupplierDialog supplier={null} onClose={() => setAddingSupplier(false)}
+          onSaved={(s) => { qc.setQueryData<Supplier[]>(["suppliers", "active"], (old) => [...(old ?? []).filter((x) => x.id !== s.id), s]); setH("supplier_id", s.id); }} />
+      )}
       {confirmPost && (
         <Modal title={t("purchases.postTitle")} onClose={() => setConfirmPost(false)} footer={<>
           <button className="btn btn-outline" onClick={() => setConfirmPost(false)}>{t("common.cancel")}</button>

@@ -408,6 +408,20 @@ def test_balances_and_movements_endpoints_filters(admin_c):
     assert admin_c.get("/api/v1/inventory/movements?from=bad").status_code == 400
 
 
+def test_balances_no_cost_filter_lists_active_ingredients_without_a_price(admin_c):
+    priced, off = new_ing(admin_c, "Priced"), new_ing(admin_c, "Off")
+    new_ing(admin_c, "Bare")
+    stock(admin_c, priced, "10.000", "5.00")
+    r = admin_c.patch(f"/api/v1/ingredients/{off['id']}", {"is_active": False}, format="json")
+    assert r.status_code == 200
+
+    def names(q):
+        return [b["ingredient_name"] for b in data(admin_c.get(f"/api/v1/inventory/balances{q}"))]
+
+    assert names("?no_cost=true") == ["Bare"]  # not the priced one, not the inactive one
+    assert names("?no_cost=false") == ["Off", "Priced"]
+
+
 def test_movement_date_filter_uses_org_timezone(admin_c, org):
     from datetime import UTC, datetime
 

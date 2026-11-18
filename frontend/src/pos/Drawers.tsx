@@ -150,7 +150,7 @@ export function ShiftDrawer({ shift, onClose }: { shift: Shift | null; onClose: 
       )}
       {admin && <Link className="btn btn-ghost btn-block" style={{ marginTop: 12 }} to="/admin/shifts">{t("shift.allShifts")}</Link>}
       {dlg === "cash" && <CashMoveDialog onClose={() => setDlg(null)} />}
-      {dlg === "close" && shift && <CloseShiftDialog shift={shift} onClose={() => setDlg(null)} onDone={(s) => { onClose(); if (admin) nav(`/shift/${s.id}`); }} />}
+      {dlg === "close" && shift && <CloseShiftDialog shift={shift} onClose={() => setDlg(null)} onDone={(s) => { onClose(); if (admin) nav(`/admin/shifts/${s.id}`); }} />}
     </Drawer>
   );
 }

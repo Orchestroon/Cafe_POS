@@ -32,7 +32,9 @@
     "products": "Products & recipes",
     "categories": "Categories",
     "ingredients": "Ingredients",
-    "inventory": "Inventory & stock",
+    "inventory": "Inventory & Stock",
+    "menuRecipes": "Menu & Recipes",
+    "buying": "Buying & Suppliers",
     "users": "Team & permissions",
     "settings": "Admin settings",
     "logout": "Log out",
@@ -60,7 +62,6 @@
     "sections": {
       "daily": "Daily work",
       "menu": "Menu & stock",
-      "buying": "Buying",
       "manage": "Management"
     }
   },
@@ -82,7 +83,6 @@
     "openShifts": "Open shifts",
     "lowStock": "Low stock",
     "negativeCount": "{{count}} negative",
-    "shortcuts": "Shortcuts",
     "noRecipe": "Sizes without a recipe",
     "noRecipeMeta": "Cannot be sold until fixed",
     "optionsNoIngredient_one": "{{count}} option without an ingredient",
@@ -185,7 +185,19 @@
     "unsavedConfirm": "You have unsaved changes on this product. Leave and lose them?",
     "nameRequired": "Enter a product name.",
     "categoryRequired": "Choose a category.",
-    "costPerServing": "Cost per serving",
+    "filterNoRecipe": "Showing only products with a size that has no recipe (these cannot be sold).",
+    "clearFilter": "Show all",
+    "newCategory": "New category",
+    "noCostRow": "No cost yet: post a purchase or enter an opening balance with its value.",
+    "costBar": {
+      "title": "Recipe cost and margin",
+      "cost": "Estimated recipe cost",
+      "price": "Sale price",
+      "exTax": "Profit and margin use the price without tax.",
+      "profit": "Gross profit",
+      "margin": "Gross margin %",
+      "note": "Gross profit before operating expenses (rent, salaries, utilities) — open <l>Profit Report →</l> for Net Profit."
+    },
     "margin": "Margin",
     "noCost": "No price yet for: {{names}}. Post a purchase or enter an opening balance with its value; until then this size cannot be sold.",
     "costNote": "At today's average cost of each ingredient.",
@@ -195,6 +207,7 @@
   },
   "ingredients": {
     "new": "New ingredient",
+    "newButton": "+ New ingredient",
     "edit": "Edit ingredient",
     "unit": "Unit",
     "threshold": "Low-stock threshold",
@@ -207,15 +220,15 @@
   },
   "inventory": {
     "tabs": {
-      "balances": "Balances",
+      "stock": "Stock",
       "movements": "Movements",
-      "adjust": "Adjustment",
       "opening": "Opening balances"
     },
     "qty": "Quantity",
     "low": "Low",
     "negative": "Negative",
     "adjust": "Adjust",
+    "adjustWaste": "Adjust / Waste",
     "type": "Type",
     "delta": "Change",
     "balanceAfter": "Balance after",
@@ -588,6 +601,7 @@
     "draft": "Draft",
     "posted": "Posted",
     "supplier": "Supplier",
+    "newSupplier": "New supplier",
     "invoiceNo": "Supplier invoice no.",
     "receiptNo": "Purchase no.",
     "viewTitle": "Purchase",
@@ -636,7 +650,12 @@
     "postWarningCredit": "Posting adds the stock now. Nothing is paid now: {{total}} is owed to the supplier. It cannot be undone or edited."
   },
   "reports": {
-    "today": "Today",
+    "presets": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "last7": "Last 7 days",
+      "thisMonth": "This month"
+    },
     "names": {
       "sales-summary": "Sales",
       "payment-breakdown": "Payments",

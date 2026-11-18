@@ -4,18 +4,21 @@
 // All rules stay: prices and recipes per size, waste %, slots, "Track stock" (B3), modifiers.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { needsRecipe, type Balance, type Category, type Ingredient, type ModifierGroup, type Product, type ProductSetup, type RecipeWarning, type Unit } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { fieldError, isDecimal } from "../components/Form";
 import { PageHeader } from "../components/PageHeader";
+import { MenuTabs } from "../components/SectionTabs";
 import { Kbd } from "../components/ShortcutsHelp";
 import { ErrorBanner, Loading } from "../components/States";
 import { formatMoney } from "../i18n/format";
 import { addMoney, isDec, marginPct, perUnitQty, servingCost, subMoney, toUnits } from "../lib/decimal";
 import { optionLines, optionPrice, withOption } from "../lib/optionCost";
+import { recipeCost } from "../lib/recipeCost";
+import { CategoryForm } from "./Categories";
 import { useShortcuts } from "../lib/shortcuts";
 import { gte, inLarge, readable, times, toBase, trim, unitsFor, validEntry, type EntryUnit } from "../lib/units";
 import { confirmLeave, setUnsaved } from "../lib/unsaved";
@@ -83,19 +86,31 @@ export function Products() {
   const cur = me?.settings.currency ?? "";
   const [params, setParams] = useSearchParams();
   const selected = params.get("id"); // product id, "new", or null
+  const noRecipeOnly = params.get("filter") === "no-recipe"; // from the overview card: sizes that cannot be sold
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("");
   const products = useQuery({ queryKey: ["products", "all"], queryFn: () => api.all<Product>("/products", { ordering: "sort_order" }) });
   const cats = useQuery({ queryKey: ["categories"], queryFn: () => api.all<Category>("/categories", { ordering: "sort_order" }) });
   const catName = (id: string) => cats.data?.find((c) => c.id === id)?.name ?? "";
-  const open = (id: string | null) => { if (confirmLeave()) setParams(id ? { id } : {}); };
+  // Keeps the other params (the filter) while the selected product changes.
+  const select = (id: string | null) => setParams((p) => { const n = new URLSearchParams(p); if (id) n.set("id", id); else n.delete("id"); return n; });
+  const open = (id: string | null) => { if (confirmLeave()) select(id); };
 
   const needle = search.trim().toLowerCase();
-  const list = (products.data ?? []).filter((p) => (!cat || p.category_id === cat) && (!needle || p.name.toLowerCase().includes(needle) || p.variants.some((v) => (v.sku ?? "").toLowerCase().includes(needle))));
+  const list = (products.data ?? []).filter((p) => (!cat || p.category_id === cat)
+    && (!noRecipeOnly || (p.is_active && p.variants.some((v) => v.is_active && needsRecipe(v))))
+    && (!needle || p.name.toLowerCase().includes(needle) || p.variants.some((v) => (v.sku ?? "").toLowerCase().includes(needle))));
 
   return (
     <>
-      <PageHeader title={t("nav.products")} subtitle={t("products.subtitle")} actions={<button className="btn btn-primary" data-shortcut="new" onClick={() => open("new")}>{t("products.add")}<Kbd k="N" /></button>} />
+      <PageHeader title={t("nav.menuRecipes")} subtitle={t("products.subtitle")} actions={<button className="btn btn-primary" data-shortcut="new" onClick={() => open("new")}>{t("products.add")}<Kbd k="N" /></button>} />
+      <MenuTabs />
+      {noRecipeOnly && (
+        <div className="alert-banner alert-warning" role="status" style={{ marginBottom: 12, display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+          <span>{t("products.filterNoRecipe")}</span>
+          <button className="btn btn-outline btn-sm" onClick={() => setParams((p) => { const n = new URLSearchParams(p); n.delete("filter"); return n; })}>{t("products.clearFilter")}</button>
+        </div>
+      )}
       <div className={`pr-layout${selected ? " has-selection" : ""}`}>
         <aside className="card pr-list" aria-label={t("products.menu")}>
           <div className="pr-list-head"><h3>{t("products.menu")}</h3><span className="pr-count">{t("products.items", { count: products.data?.length ?? 0 })}</span></div>
@@ -115,7 +130,7 @@ export function Products() {
           <div className="pr-note"><span aria-hidden="true">ⓘ</span> {t("products.note")}</div>
         </aside>
         <section className="pr-editor-wrap">
-          {selected ? <EditorLoader key={selected} id={selected} categories={cats.data ?? []} onBack={() => open(null)} onSaved={(id) => setParams({ id })} />
+          {selected ? <EditorLoader key={selected} id={selected} categories={cats.data ?? []} onBack={() => open(null)} onSaved={select} />
             : <div className="card centered-state">{t("products.pick")}</div>}
         </section>
       </div>
@@ -171,7 +186,11 @@ function Editor({ id, initial, ingredients, groups, balances, categories, onBack
   const [tab, setTab] = useState(0);
   const [clientErr, setClientErr] = useState("");
   const [saved, setSaved] = useState(false);
+  const [addingCat, setAddingCat] = useState(false);
   const ings = useMemo(() => new Map(ingredients.map((i) => [i.id, i])), [ingredients]);
+  // Average cost per base unit of each ingredient (null = never bought / stocked with a value).
+  const unitCosts = useMemo(() => new Map(balances.map((b) => [b.ingredient_id, b.unit_cost])), [balances]);
+  const unitCostOf = (id: string) => unitCosts.get(id) ?? null;
   const dirty = id === "new" || JSON.stringify(normalize(d)) !== JSON.stringify(normalize(base));
   useEffect(() => { setUnsaved(dirty, t("products.unsavedConfirm")); return () => setUnsaved(false); }, [dirty, t]);
 
@@ -261,11 +280,15 @@ function Editor({ id, initial, ingredients, groups, balances, categories, onBack
         </div>
         <div className="pr-grid-3">
           <label className="form-label">{t("products.name")}<input className="form-input" value={d.name} onChange={(e) => set({ name: e.target.value })} />{productField("name") && <span className="field-error" role="alert">{productField("name")}</span>}</label>
-          <label className="form-label">{t("products.category")}
-            <select className="form-select" value={d.category_id} onChange={(e) => set({ category_id: e.target.value })}>
-              {!d.category_id && <option value="">—</option>}
-              {activeCats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>{productField("category_id") && <span className="field-error" role="alert">{productField("category_id")}</span>}</label>
+          <div className="form-label">
+            <label htmlFor="pr-category">{t("products.category")}</label>
+            <span className="with-add">
+              <select id="pr-category" className="form-select" value={d.category_id} onChange={(e) => set({ category_id: e.target.value })}>
+                {!d.category_id && <option value="">—</option>}
+                {activeCats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <button type="button" className="btn btn-outline" aria-label={t("products.newCategory")} title={t("products.newCategory")} onClick={() => setAddingCat(true)}>+</button>
+            </span>{productField("category_id") && <span className="field-error" role="alert">{productField("category_id")}</span>}</div>
           <label className="form-label">{t("products.type")}
             <select className="form-select" value={ptype} onChange={(e) => applyType(e.target.value as PType)}>
               <option value="made">{t("products.types.made")}</option>
@@ -311,10 +334,11 @@ function Editor({ id, initial, ingredients, groups, balances, categories, onBack
           ) : ptype === "stock" ? (
             <StockItemLine size={size} ingredients={ingredients} onPick={(ingredient_id) => setSize({ lines: [newLine({ ingredient_id, qty: "1", unit: "pcs", base: "pcs", waste: "0" })] })} />
           ) : (
-            <RecipeLines size={size} ings={ings} ingredients={ingredients} problems={lineProblems} setLine={setLine}
+            <RecipeLines size={size} ings={ings} ingredients={ingredients} problems={lineProblems} setLine={setLine} unitCostOf={unitCostOf}
               onRemove={(key) => setSize({ lines: size.lines.filter((l) => l.key !== key) })}
               onAdd={() => setSize({ lines: [...size.lines, newLine()] })} />
           )}
+          {size.track_stock && size.lines.some((l) => l.ingredient_id) && <RecipeCostBar size={size} ings={ings} unitCostOf={unitCostOf} />}
           {size.track_stock && (size.lines.length === 0 || (ptype === "stock" && !size.lines[0]?.ingredient_id)) && <div className="alert-banner alert-warning" role="status" style={{ marginTop: 10 }}>{t("products.noRecipeHint")}</div>}
           {slotWarnings.map((g) => <div key={g.id} className="alert-banner alert-warning" role="alert" style={{ marginTop: 8 }}>{t("recipe.slotMissing", { group: g.name, slot: g.replacement_slot })}</div>)}
           <div className="alert-banner alert-success pr-info"><span aria-hidden="true">✓</span> {t("products.recipeInfo")}</div>
@@ -350,13 +374,43 @@ function Editor({ id, initial, ingredients, groups, balances, categories, onBack
         <button className="btn btn-outline" disabled={!dirty || save.isPending || id === "new"} onClick={discard}>{t("products.discard")}</button>
         <button className="btn btn-primary" disabled={!dirty || save.isPending} onClick={submit}>✓ {t("products.save")}<Kbd k="Ctrl+Enter" /></button>
       </div>
+      {addingCat && (
+        <CategoryForm initial={{ is_active: true, sort_order: 0 }} onClose={() => setAddingCat(false)}
+          onSaved={(c) => { qc.setQueryData<Category[]>(["categories"], (old) => [...(old ?? []).filter((x) => x.id !== c.id), c]); set({ category_id: c.id }); }} />
+      )}
     </div>
   );
 }
 
-function RecipeLines({ size, ings, ingredients, problems, setLine, onRemove, onAdd }: {
+/** Live cost of one serving of the selected size at today's average costs, and the gross profit and
+ * margin on its price. Computed from the draft, so it moves as you type. Unknown costs are never 0. */
+function RecipeCostBar({ size, ings, unitCostOf }: { size: Size; ings: Map<string, Ingredient>; unitCostOf: (id: string) => string | null }) {
+  const { t } = useTranslation();
+  const { me } = useAuth();
+  const s = me?.settings;
+  const cur = s?.currency ?? "";
+  const taxIn = s?.tax_enabled && s.prices_include_tax ? s.tax_rate : null;
+  const r = recipeCost(size.lines, unitCostOf, size.price, taxIn);
+  const m = (v: string | null) => (v === null ? "—" : formatMoney(v, cur));
+  const names = r.missing.map((id) => ings.get(id)?.name ?? size.lines.find((l) => l.ingredient_id === id)?.name ?? "").join(t("audit.listSep"));
+  return (
+    <div className="pr-costbar" role="group" aria-label={t("products.costBar.title")}>
+      <div className="pr-costbar-grid">
+        <div><span className="form-hint">{t("products.costBar.cost")}</span><strong data-metric="cost">{m(r.cost)}</strong></div>
+        <div><span className="form-hint">{t("products.costBar.price")}</span><strong>{isDec(size.price, 2) ? formatMoney(size.price, cur) : "—"}</strong>{taxIn !== null && <span className="form-hint">{t("products.costBar.exTax")}</span>}</div>
+        <div><span className="form-hint">{t("products.costBar.profit")}</span><strong className={r.profit?.startsWith("-") ? "pr-bad" : ""}>{m(r.profit)}</strong></div>
+        <div><span className="form-hint">{t("products.costBar.margin")}</span><strong className={r.margin?.startsWith("-") ? "pr-bad" : ""}>{r.margin === null ? "—" : `${r.margin}%`}</strong></div>
+      </div>
+      {r.missing.length > 0 && <div className="alert-banner alert-warning" role="status">{t("products.noCost", { names })}</div>}
+      <p className="form-hint">{t("products.costNote")}</p>
+      <p className="form-hint"><Trans i18nKey="products.costBar.note" components={{ l: <Link to="/admin/reports/profit" /> }} /></p>
+    </div>
+  );
+}
+
+function RecipeLines({ size, ings, ingredients, problems, setLine, unitCostOf, onRemove, onAdd }: {
   size: Size; ings: Map<string, Ingredient>; ingredients: Ingredient[]; problems: { index: number; problems: string[] }[];
-  setLine: (key: number, p: Partial<Line>) => void; onRemove: (key: number) => void; onAdd: () => void;
+  setLine: (key: number, p: Partial<Line>) => void; unitCostOf: (id: string) => string | null; onRemove: (key: number) => void; onAdd: () => void;
 }) {
   const { t } = useTranslation();
   const [more, setMore] = useState<number | null>(null);
@@ -393,6 +447,7 @@ function RecipeLines({ size, ings, ingredients, problems, setLine, onRemove, onA
             <div className="pr-line-meta form-hint">
               {ing ? t("products.stockUnit", { unit: t(`units.${ing.base_unit}`) }) : ""}
               {l.slot.trim() ? ` · ${t("recipe.slot")}: ${l.slot.trim()}` : ""}
+              {l.ingredient_id && unitCostOf(l.ingredient_id) === null && <span className="badge badge-lowstock" style={{ marginInlineStart: 8 }} title={t("products.noCostRow")}>{t("ingredients.noCost")}</span>}
             </div>
             {more === l.key && (
               <div className="pr-line-more">
@@ -435,12 +490,11 @@ function PreviewAndStock({ size, ings, balances, productName, groups }: { size: 
     const have = bal.get(l.ingredient_id)?.qty;
     return { key: l.key, name: ings.get(l.ingredient_id)?.name ?? l.name ?? "", unit, one, need, have, enough: have !== undefined && gte(have, need), unitCost: bal.get(l.ingredient_id)?.unit_cost ?? null, slot: l.slot.trim() };
   });
-  // Cost per serving at today's average cost, and the margin on this size's price.
+  // The size's own cost and margin are in the cost bar under the recipe; here only what each option adds.
   const base = rows.map((r) => ({ qty: r.one, unitCost: r.unitCost, slot: r.slot }));
   const cost = servingCost(base);
   const s = me?.settings;
   const taxIn = s?.tax_enabled && s.prices_include_tax ? s.tax_rate : null;
-  const margin = cost !== null && isDec(size.price, 2) ? marginPct(size.price, cost, taxIn) : null;
   // Sprint 5 P6: what each linked option adds to the cost and the price, and the margin with it.
   const ucOf = (id: string) => bal.get(id)?.unit_cost ?? null;
   const options = groups.flatMap((g) => g.options.filter((o) => o.is_active).map((o) => {
@@ -449,7 +503,6 @@ function PreviewAndStock({ size, ings, balances, productName, groups }: { size: 
     const full = isDec(size.price, 2) ? addMoney(size.price, price) : null;
     return { id: o.id, name: `${g.name}: ${o.label}`, extraCost: c !== null && cost !== null ? subMoney(c, cost) : null, price, margin: c !== null && full ? marginPct(full, c, taxIn) : null };
   }));
-  const noCost = rows.filter((r) => r.unitCost === null).map((r) => r.name);
   const show = (q: string, u: Unit) => { const r = readable(q, u); return `${r.qty} ${t(`units.${r.unit}`)}`; };
   const allEnough = rows.length > 0 && rows.every((r) => r.enough);
   return (
@@ -467,10 +520,6 @@ function PreviewAndStock({ size, ings, balances, productName, groups }: { size: 
           </div>
           {rows.map((r) => <div key={r.key} className="pr-kv"><strong>{r.name}</strong><strong className="mono">{show(r.need, r.unit)}</strong></div>)}
           <p className="form-hint">{t("products.previewNote")}</p>
-          <div className="pr-kv pr-cost"><span>{t("products.costPerServing")}</span><strong>{cost === null ? "—" : formatMoney(cost, s?.currency ?? "")}</strong></div>
-          {margin !== null && <div className="pr-kv"><span>{t("products.margin")}</span><strong className={margin.startsWith("-") ? "pr-bad" : ""}>{margin}%</strong></div>}
-          {noCost.length > 0 && <p className="form-hint">{t("products.noCost", { names: noCost.join(t("audit.listSep")) })}</p>}
-          {cost !== null && <p className="form-hint">{t("products.costNote")}</p>}
           {options.length > 0 && (
             <div className="table-scroll" style={{ marginTop: 8 }}>
               <table className="erp-table">

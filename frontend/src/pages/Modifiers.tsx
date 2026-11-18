@@ -7,6 +7,7 @@ import { useAuth } from "../auth/AuthContext";
 import { Check, Field, fieldError, isDecimal, TextField } from "../components/Form";
 import { Modal } from "../components/Modal";
 import { PageHeader } from "../components/PageHeader";
+import { MenuTabs } from "../components/SectionTabs";
 import { Kbd } from "../components/ShortcutsHelp";
 import { ErrorBanner, Loading } from "../components/States";
 import { ListState, StatusBadge } from "../components/Table";
@@ -21,7 +22,8 @@ export function Modifiers() {
   const q = useQuery({ queryKey: ["modifier-groups"], queryFn: () => api.all<ModifierGroup>("/modifier-groups", { ordering: "sort_order" }) });
   return (
     <>
-      <PageHeader title={t("nav.modifiers")} subtitle={t("modifiers.help")} actions={<button className="btn btn-primary" data-shortcut="new" onClick={() => setEditId("new")}>{t("common.new")}<Kbd k="N" /></button>} />
+      <PageHeader title={t("nav.menuRecipes")} subtitle={t("modifiers.help")} actions={<button className="btn btn-primary" data-shortcut="new" onClick={() => setEditId("new")}>{t("common.new")}<Kbd k="N" /></button>} />
+      <MenuTabs />
       <div className="card">
         <ListState loading={q.isLoading} error={q.error} empty={q.data?.length === 0}>
           <table className="erp-table">
