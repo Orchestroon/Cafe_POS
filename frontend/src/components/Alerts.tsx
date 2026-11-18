@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
-import { needsRecipe, type Product } from "../api/types";
+import { needsRecipe, type Ingredient, type Product } from "../api/types";
 
 /** Top-bar bell (Admin): things that need attention, from data the app already has — no new
  *  notification system. Low / negative stock, sizes without a recipe, shifts still open. */
@@ -16,10 +16,14 @@ export function Alerts({ icon, onGo }: { icon: ReactNode; onGo: (to: string) => 
   const shifts = useQuery({ queryKey: ["shifts", "count", "open"], queryFn: () => api.list("/shifts", { status: "open", page_size: 1 }), ...opt });
   const products = useQuery({ queryKey: ["products", "all"], queryFn: () => api.all<Product>("/products", { ordering: "sort_order" }) });
   const noRecipe = (products.data ?? []).filter((p) => p.is_active).flatMap((p) => p.variants.filter((v) => v.is_active && needsRecipe(v))).length;
+  // Sprint 5 L3: an ingredient never stocked with a value cannot be sold (COST_MISSING).
+  const ings = useQuery({ queryKey: ["ingredients", "all"], queryFn: () => api.all<Ingredient>("/ingredients", { ordering: "name" }), ...opt });
+  const noPrice = (ings.data ?? []).filter((i) => i.is_active && i.avg_cost === null).length;
   const items = [
     { n: neg.data?.meta.total_count ?? 0, text: t("alerts.negative", { count: neg.data?.meta.total_count ?? 0 }), to: "/admin/inventory", bad: true },
     { n: low.data?.meta.total_count ?? 0, text: t("alerts.low", { count: low.data?.meta.total_count ?? 0 }), to: "/admin/inventory" },
     { n: noRecipe, text: t("alerts.noRecipe", { count: noRecipe }), to: "/admin/products", bad: true },
+    { n: noPrice, text: t("alerts.noPrice", { count: noPrice }), to: "/admin/inventory", bad: true },
     { n: shifts.data?.meta.total_count ?? 0, text: t("alerts.openShifts", { count: shifts.data?.meta.total_count ?? 0 }), to: "/admin/shifts" },
   ].filter((i) => i.n > 0);
 

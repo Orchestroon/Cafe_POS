@@ -18,11 +18,11 @@ export type Area = (typeof AREAS)[number];
 const AREA_OF: Record<string, Area> = {
   order: "sales", refund: "sales", shift: "shifts", cash: "shifts", stock: "stock", ingredient: "stock",
   category: "menu", product: "menu", variant: "menu", recipe: "menu", modifier_group: "menu", modifier_option: "menu",
-  purchase: "purchases", supplier: "purchases", expense: "expenses", user: "admin", settings: "admin",
+  purchase: "purchases", supplier: "purchases", supplier_payment: "purchases", expense: "expenses", user: "admin", settings: "admin",
 };
 export const areaOf = (action: string): Area => AREA_OF[action.split(".")[0]] ?? "admin";
 
-const MONEY = new Set(["total", "total_amount", "amount", "opening_cash", "expected_cash", "actual_cash", "difference", "price", "price_delta", "cash_sales", "card_sales", "cash_refunds", "card_refunds", "drawer_expenses"]);
+const MONEY = new Set(["total", "total_amount", "amount", "opening_cash", "expected_cash", "actual_cash", "difference", "price", "price_delta", "cash_sales", "card_sales", "cash_refunds", "card_refunds", "drawer_expenses", "cost_total", "total_value"]);
 const ID_KEYS = new Set(["shift_id", "order_id", "original_cashier_id", "owner_id", "expense_id", "ingredient_id", "category_id", "variant_id", "group_id", "supplier_id"]);
 // Shown in the sentence or as their own section, not repeated as plain rows.
 const SKIP = new Set(["changes", "before", "after", "totals", "payments", "lines", "items_detail", "balances_after"]);
@@ -89,13 +89,17 @@ export function sentence(e: AuditEvent, c: Ctx): string {
   const name = recordName(e, c);
   const vars: Record<string, string | number> = { name };
   switch (e.action) {
+    case "order.cost_estimated": Object.assign(vars, { invoice: s.invoice_no, cost: m("cost_total") }); break;
     case "order.created": Object.assign(vars, { invoice: s.invoice_no, total: m("total"), payments: methods(s.payments, c) || c.t("audit.noPayment") }); break;
     case "refund.created": Object.assign(vars, { invoice: s.invoice_no, amount: m("total_amount"), reason: s.reason }); break;
+    case "order.stock_returned": Object.assign(vars, { invoice: s.invoice_no, value: m("total_value"), reason: s.reason ?? "" }); break;
     case "shift.opened": vars.cash = m("opening_cash"); break;
     case "shift.closed": Object.assign(vars, { owner: m("owner_id"), expected: m("expected_cash"), actual: m("actual_cash"), difference: m("difference") }); break;
     case "stock.adjusted": Object.assign(vars, { ingredient: m("ingredient_id"), delta: s.qty_delta, after: s.balance_after, reason: s.reason }); break;
     case "stock.counted": Object.assign(vars, { ingredient: m("ingredient_id"), counted: s.counted_qty, delta: s.qty_delta }); break;
-    case "stock.opening_balance": Object.assign(vars, { ingredient: m("ingredient_id"), qty: s.qty }); break;
+    case "stock.opening_balance": Object.assign(vars, { ingredient: m("ingredient_id"), qty: s.qty, value: s.total_value ? m("total_value") : "—" }); break;
+    case "supplier_payment.created":
+    case "supplier_payment.voided": Object.assign(vars, { supplier: s.supplier ?? "", amount: m("amount"), source: m("source"), reason: s.reason ?? "" }); break;
     case "recipe.replaced": vars.lines = recipeText(s.after, c); break;
     case "product.modifier_groups_replaced": vars.groups = groupsText(s.after, c); break;
     case "modifier_option.created":

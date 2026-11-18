@@ -1,6 +1,8 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
-from apps.core.serializers import StrictSerializerMixin, _StringDecimalField
+from apps.core.serializers import QtyField, StrictSerializerMixin, _StringDecimalField
 
 
 class CartItemSerializer(StrictSerializerMixin, serializers.Serializer):
@@ -42,3 +44,24 @@ class RefundSerializer(StrictSerializerMixin, serializers.Serializer):
     card_external_reference = serializers.CharField(
         max_length=100, required=False, allow_blank=True, allow_null=True
     )
+
+
+class ReturnLineSerializer(StrictSerializerMixin, serializers.Serializer):
+    ingredient_id = serializers.UUIDField()
+    qty = QtyField(min_value=Decimal("0.001"))
+
+
+class StockReturnSerializer(StrictSerializerMixin, serializers.Serializer):
+    reason = serializers.CharField(max_length=300)
+    lines = ReturnLineSerializer(many=True, allow_empty=False, max_length=100)
+
+    def validate_reason(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("A reason is required.")
+        return value.strip()
+
+    def validate_lines(self, lines):
+        ids = [line["ingredient_id"] for line in lines]
+        if len(set(ids)) != len(ids):
+            raise serializers.ValidationError("Each ingredient once.")
+        return lines

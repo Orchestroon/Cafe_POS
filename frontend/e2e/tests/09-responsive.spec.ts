@@ -31,7 +31,8 @@ for (const lang of ["en", "ar"] as const) {
 
       await page.goto("/orders");
       await loaded(page);
-      await expect(page.locator("table").first()).toBeVisible();
+      // Sprint 5 P11: cards on a phone, the table elsewhere.
+      await expect(page.locator(device === "phone" ? ".order-card" : "table.orders-table").first()).toBeVisible();
       await expectNoSideScroll(page);
       await shot("orders");
 

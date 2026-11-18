@@ -32,6 +32,7 @@ function SettingsForm({ initial }: { initial: Settings }) {
   const err = (k: string) => fieldError(save.error, k);
   const submit = () => {
     if (!isDecimal(f.tax_rate, 2)) return setClientErr(t("settings.taxRateInvalid"));
+    if (!isDecimal(f.card_fee_pct ?? "0", 2) || Number(f.card_fee_pct ?? "0") > 100) return setClientErr(t("settings.cardFeeInvalid"));
     setClientErr("");
     save.mutate();
   };
@@ -72,6 +73,10 @@ function SettingsForm({ initial }: { initial: Settings }) {
           <TextField label={t("settings.taxNumber")} value={f.tax_registration_number} onChange={(e) => set("tax_registration_number", e.target.value)} error={err("tax_registration_number")} />
         </div>
         <Check label={t("settings.pricesIncludeTax")} checked={f.prices_include_tax} onChange={(v) => set("prices_include_tax", v)} />
+      </div>
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="card-header"><div className="card-title">{t("settings.cardFees")}</div></div>
+        <TextField label={t("settings.cardFeePct")} inputMode="decimal" value={f.card_fee_pct ?? "0.00"} onChange={(e) => set("card_fee_pct", e.target.value)} error={err("card_fee_pct")} hint={t("settings.cardFeeHint")} />
       </div>
       <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
         <button className="btn btn-primary" disabled={save.isPending} onClick={submit}>{t("common.save")}</button>

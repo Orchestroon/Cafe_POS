@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link, Navigate } from "react-router-dom";
 import { api } from "../api/client";
-import { needsRecipe, type ModifierGroup, type PaymentBreakdown, type Product, type SalesSummary } from "../api/types";
+import { needsRecipe, type Ingredient, type ModifierGroup, type PaymentBreakdown, type Product, type SalesSummary, type Supplier } from "../api/types";
+import { addMoney } from "../lib/decimal";
 import { useAuth } from "../auth/AuthContext";
 import { PageHeader } from "../components/PageHeader";
 import { Stat } from "../components/Stat";
@@ -37,6 +38,11 @@ function Dashboard() {
   const products = useQuery({ queryKey: ["products", "all"], queryFn: () => api.all<Product>("/products") });
   const groups = useQuery({ queryKey: ["modifier-groups"], queryFn: () => api.all<ModifierGroup>("/modifier-groups", { ordering: "sort_order" }) });
   const missing = (products.data ?? []).filter((x) => x.is_active).flatMap((x) => x.variants.filter((v) => v.is_active && needsRecipe(v)).map((v) => `${x.name} · ${v.label}`));
+  const ings = useQuery({ queryKey: ["ingredients", "all"], queryFn: () => api.all<Ingredient>("/ingredients", { ordering: "name" }) });
+  const noPrice = (ings.data ?? []).filter((i) => i.is_active && i.avg_cost === null).map((i) => i.name);
+  // Sprint 5 P4: what is still owed to suppliers for purchases on credit.
+  const sups = useQuery({ queryKey: ["suppliers", "all"], queryFn: () => api.all<Supplier>("/suppliers") });
+  const owed = (sups.data ?? []).reduce((sum, x) => addMoney(sum, x.owed), "0.00");
   const bareOptions = (groups.data ?? []).filter((g) => g.is_active).flatMap((g) => g.options.filter((o) => o.is_active && o.track_stock && (o.effects?.length ?? 0) === 0));
   const s = sales.data;
   const p = pay.data;
@@ -53,6 +59,12 @@ function Dashboard() {
         <Link to="/admin/products" style={{ textDecoration: "none" }} title={missing.join(", ")}>
           <Stat title={t("home.noRecipe")} value={products.data ? missing.length : "…"} alert={missing.length > 0 || bareOptions.length > 0}
             meta={bareOptions.length > 0 ? t("home.optionsNoIngredient", { count: bareOptions.length }) : missing.length > 0 ? t("home.noRecipeMeta") : undefined} />
+        </Link>
+        <Link to="/admin/inventory" style={{ textDecoration: "none" }} title={noPrice.join(", ")}>
+          <Stat title={t("home.noPrice")} value={ings.data ? noPrice.length : "…"} alert={noPrice.length > 0} meta={noPrice.length > 0 ? t("home.noPriceMeta") : undefined} />
+        </Link>
+        <Link to="/admin/suppliers" style={{ textDecoration: "none" }}>
+          <Stat title={t("home.owed")} value={sups.data ? m(owed) : "…"} alert={owed !== "0.00"} />
         </Link>
         <Stat title={t("home.lowStock")} value={low.data ? low.data.meta.total_count : "…"} alert={!!low.data && low.data.meta.total_count > 0} meta={neg.data ? t("home.negativeCount", { count: neg.data.meta.total_count }) : undefined} />
       </div>

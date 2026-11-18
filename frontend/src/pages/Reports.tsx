@@ -5,7 +5,7 @@ import { Link, NavLink, Navigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import {
   MONEY_METHODS, REPORT_NAMES, type MoneyInOut, type MoneyRow, type PaymentBreakdown, type ProfitReport, type PurchasesExpenses, type ReportName,
-  type SalesSummary, type ShiftsReport, type StockReport, type TopProducts,
+  type SalesSummary, type Shift, type ShiftsReport, type StockReport, type TopProducts, type Unit, type User,
 } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { PageHeader } from "../components/PageHeader";
@@ -13,6 +13,7 @@ import { RangeBar, useRange, type RangeValue } from "../components/Range";
 import { Stat } from "../components/Stat";
 import { ErrorBanner, Loading } from "../components/States";
 import { formatDateTime, formatMoney } from "../i18n/format";
+import { costPer, readable } from "../lib/units";
 
 /** /admin/reports/:name: one page per report with a local-date range (spec 10.6). */
 export function Reports() {
@@ -133,11 +134,29 @@ function TopView({ range }: { range: RangeValue }) {
 
 function StockView({ range }: { range: RangeValue }) {
   const { t } = useTranslation();
-  const { m } = useCur();
-  const q = useReport<StockReport>("stock", range);
+  const { m, cur, tz } = useCur();
+  // Sprint 5 P11: the consumed column for one cashier or one shift (balances stay current).
+  const [who, setWho] = useState({ cashier_id: "", shift_id: "" });
+  const users = useQuery({ queryKey: ["users", "all"], queryFn: () => api.all<User>("/users") });
+  const shifts = useQuery({ queryKey: ["shifts", "range", range], queryFn: () => api.all<Shift>("/shifts", { from: range.from, to: range.to }), enabled: !!range.from });
+  const extra = Object.fromEntries(Object.entries(who).filter(([, v]) => v));
+  const q = useReport<StockReport>("stock", range, extra);
   const d = q.data;
+  const per = (avg: string, u: Unit) => { const c = costPer(avg, u); return t("reports.perUnit", { cost: formatMoney(c.amount, cur), unit: t(`units.${c.unit}`) }); };
+  const qty = (v: string, u: Unit) => { const r = readable(v, u); return `${r.qty} ${t(`units.${r.unit}`)}`; };
   return (
     <State q={q}>
+      <div className="card toolbar" style={{ marginBottom: 12 }}>
+        <div className="form-group"><label className="form-label">{t("shift.cashier")}
+          <select className="form-select" value={who.cashier_id} onChange={(e) => setWho({ cashier_id: e.target.value, shift_id: "" })}>
+            <option value="">{t("common.all")}</option>{users.data?.map((u) => <option key={u.id} value={u.id}>{u.display_name || u.username}</option>)}
+          </select></label></div>
+        <div className="form-group"><label className="form-label">{t("reports.names.shifts")}
+          <select className="form-select" value={who.shift_id} onChange={(e) => setWho({ ...who, shift_id: e.target.value })}>
+            <option value="">{t("common.all")}</option>
+            {shifts.data?.filter((s) => !who.cashier_id || s.user.id === who.cashier_id).map((s) => <option key={s.id} value={s.id}>{s.user.display_name} · {formatDateTime(s.opened_at, tz)}</option>)}
+          </select></label></div>
+      </div>
       {d && (
         <div className="stat-grid">
           <Stat title={t("reports.stockValue")} value={m(d.stock_value)} meta={d.without_cost_count ? t("reports.withoutCost", { count: d.without_cost_count }) : undefined} alert={d.without_cost_count > 0} />
@@ -147,8 +166,8 @@ function StockView({ range }: { range: RangeValue }) {
         <thead><tr><th>{t("nav.ingredients")}</th><th className="num">{t("inventory.qty")}</th><th className="num">{t("ingredients.threshold")}</th><th className="num">{t("reports.consumed")}</th><th className="num">{t("reports.avgCost")}</th><th className="num">{t("reports.value")}</th><th /></tr></thead>
         <tbody>{d?.ingredients.map((i) => (
           <tr key={i.ingredient_id} className={i.is_negative ? "row-negative" : i.is_low ? "row-low" : ""}>
-            <td>{i.name}{!i.is_active && <span className="badge badge-off" style={{ marginInlineStart: 6 }}>{t("common.inactive")}</span>}</td><td className="num mono">{i.balance} {i.unit}</td><td className="num mono">{i.threshold ?? "—"}</td><td className="num mono">{i.consumed_qty_period} {i.unit}</td>
-            <td className="num mono">{i.unit_cost ? t("reports.perUnit", { cost: i.unit_cost, unit: t(`units.${i.unit}`) }) : t("reports.noCost")}</td><td className="num">{i.value ? m(i.value) : "—"}</td>
+            <td>{i.name}{!i.is_active && <span className="badge badge-off" style={{ marginInlineStart: 6 }}>{t("common.inactive")}</span>}</td><td className="num mono">{qty(i.balance, i.unit)}</td><td className="num mono">{i.threshold ?? "—"}</td><td className="num mono">{qty(i.consumed_qty_period, i.unit)}</td>
+            <td className="num mono">{i.unit_cost ? per(i.unit_cost, i.unit) : t("reports.noCost")}</td><td className="num">{i.value ? m(i.value) : "—"}</td>
             <td>{i.is_negative ? <span className="badge badge-danger">{t("inventory.negative")}</span> : i.is_low ? <span className="badge badge-pending">{t("inventory.low")}</span> : null}</td>
           </tr>
         ))}</tbody>
@@ -269,9 +288,10 @@ function ProfitView({ range }: { range: RangeValue }) {
   const { m } = useCur();
   const q = useReport<ProfitReport>("profit", range);
   const d = q.data;
-  const neg = (v: string) => (v.startsWith("-") ? " text-negative" : "");
-  const line = (k: string, v: string, sign: "" | "−" | "+" = "", grand = false) => (
-    <div className={`totals-row${grand ? " grand" : ""}`} key={k}><span>{sign && `${sign} `}{t(`reports.profitRows.${k}`)}</span><span className={neg(v)}>{m(v)}</span></div>
+  const neg = (v: string | null) => (v?.startsWith("-") ? " text-negative" : "");
+  const money = (v: string | null) => (v === null ? t("reports.cantCalc") : m(v));
+  const line = (k: string, v: string | null, sign: "" | "−" | "+" = "", grand = false, label?: string) => (
+    <div className={`totals-row${grand ? " grand" : ""}`} key={k}><span>{sign && `${sign} `}{label ?? t(`reports.profitRows.${k}`)}</span><span className={v === null ? "text-muted" : neg(v)}>{money(v)}</span></div>
   );
   return (
     <State q={q}>
@@ -283,24 +303,34 @@ function ProfitView({ range }: { range: RangeValue }) {
               {d.adjustments_without_cost > 0 && <div>{t("reports.missingAdjustments", { count: d.adjustments_without_cost })}</div>}
             </div>
           )}
+          {d.estimated_orders > 0 && <p className="form-hint" style={{ marginBottom: 12 }}>{t("reports.estimatedOrders", { count: d.estimated_orders })}</p>}
           <div className="stat-grid">
             <Stat title={t("reports.profitRows.net_sales")} value={m(d.net_sales)} />
-            <Stat title={t("reports.profitRows.gross_profit")} value={m(d.gross_profit)} meta={d.gross_margin_pct ? t("reports.margin", { pct: d.gross_margin_pct }) : undefined} alert={d.gross_profit.startsWith("-")} />
-            <Stat title={t("reports.profitRows.net_profit")} value={m(d.net_profit)} alert={d.net_profit.startsWith("-")} />
+            <Stat title={t("reports.profitRows.gross_profit")} value={money(d.gross_profit)} meta={d.gross_margin_pct ? t("reports.margin", { pct: d.gross_margin_pct }) : undefined} alert={!!d.gross_profit?.startsWith("-")} />
+            <Stat title={t("reports.profitRows.net_profit")} value={money(d.net_profit)} alert={!!d.net_profit?.startsWith("-")} />
           </div>
+          {/* Sprint 5 L3 (owner, 2026-11-17): "I sell for 100, all my costs are 90, so I made 10". */}
+          {d.per_100 && (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div className="card-title" style={{ marginBottom: 6 }}>{t("reports.per100Title")}</div>
+              <p>{t("reports.per100", { cost: d.per_100.cost, losses: d.per_100.losses, expenses: d.per_100.expenses, profit: d.per_100.profit })}</p>
+            </div>
+          )}
           <div className="card">
             <div className="totals">
               {line("sales", d.sales)}
               {line("refunds", d.refunds, "−")}
               {line("net_sales", d.net_sales, "", true)}
               {line("cost_of_sales", d.cost_of_sales, "−")}
+              {d.returned_to_stock !== "0.00" && <p className="form-hint">{t("reports.returnedInfo", { amount: m(d.returned_to_stock) })}</p>}
               {line("gross_profit", d.gross_profit, "", true)}
               {line("stock_losses", d.stock_losses, "−")}
-              {line("stock_gains", d.stock_gains, "+")}
-              {line("general_expenses", d.general_expenses, "−")}
+              {d.expenses_by_category.map((e) => line(`exp-${e.category}`, e.amount, "−", false, t(`expenses.categories.${e.category}`)))}
+              {d.card_fees !== "0.00" && line("card_fees", d.card_fees, "−")}
               {line("net_profit", d.net_profit, "", true)}
             </div>
             <p className="form-hint" style={{ marginTop: 10 }}>{t("reports.purchasesInfo", { amount: m(d.purchases_info) })}</p>
+            {d.stock_added_info !== "0.00" && <p className="form-hint">{t("reports.stockAddedInfo", { amount: m(d.stock_added_info) })}</p>}
           </div>
         </>
       )}

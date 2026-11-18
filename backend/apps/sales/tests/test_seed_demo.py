@@ -26,7 +26,7 @@ def test_seed_demo_is_idempotent_and_sellable(db):
         ModifierOption.objects.count(),
         StockMovement.objects.count(),
     )
-    assert counts == (12, 2, 3, 6)
+    assert counts == (15, 2, 3, 7)  # 3 sizes x 5 lines (cup and lid included), 7 opening lines
 
     from apps.accounts.models import User
     from apps.catalog.models import ProductVariant

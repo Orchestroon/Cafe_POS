@@ -65,13 +65,15 @@ def bal(ing):
     return StockBalance.objects.get(ingredient=ing)
 
 
+def set_cost(ing, value):
+    StockBalance.objects.filter(ingredient=ing).update(avg_cost=Decimal(value))
+
+
 @pytest.fixture
 def costed(shop):
-    """Milk and cups have a reference cost; coffee gets its cost from purchases."""
-    shop.ing["Whole Milk"].reference_unit_cost = Decimal("0.0300")
-    shop.ing["Whole Milk"].save()
-    shop.ing["Cup"].reference_unit_cost = Decimal("1.5000")
-    shop.ing["Cup"].save()
+    """Milk at 0.03/ml and cups at 1.50; coffee opens at 1.00/g and moves with purchases."""
+    set_cost(shop.ing["Whole Milk"], "0.03")
+    set_cost(shop.ing["Cup"], "1.5")
     return shop
 
 
@@ -99,10 +101,10 @@ def test_pack_cost_rules(admin_c, shop):
 
     assert post({"ingredient_id": ing, "qty": "5.000", "pack_cost": "1.00"}).status_code == 400
     both = {"ingredient_id": ing, "pack_count": "1", "pack_size": "5", "pack_cost": "5"}
-    assert post({**both, "unit_cost": "1.0000"}).status_code == 400
+    assert post({**both, "line_total": "5.00"}).status_code == 400
     assert post({"ingredient_id": ing, "qty": "5.000"}).status_code == 400  # no price at all
-    old = post({"ingredient_id": ing, "qty": "3.000", "unit_cost": "0.3333"})  # still works
-    assert data(old)["total"] == "1.00"
+    plain = post({"ingredient_id": ing, "qty": "3.000", "line_total": "1.00"})
+    assert data(plain)["total"] == "1.00" and data(plain)["items"][0]["unit_cost"] == "0.3333"
 
 
 # --- 2. an ingredient in use cannot be switched off ------------------------------------------
@@ -127,7 +129,7 @@ def test_stock_report_keeps_switched_off_ingredient_with_stock(admin_c, shop):
     straw = data(r)["id"]
     admin_c.post(
         "/api/v1/inventory/opening-balances",
-        {"items": [{"ingredient_id": straw, "qty": "50"}]},
+        {"items": [{"ingredient_id": straw, "qty": "50", "total_value": "25.00"}]},
         format="json",
     )
     admin_c.patch(f"/api/v1/ingredients/{straw}", {"is_active": False}, format="json")
@@ -139,12 +141,12 @@ def test_stock_report_keeps_switched_off_ingredient_with_stock(admin_c, shop):
 
 
 def test_weighted_average_cost(admin_c, shop):
-    coffee = shop.ing["Coffee Beans"]  # 1000 g opening, no cost known
-    buy(admin_c, coffee, "1", "1000", "400.00")  # no cost on hand: the purchase price
-    assert bal(coffee).avg_cost == Decimal("0.400000")
-    buy(admin_c, coffee, "1", "1000", "460.00")  # 2 kg at 400 + 1 kg at 460 -> 420 per kg
+    coffee = shop.ing["Coffee Beans"]  # 1000 g opening worth 1000.00
+    buy(admin_c, coffee, "1", "1000", "400.00")  # (1000 + 400) / 2000
+    assert bal(coffee).avg_cost == Decimal("0.700000")
+    buy(admin_c, coffee, "1", "1000", "460.00")  # (2000 x 0.70 + 460) / 3000
     b = bal(coffee)
-    assert b.qty == Decimal("3000.000") and b.avg_cost == Decimal("0.420000")
+    assert b.qty == Decimal("3000.000") and b.avg_cost == Decimal("0.620000")
     mv = StockMovement.objects.filter(ingredient=coffee, movement_type="purchase")
     assert sorted(m.unit_cost for m in mv) == [Decimal("0.400000"), Decimal("0.460000")]
 
@@ -162,31 +164,53 @@ def test_negative_stock_takes_the_purchase_price(admin_c, shop):
 
 def test_each_sale_saves_its_cost(admin_c, barista_c, costed):
     buy(admin_c, costed.ing["Coffee Beans"], "1", "1000", "400.00")
-    buy(admin_c, costed.ing["Coffee Beans"], "1", "1000", "460.00")  # 0.42 per g
+    buy(admin_c, costed.ing["Coffee Beans"], "1", "1000", "460.00")  # 0.62 per g
     open_shift(barista_c)
     oid = sell(barista_c, costed, [cash("65.00")], "65.00")
     o = Order.objects.get(pk=oid)
-    # 12.6 g x 0.42 + 200 ml x 0.03 + 1 cup x 1.50 = 5.292 + 6 + 1.5 = 12.792
-    assert o.cost_total == Decimal("12.79")
+    # 12.6 g x 0.62 + 200 ml x 0.03 + 1 cup x 1.50 = 7.812 + 6 + 1.5 = 15.312
+    assert o.cost_total == Decimal("15.31")
     item = o.items.get()
-    assert item.cost_total == Decimal("12.79")
+    assert item.cost_total == Decimal("15.31")
     rows = {r["ingredient_name"]: r for r in item.consumption_snapshot}
-    assert rows["Coffee Beans"]["unit_cost"] == "0.420000"
-    assert rows["Coffee Beans"]["cost"] == "5.29"
+    assert rows["Coffee Beans"]["unit_cost"] == "0.620000"
+    assert rows["Coffee Beans"]["cost"] == "7.81"
     sale = StockMovement.objects.get(ingredient=costed.ing["Cup"], movement_type="sale")
     assert sale.unit_cost == Decimal("1.500000")
     detail = data(admin_c.get(f"/api/v1/orders/{oid}"))
-    assert detail["cost_total"] == "12.79" and detail["items"][0]["cost_total"] == "12.79"
+    assert detail["cost_total"] == "15.31" and detail["items"][0]["cost_total"] == "15.31"
     seen_by_barista = data(barista_c.get(f"/api/v1/orders/{oid}"))
     assert "cost_total" not in seen_by_barista
     assert "cost_total" not in seen_by_barista["items"][0]
 
 
-def test_unknown_cost_is_never_zero(barista_c, shop):
+def test_nothing_is_sold_without_a_known_cost(admin_c, barista_c, shop, org):
+    """Sprint 5 L3: an ingredient never stocked with a value blocks the whole cart (quote and
+    checkout), like a size with no recipe. Nothing is written."""
+    from apps.catalog.models import RecipeLine
+    from apps.sales.tests.conftest import checkout, item
+
+    r = admin_c.post("/api/v1/ingredients", {"name": "Straw", "base_unit": "pcs"}, format="json")
+    straw = data(r)["id"]
+    RecipeLine.objects.create(
+        organization=org, variant=shop.small, ingredient_id=straw, base_qty="1.000"
+    )
     open_shift(barista_c)
-    oid = sell(barista_c, shop, [cash("65.00")], "65.00")  # no ingredient has a cost
-    o = Order.objects.get(pk=oid)
-    assert o.cost_total is None and o.items.get().cost_total is None
+    q = barista_c.post("/api/v1/orders/quote", {"items": [item(shop.small)]}, format="json")
+    assert q.status_code == 422 and q.json()["error"]["code"] == "COST_MISSING"
+    assert q.json()["error"]["details"]["ingredients"] == ["Straw"]
+    r = checkout(barista_c, [item(shop.small), item(shop.large)], [cash("145.00")], "145.00")
+    assert r.status_code == 422 and r.json()["error"]["code"] == "COST_MISSING"
+    assert (
+        not Order.objects.exists()
+        and not StockMovement.objects.filter(movement_type="sale").exists()
+    )
+    admin_c.post(
+        "/api/v1/inventory/opening-balances",
+        {"items": [{"ingredient_id": straw, "qty": "100", "total_value": "20.00"}]},
+        format="json",
+    )
+    assert sell(barista_c, shop, [cash("65.00")], "65.00")  # priced now: it sells
 
 
 # --- 6. void a posted purchase ---------------------------------------------------------------
@@ -201,7 +225,7 @@ def test_void_purchase_reverses_stock_cost_and_expense(admin_c, shop):
     p = data(r)
     assert p["status"] == "voided" and p["void_reason"] == "Wrong invoice" and p["voided_by"]
     b = bal(coffee)
-    assert b.qty == Decimal("2000.000") and b.avg_cost == Decimal("0.400000")  # back to before
+    assert b.qty == Decimal("2000.000") and b.avg_cost == Decimal("0.700000")  # back to before
     mv = StockMovement.objects.get(movement_type="purchase_void")
     assert mv.qty_delta == Decimal("-1000.000") and mv.unit_cost == Decimal("0.460000")
     exp = Expense.objects.get(purchase_id=pid)
@@ -313,12 +337,12 @@ def test_gap_between_shifts(barista_c, admin_c, shop):
 def test_a_whole_day_every_pound_and_gram(admin_c, barista_c, costed):
     coffee, milk, cup = (costed.ing[n] for n in ("Coffee Beans", "Whole Milk", "Cup"))
     buy(admin_c, coffee, "1", "1000", "400.00")  # external transfer
-    buy(admin_c, coffee, "1", "1000", "460.00")  # avg 0.42
+    buy(admin_c, coffee, "1", "1000", "460.00")  # avg 0.62
     wrong = buy(admin_c, cup, "1", "100", "999.00", method="card")
     admin_c.post(f"/api/v1/purchases/{wrong}/void", {"reason": "Wrong price"}, format="json")
 
     s = open_shift(barista_c, "200.00")
-    a = sell(barista_c, costed, [cash("65.00")], "65.00")  # cost 12.79
+    a = sell(barista_c, costed, [cash("65.00")], "65.00")  # cost 15.31
     sell(barista_c, costed, [cash("20.00", "50.00"), card("45.00")], "65.00")  # split, change 30
     c = sell(barista_c, costed, [card("80.00")], "80.00", variant=costed.large)
     assert refund(barista_c, a, "65.00").status_code == 201  # cash back from the drawer
@@ -383,19 +407,30 @@ def test_a_whole_day_every_pound_and_gram(admin_c, barista_c, costed):
 
     # profit: sales 210 - refunds 145 = 65; cost of the three sales (refunded ones keep their
     # cost: the ingredients were used, D8)
-    small = Decimal("12.79")  # 5.292 + 6 + 1.5
-    large = Decimal("18.44")  # 18.9 g x 0.42 = 7.938 + 300 ml x 0.03 = 9 + 1.5 = 18.438
+    small = Decimal("15.31")  # 7.812 + 6 + 1.5
+    large = Decimal("22.22")  # 18.9 g x 0.62 = 11.718 + 300 ml x 0.03 = 9 + 1.5 = 22.218
     costs = sorted(o.cost_total for o in Order.objects.all())
     assert costs == [small, small, large]
     p = report(admin_c, "profit")
     cogs = small * 2 + large
     assert p["sales"] == "210.00" and p["refunds"] == "145.00" and p["net_sales"] == "65.00"
     assert p["cost_of_sales"] == str(cogs) and p["gross_profit"] == str(Decimal("65.00") - cogs)
-    assert p["stock_losses"] == "3.00" and p["stock_gains"] == "0.00"  # 2 cups x 1.50
+    assert p["stock_losses"] == "3.00" and p["stock_added_info"] == "0.00"  # 2 cups x 1.50
+    assert "stock_gains" not in p  # stock coming in is never profit (Sprint 5 L2)
     assert p["general_expenses"] == "1015.00"  # rent + ice; purchases are stock, not expenses
+    assert p["expenses_by_category"] == [
+        {"category": "rent", "amount": "1000.00"},
+        {"category": "supplies", "amount": "15.00"},
+    ]
     assert p["purchases_info"] == "860.00"
-    assert p["net_profit"] == str(Decimal("65.00") - cogs - Decimal("3.00") - Decimal("1015.00"))
+    net = Decimal("65.00") - cogs - Decimal("3.00") - Decimal("1015.00")
+    assert p["net_profit"] == str(net)
     assert p["orders_without_cost"] == 0 and p["adjustments_without_cost"] == 0
+    # out of every 100 sold: cost + losses + expenses + profit = 100 (to the piastre)
+    shares = p["per_100"]
+    assert shares["cost"] == "81.29" and shares["losses"] == "4.62"
+    total = sum(Decimal(shares[k]) for k in ("cost", "losses", "expenses", "profit"))
+    assert abs(total - 100) <= Decimal("0.02")
 
     # every gram: each balance is the sum of its movements
     for ing in (coffee, milk, cup):
@@ -408,18 +443,161 @@ def test_a_whole_day_every_pound_and_gram(admin_c, barista_c, costed):
     st = report(admin_c, "stock")
     rows = {r["name"]: r for r in st["ingredients"]}
     assert rows["Cup"]["unit_cost"] == "1.500000" and rows["Cup"]["value"] == "142.50"
-    assert st["without_cost_count"] == 1  # Oat Milk has no cost yet
+    assert st["without_cost_count"] == 0  # every ingredient was stocked with a value
 
 
-def test_profit_flags_orders_without_cost(admin_c, barista_c, shop):
+def test_profit_is_not_calculated_when_an_order_has_no_cost(admin_c, barista_c, shop):
+    # owner, 2026-11-17 (D20): an old order sold before costs existed has no cost; it is never
+    # counted as 0 (that showed a 100% margin). New sales always have one (Sprint 5).
+    from apps.sales.models import OrderItem
+
     open_shift(barista_c)
     sell(barista_c, shop, [cash("65.00")], "65.00")
+    Order.objects.update(cost_total=None)
+    OrderItem.objects.update(cost_total=None)
     p = report(admin_c, "profit")
     assert p["orders_without_cost"] == 1 and p["sales_without_cost"] == "65.00"
-    assert p["cost_of_sales"] == "0.00"
+    assert p["net_sales"] == "65.00"
+    assert p["cost_of_sales"] is None and p["gross_profit"] is None
+    assert p["gross_margin_pct"] is None and p["net_profit"] is None and p["per_100"] is None
+
+
+def test_recalculate_cost_is_gone(admin_c):
+    """Sprint 5 P8: every sale has a cost now, so the estimate button and endpoint are removed."""
+    assert admin_c.post("/api/v1/orders/recost", {}, format="json").status_code in (404, 405)
+
+
+def test_stock_coming_in_is_never_profit(admin_c, costed):
+    """Sprint 5 L2/Q-A: a count surplus or a later opening balance changes stock, not profit;
+    a loss (waste) still lowers it."""
+    cup = costed.ing["Cup"]
+    for body in (
+        {"mode": "count", "counted_qty": "110"},  # +10 found: 15.00 at 1.50, not profit
+        {"mode": "delta", "qty_delta": "-4"},  # broken: 6.00 loss
+    ):
+        r = admin_c.post(
+            "/api/v1/inventory/adjustments",
+            {"ingredient_id": str(cup.pk), "reason": "x", **body},
+            format="json",
+        )
+        assert r.status_code == 201, r.content
+    admin_c.post(
+        "/api/v1/inventory/opening-balances",
+        {
+            "items": [{"ingredient_id": str(cup.pk), "qty": "50", "total_value": "75.00"}],
+            "reason": "Gift",
+        },
+        format="json",
+    )
+    p = report(admin_c, "profit")
+    assert p["stock_losses"] == "6.00" and p["stock_added_info"] == "15.00"
+    assert p["net_profit"] == "-6.00"
+
+
+def test_backfill_average_cost_from_purchases_before_the_update(admin_c, shop):
+    from django.apps import apps as django_apps
+
+    from apps.inventory.backfill import backfill_average_cost
+
+    coffee = shop.ing["Coffee Beans"]
+    buy(admin_c, coffee, "1", "1000", "400.00")
+    buy(admin_c, coffee, "1", "1000", "460.00")
+    StockBalance.objects.filter(pk=bal(coffee).pk).update(avg_cost=None)  # as before the update
+    backfill_average_cost(django_apps, None)
+    assert bal(coffee).avg_cost == Decimal("0.420000")
+    assert bal(shop.ing["Cup"]).avg_cost == Decimal("1.000000")  # has an average: left alone
 
 
 def test_new_reports_refuse_person_filters(admin_c, shop, barista):
     for name in ("money-in-out", "profit"):
         r = admin_c.get(f"/api/v1/reports/{name}", {"cashier_id": str(barista.pk)})
         assert r.status_code == 400
+
+
+# --- Sprint 5 Q-C: card fees ------------------------------------------------------------------
+
+
+def test_card_fee_is_saved_on_each_card_sale_and_is_a_cost(admin_c, barista_c, costed, org):
+    from apps.sales.models import Payment
+    from apps.tenancy.models import OrganizationSettings
+
+    r = admin_c.patch("/api/v1/settings", {"card_fee_pct": "2.00"}, format="json")
+    assert r.status_code == 200 and data(r)["card_fee_pct"] == "2.00"
+    assert "card_fee_pct" not in data(barista_c.get("/api/v1/settings"))
+    open_shift(barista_c)
+    sell(barista_c, costed, [card("65.00")], "65.00")  # 1.30
+    mixed = sell(barista_c, costed, [cash("20.00"), card("45.00")], "65.00")  # 0.90 on 45
+    sell(barista_c, costed, [cash("65.00")], "65.00")  # no fee on cash
+    fees = sorted(Payment.objects.values_list("method", "fee_amount"))
+    assert fees == [
+        ("card", Decimal("0.90")),
+        ("card", Decimal("1.30")),
+        ("cash", Decimal("0")),
+        ("cash", Decimal("0")),
+    ]
+    OrganizationSettings.objects.filter(organization=org).update(card_fee_pct=Decimal("5"))
+    assert sorted(Payment.objects.values_list("fee_amount", flat=True))[-1] == Decimal("1.30")
+    assert refund(barista_c, mixed, "65.00").status_code == 201  # the bank keeps its fee
+    p = report(admin_c, "profit")
+    assert p["card_fees"] == "2.20"
+    cogs = Decimal(p["cost_of_sales"])
+    assert Decimal(p["net_profit"]) == Decimal(p["net_sales"]) - cogs - Decimal("2.20")
+    m = report(admin_c, "money-in-out")
+    rows = {r["key"]: r for r in m["rows"]}
+    assert rows["card_fees"]["card"] == "2.20" and rows["card_fees"]["total"] == "2.20"
+    for bad in ("-1.00", "100.01", 2):
+        r = admin_c.patch("/api/v1/settings", {"card_fee_pct": bad}, format="json")
+        assert r.status_code == 400
+
+
+# --- Sprint 5 P7: return to stock after a refund ------------------------------------------------
+
+
+def give_back(c, oid, lines, reason="Sealed, not used"):
+    body = {"reason": reason, "lines": [{"ingredient_id": str(i.pk), "qty": q} for i, q in lines]}
+    return c.post(f"/api/v1/orders/{oid}/return-stock", body, format="json")
+
+
+def test_return_to_stock_after_a_refund(admin_c, barista_c, costed):
+    cup, milk = costed.ing["Cup"], costed.ing["Whole Milk"]
+    open_shift(barista_c)
+    oid = sell(barista_c, costed, [cash("65.00")], "65.00")  # 1 cup at 1.50, 200 ml at 0.03
+    assert give_back(admin_c, oid, [(cup, "1")]).status_code == 422  # not refunded yet
+    assert refund(barista_c, oid, "65.00").status_code == 201
+    assert give_back(barista_c, oid, [(cup, "1")]).status_code == 403  # Admin only
+    assert give_back(admin_c, oid, [(cup, "2")]).status_code == 400  # more than it used
+    assert give_back(admin_c, oid, [(costed.ing["Oat Milk"], "1")]).status_code == 400
+    assert give_back(admin_c, oid, [(cup, "1")], reason=" ").status_code == 400
+    before = bal(cup).qty
+    r = give_back(admin_c, oid, [(cup, "1"), (milk, "100")])
+    assert r.status_code == 201, r.content
+    assert data(r)["stock_return"]["total_value"] == "4.50"  # 1.50 + 100 x 0.03
+    assert bal(cup).qty == before + 1
+    mv = StockMovement.objects.get(ingredient=cup, movement_type="refund_return")
+    assert mv.unit_cost == Decimal("1.500000") and mv.qty_delta == Decimal("1")
+    assert give_back(admin_c, oid, [(cup, "1")]).status_code == 409  # once per order
+    assert AuditEvent.objects.filter(action="order.stock_returned").count() == 1
+    p = report(admin_c, "profit")
+    sold = Order.objects.get(pk=oid).cost_total
+    assert p["returned_to_stock"] == "4.50"
+    assert Decimal(p["cost_of_sales"]) == sold - Decimal("4.50")
+    assert "stock_return" not in data(barista_c.get(f"/api/v1/orders/{oid}"))
+
+
+def test_stock_report_consumed_by_cashier_and_shift(admin_c, barista_c, costed, barista, admin):
+    """Sprint 5 P11: the consumed column can be narrowed to one cashier or one shift."""
+    s1 = open_shift(barista_c)
+    sell(barista_c, costed, [cash("65.00")], "65.00")  # 1 cup
+    open_shift(admin_c)
+    sell(admin_c, costed, [cash("130.00")], "130.00", qty=2)  # 2 cups
+
+    def cups(**params):
+        rows = report(admin_c, "stock", **params)["ingredients"]
+        return next(r["consumed_qty_period"] for r in rows if r["name"] == "Cup")
+
+    assert cups() == "3.000"
+    assert cups(cashier_id=str(barista.pk)) == "1.000"
+    assert cups(cashier_id=str(admin.pk)) == "2.000"
+    assert cups(shift_id=s1["id"]) == "1.000"
+    rows = report(admin_c, "stock", cashier_id=str(barista.pk))["ingredients"]
+    assert next(r["balance"] for r in rows if r["name"] == "Cup") == "97.000"  # still current

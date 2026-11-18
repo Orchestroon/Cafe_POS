@@ -32,7 +32,7 @@ class IngredientViewSet(
     mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
-    queryset = Ingredient.objects.all()
+    queryset = Ingredient.objects.prefetch_related("balances")
     serializer_class = IngredientSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]
     filterset_fields = ["is_active", "base_unit"]
@@ -94,11 +94,18 @@ class OpeningBalancesView(APIView):
     def post(self, request):
         ser = OpeningBalancesSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        balances = services.set_opening_balances(request.user, ser.validated_data["items"])
+        balances = services.set_opening_balances(
+            request.user, ser.validated_data["items"], ser.validated_data["reason"]
+        )
         return Response(
             {
                 "items": [
-                    {"ingredient_id": b.ingredient_id, "balance": str(b.qty)} for b in balances
+                    {
+                        "ingredient_id": b.ingredient_id,
+                        "balance": str(b.qty),
+                        "avg_cost": str(b.avg_cost),
+                    }
+                    for b in balances
                 ]
             },
             status=201,

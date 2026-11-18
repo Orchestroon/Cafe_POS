@@ -38,3 +38,19 @@ export const times = (base: string, n: number) => fromUnits(toUnits(base, 3) * B
 
 /** a ≥ b for base quantities. */
 export const gte = (a: string, b: string) => toUnits(a, 3) >= toUnits(b, 3);
+
+/** A cost per base unit (6 dp) for reading (Sprint 5 L1): per kg / per L for g and ml (0.00157 per g
+ * reads as 1.57 per kg), per piece for pcs; 2 dp, half up. */
+export function costPer(avg: string, unit: Unit): { amount: string; unit: EntryUnit } {
+  const big = unit === "g" || unit === "ml";
+  const n = toUnits(avg, 6) * (big ? 1000n : 1n); // money x 1e6
+  return { amount: fromUnits((n + 5000n) / 10000n, 2), unit: big ? (unit === "g" ? "kg" : "L") : unit };
+}
+
+/** Cost per base unit (6 dp) of a total (2 dp) over a base quantity (3 dp), half up; null for 0. */
+export function avgFrom(total: string, baseQty: string): string | null {
+  const den = toUnits(baseQty, 3);
+  if (den <= 0n) return null;
+  const num = toUnits(total, 2) * 10000000n;
+  return fromUnits((2n * num + den) / (2n * den), 6);
+}

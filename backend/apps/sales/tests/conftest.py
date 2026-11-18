@@ -75,10 +75,11 @@ def shop(org, admin):
     set_opening_balances(
         admin,
         [
-            {"ingredient_id": ing["Coffee Beans"].pk, "qty": "1000.000"},
-            {"ingredient_id": ing["Whole Milk"].pk, "qty": "5000.000"},
-            {"ingredient_id": ing["Oat Milk"].pk, "qty": "1000.000"},
-            {"ingredient_id": ing["Cup"].pk, "qty": "100.000"},
+            # Every stock line has its value (Sprint 5 L3): 1.00/g, 0.05/ml, 0.10/ml, 1.00/pc.
+            {"ingredient_id": ing["Coffee Beans"].pk, "qty": "1000.000", "total_value": "1000"},
+            {"ingredient_id": ing["Whole Milk"].pk, "qty": "5000.000", "total_value": "250"},
+            {"ingredient_id": ing["Oat Milk"].pk, "qty": "1000.000", "total_value": "100"},
+            {"ingredient_id": ing["Cup"].pk, "qty": "100.000", "total_value": "100"},
         ],
     )
     return SimpleNamespace(

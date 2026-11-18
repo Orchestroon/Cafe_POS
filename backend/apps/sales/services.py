@@ -1,4 +1,6 @@
 from apps.core.exceptions import ApiError
+from apps.inventory.models import StockBalance
+from apps.inventory.services import cost_missing
 
 from . import consumption, loader, pricing
 from .domain import ItemRequest
@@ -18,7 +20,25 @@ def price_and_consume(org, requests):
     variants, options = loader.load(org, requests)
     priced = pricing.price_order(requests, variants, options, loader.load_tax(org))
     consumptions = [consumption.consume_item(p) for p in priced.items]
-    return priced, consumptions, consumption.aggregate(consumptions)
+    required = consumption.aggregate(consumptions)
+    _require_costs(org, required)
+    return priced, consumptions, required
+
+
+def _require_costs(org, required):
+    """Sprint 5 L3 (owner, 2026-11-17): nothing is sold without a known cost. An ingredient
+    with no average cost was never stocked with a value, so the whole cart is refused (quote and
+    checkout alike), like RECIPE_MISSING. A set average never goes back to None, so this
+    unlocked read cannot let a costless sale through."""
+    priced = {
+        str(i)
+        for i in StockBalance.objects.filter(
+            organization=org, ingredient_id__in=list(required), avg_cost__isnull=False
+        ).values_list("ingredient_id", flat=True)
+    }
+    names = [r["name"] for k, r in required.items() if k not in priced]
+    if names:
+        raise cost_missing(names)
 
 
 def quote_payload(priced, required, warnings) -> dict:

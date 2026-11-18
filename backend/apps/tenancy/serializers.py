@@ -23,7 +23,7 @@ SAFE_FIELDS = [
 
 
 class SafeSettingsSerializer(serializers.ModelSerializer):
-    """Everything except invoice_prefix: what a Barista may see."""
+    """Everything except invoice_prefix and the card fee: what a Barista may see."""
 
     tax_rate = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
 
@@ -34,10 +34,13 @@ class SafeSettingsSerializer(serializers.ModelSerializer):
 
 class SettingsSerializer(StrictSerializerMixin, serializers.ModelSerializer):
     tax_rate = _StringDecimalField(max_digits=5, decimal_places=2, min_value=0, max_value=100)
+    card_fee_pct = _StringDecimalField(
+        max_digits=5, decimal_places=2, min_value=0, max_value=100, required=False
+    )
 
     class Meta:
         model = OrganizationSettings
-        fields = [*SAFE_FIELDS, "invoice_prefix"]
+        fields = [*SAFE_FIELDS, "invoice_prefix", "card_fee_pct"]
 
     def validate_timezone(self, value):
         try:

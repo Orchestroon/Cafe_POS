@@ -5,7 +5,6 @@ the permission matrix, so a new shared route is scanned automatically)."""
 import pytest
 
 from apps.core.tests.test_permissions_matrix import BOTH, MATRIX
-from apps.inventory.models import Ingredient
 from apps.sales.tests.conftest import cash, checkout, item, open_shift, refund
 from conftest import data
 
@@ -15,6 +14,13 @@ pytestmark = pytest.mark.django_db
 # purchasing, organization secrets and anything password-like.
 FORBIDDEN = {
     "reference_unit_cost",
+    "avg_cost",
+    "total_value",
+    "fee_amount",
+    "card_fee_pct",
+    "card_fees",
+    "owed",
+    "amount_paid",
     "unit_cost",
     "cost",
     "effects",
@@ -51,7 +57,6 @@ def leaks(obj, path="$"):
 @pytest.fixture
 def world(shop, barista_c, org):
     """A café with costs, recipes and effects, an order with modifiers and a refund."""
-    Ingredient.objects.filter(organization=org).update(reference_unit_cost="0.5000")
     shift = open_shift(barista_c)
     r = checkout(
         barista_c,

@@ -41,6 +41,7 @@ export function ExpenseDialog({ drawerOnly, onClose }: { drawerOnly: boolean; on
       <button className="btn btn-primary" disabled={save.isPending} onClick={submit}>{t("common.save")}</button>
     </>}>
       {drawerOnly && <p className="form-hint" style={{ marginBottom: 10 }}>{t("expenses.drawerNote")}</p>}
+      <div className="alert-banner alert-neutral" style={{ marginBottom: 10 }}>{t("expenses.stockHint")}</div>
       <ErrorBanner error={save.error} />
       {clientErr && <div className="alert-banner alert-warning" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
       <Field label={t("expenses.category")} error={fieldError(save.error, "category")}>

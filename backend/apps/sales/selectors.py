@@ -85,7 +85,7 @@ def get_order(user, pk):
     orders through the invoice lookup, then opens them from there."""
     return (
         Order.objects.filter(organization=user.organization, pk=pk)
-        .select_related("cashier", "refund__actor")
+        .select_related("cashier", "refund__actor", "stock_return__created_by")
         .prefetch_related("payments", "items", "refund__lines")
         .first()
     )

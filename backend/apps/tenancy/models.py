@@ -40,12 +40,18 @@ class OrganizationSettings(TenantModel):
     prices_include_tax = models.BooleanField(default=False)  # owner: tax added on top
     tax_label = models.CharField(max_length=20, default="VAT")
     tax_registration_number = models.CharField(max_length=50, blank=True)
+    # Sprint 5 Q-C: the bank's commission on card sales, saved on each card payment at sale time.
+    card_fee_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=["organization"], name="uniq_settings_per_org"),
             models.CheckConstraint(
                 condition=Q(tax_rate__gte=0, tax_rate__lte=100), name="settings_tax_rate_0_100"
+            ),
+            models.CheckConstraint(
+                condition=Q(card_fee_pct__gte=0, card_fee_pct__lte=100),
+                name="settings_card_fee_0_100",
             ),
         ]
 

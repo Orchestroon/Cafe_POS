@@ -38,7 +38,16 @@ export function Orders() {
             </select></label></div>
         </div>
         <ListState loading={q.isLoading} error={q.error} empty={q.data?.data.length === 0}>
-          <table className="erp-table">
+          <div className="order-cards" role="list">
+            {q.data?.data.map((o) => (
+              <div key={o.id} role="listitem" tabIndex={0} className="order-card" onClick={() => nav(`/orders/${o.id}`)} onKeyDown={(e) => e.key === "Enter" && nav(`/orders/${o.id}`)}>
+                <span className="mono">{o.invoice_no}</span><span className="oc-total">{formatMoney(o.total, cur)}</span>
+                <span className="form-hint">{formatDateTime(o.created_at, tz)} · {o.cashier.display_name}</span>
+                <span><span className={`badge ${o.status === "paid" ? "badge-active" : "badge-danger"}`}>{t(`orders.${o.status}`)}</span></span>
+              </div>
+            ))}
+          </div>
+          <table className="erp-table orders-table">
             <thead><tr><th>{t("pos.invoice")}</th><th>{t("receipt.date")}</th><th>{t("receipt.cashier")}</th><th className="num">{t("orders.items")}</th><th>{t("orders.payment")}</th><th className="num">{t("pos.total")}</th><th>{t("common.status")}</th></tr></thead>
             <tbody>
               {q.data?.data.map((o) => (

@@ -25,6 +25,22 @@ def payment_dict(p):
     return out
 
 
+def stock_return_dict(order):
+    """Sprint 5 P7 (Admin only): what was put back in stock after the refund, or None."""
+    from .models import StockReturn
+
+    try:
+        r = order.stock_return
+    except StockReturn.DoesNotExist:
+        return None
+    return {
+        "created_at": _ts(r.created_at),
+        "reason": r.reason,
+        "total_value": str(r.total_value),
+        "created_by": r.created_by.display_name or r.created_by.username,
+    }
+
+
 def refund_dict(order):
     """The order's refund (or None). Needs `refund__actor` / `refund__lines` prefetched."""
     try:
@@ -83,7 +99,11 @@ def order_detail(order, *, admin):
             row["consumption"] = i.consumption_snapshot
             row["cost_total"] = None if i.cost_total is None else str(i.cost_total)
         items.append(row)
-    extra = {"cost_total": None if order.cost_total is None else str(order.cost_total)}
+    extra = {
+        "cost_total": None if order.cost_total is None else str(order.cost_total),
+        "cost_estimated": order.cost_estimated,
+        "stock_return": stock_return_dict(order),
+    }
     return {
         **(extra if admin else {}),
         **order_summary(order),

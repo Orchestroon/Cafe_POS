@@ -67,8 +67,10 @@ test.describe("admin", () => {
     await expect(page.getByText("Cash drawers")).toBeVisible();
     await page.getByRole("link", { name: "Profit" }).click();
     await loaded(page);
-    await expect(page.getByText("Cost of what was sold")).toBeVisible();
-    await expect(page.getByText(/Purchases in this period/)).toBeVisible();
+    await expect(page.getByText("− Cost of what was sold", { exact: true })).toBeVisible();
+    await expect(page.getByText("Out of every 100 sold")).toBeVisible();
+    await expect(page.getByText(/Stock bought in this period/)).toBeVisible();
+    await expect(page.getByText("Stock gains")).toHaveCount(0); // stock coming in is never profit (Sprint 5)
   });
 
   test("the Products screen shows the cost per serving", async ({ page }) => {

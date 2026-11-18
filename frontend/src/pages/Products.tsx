@@ -14,7 +14,8 @@ import { PageHeader } from "../components/PageHeader";
 import { Kbd } from "../components/ShortcutsHelp";
 import { ErrorBanner, Loading } from "../components/States";
 import { formatMoney } from "../i18n/format";
-import { isDec, marginPct, perUnitQty, servingCost, toUnits } from "../lib/decimal";
+import { addMoney, isDec, marginPct, perUnitQty, servingCost, subMoney, toUnits } from "../lib/decimal";
+import { optionLines, optionPrice, withOption } from "../lib/optionCost";
 import { useShortcuts } from "../lib/shortcuts";
 import { gte, inLarge, readable, times, toBase, trim, unitsFor, validEntry, type EntryUnit } from "../lib/units";
 import { confirmLeave, setUnsaved } from "../lib/unsaved";
@@ -321,7 +322,7 @@ function Editor({ id, initial, ingredients, groups, balances, categories, onBack
       )}
 
       {/* Consumption preview and stock */}
-      {size && size.track_stock && size.lines.some((l) => l.ingredient_id) && <PreviewAndStock size={size} ings={ings} balances={balances} productName={d.name} />}
+      {size && size.track_stock && size.lines.some((l) => l.ingredient_id) && <PreviewAndStock size={size} ings={ings} balances={balances} productName={d.name} groups={groups.filter((g) => d.groups.includes(g.id) && g.is_active)} />}
 
       {/* Modifier groups */}
       <div className="card">
@@ -422,7 +423,7 @@ function StockItemLine({ size, ingredients, onPick }: { size: Size; ingredients:
   );
 }
 
-function PreviewAndStock({ size, ings, balances, productName }: { size: Size; ings: Map<string, Ingredient>; balances: Balance[]; productName: string }) {
+function PreviewAndStock({ size, ings, balances, productName, groups }: { size: Size; ings: Map<string, Ingredient>; balances: Balance[]; productName: string; groups: ModifierGroup[] }) {
   const { t } = useTranslation();
   const { me } = useAuth();
   const [n, setN] = useState(1);
@@ -432,12 +433,22 @@ function PreviewAndStock({ size, ings, balances, productName }: { size: Size; in
     const one = perUnitQty(toBase(l.qty.trim(), l.unit), l.waste.trim() || "0");
     const need = times(one, n);
     const have = bal.get(l.ingredient_id)?.qty;
-    return { key: l.key, name: ings.get(l.ingredient_id)?.name ?? l.name ?? "", unit, one, need, have, enough: have !== undefined && gte(have, need), unitCost: bal.get(l.ingredient_id)?.unit_cost ?? null };
+    return { key: l.key, name: ings.get(l.ingredient_id)?.name ?? l.name ?? "", unit, one, need, have, enough: have !== undefined && gte(have, need), unitCost: bal.get(l.ingredient_id)?.unit_cost ?? null, slot: l.slot.trim() };
   });
-  // Cost per serving at today's average cost (options are not included), and the margin on this size's price.
-  const cost = servingCost(rows.map((r) => ({ qty: r.one, unitCost: r.unitCost })));
+  // Cost per serving at today's average cost, and the margin on this size's price.
+  const base = rows.map((r) => ({ qty: r.one, unitCost: r.unitCost, slot: r.slot }));
+  const cost = servingCost(base);
   const s = me?.settings;
-  const margin = cost !== null && isDec(size.price, 2) ? marginPct(size.price, cost, s?.tax_enabled && s.prices_include_tax ? s.tax_rate : null) : null;
+  const taxIn = s?.tax_enabled && s.prices_include_tax ? s.tax_rate : null;
+  const margin = cost !== null && isDec(size.price, 2) ? marginPct(size.price, cost, taxIn) : null;
+  // Sprint 5 P6: what each linked option adds to the cost and the price, and the margin with it.
+  const ucOf = (id: string) => bal.get(id)?.unit_cost ?? null;
+  const options = groups.flatMap((g) => g.options.filter((o) => o.is_active).map((o) => {
+    const c = servingCost(withOption(base, g, optionLines(o, size.id, ucOf)));
+    const price = optionPrice(o, size.id);
+    const full = isDec(size.price, 2) ? addMoney(size.price, price) : null;
+    return { id: o.id, name: `${g.name}: ${o.label}`, extraCost: c !== null && cost !== null ? subMoney(c, cost) : null, price, margin: c !== null && full ? marginPct(full, c, taxIn) : null };
+  }));
   const noCost = rows.filter((r) => r.unitCost === null).map((r) => r.name);
   const show = (q: string, u: Unit) => { const r = readable(q, u); return `${r.qty} ${t(`units.${r.unit}`)}`; };
   const allEnough = rows.length > 0 && rows.every((r) => r.enough);
@@ -460,6 +471,19 @@ function PreviewAndStock({ size, ings, balances, productName }: { size: Size; in
           {margin !== null && <div className="pr-kv"><span>{t("products.margin")}</span><strong className={margin.startsWith("-") ? "pr-bad" : ""}>{margin}%</strong></div>}
           {noCost.length > 0 && <p className="form-hint">{t("products.noCost", { names: noCost.join(t("audit.listSep")) })}</p>}
           {cost !== null && <p className="form-hint">{t("products.costNote")}</p>}
+          {options.length > 0 && (
+            <div className="table-scroll" style={{ marginTop: 8 }}>
+              <table className="erp-table">
+                <thead><tr><th>{t("products.optionCosts")}</th><th className="num">{t("products.extraCost")}</th><th className="num">{t("products.extraPrice")}</th><th className="num">{t("products.margin")}</th></tr></thead>
+                <tbody>{options.map((o) => (
+                  <tr key={o.id}><td>{o.name}</td>
+                    <td className="num mono">{o.extraCost === null ? "—" : formatMoney(o.extraCost, s?.currency ?? "")}</td>
+                    <td className="num mono">{formatMoney(o.price, s?.currency ?? "")}</td>
+                    <td className={`num${o.margin?.startsWith("-") ? " pr-bad" : ""}`}>{o.margin === null ? "—" : `${o.margin}%`}</td></tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
         </div>
         <div className="card">
           <div className="pr-card-head"><h3>{t("products.stock")}</h3><span className="pr-accent">{t("products.mainLocation")}</span></div>

@@ -1,3 +1,7 @@
+from decimal import Decimal
+
+from django.db.models import DecimalField, F, OuterRef, Subquery, Sum, Value
+from django.db.models.functions import Coalesce
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
@@ -10,9 +14,14 @@ from apps.core.mixins import TenantScopedViewSetMixin
 from apps.core.pagination import EnvelopePagination
 from apps.core.permissions import PolicyPermission
 
-from . import services
+from . import payments, services
 from .models import Purchase, Supplier
-from .serializers import PurchaseInputSerializer, SupplierSerializer, VoidPurchaseSerializer
+from .serializers import (
+    PurchaseInputSerializer,
+    SupplierPaymentInputSerializer,
+    SupplierSerializer,
+    VoidPurchaseSerializer,
+)
 
 ADMIN_ONLY = {"permissions_by_method": {"*": "purchasing.manage"}}
 
@@ -24,7 +33,18 @@ class SupplierViewSet(
     mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
-    queryset = Supplier.objects.all()
+    queryset = Supplier.objects.annotate(
+        owed_total=Coalesce(
+            Subquery(
+                Purchase.objects.filter(supplier=OuterRef("pk"), status="posted", on_credit=True)
+                .values("supplier")
+                .annotate(t=Sum(F("total") - F("amount_paid")))
+                .values("t")
+            ),
+            Value(Decimal("0.00")),
+            output_field=DecimalField(max_digits=12, decimal_places=2),
+        )
+    )
     serializer_class = SupplierSerializer
     permission_classes = [PolicyPermission]
     permissions_by_method = ADMIN_ONLY["permissions_by_method"]
@@ -62,6 +82,8 @@ class PurchaseViewSet(viewsets.GenericViewSet):
             qs = qs.filter(purchased_on__gte=p["from"])
         if p.get("to"):
             qs = qs.filter(purchased_on__lte=p["to"])
+        if p.get("owed") == "true":  # credit purchases not fully paid (Sprint 5 P4)
+            qs = qs.filter(status="posted", on_credit=True, amount_paid__lt=F("total"))
         return qs
 
     @extend_schema(operation_id="purchases_list", responses=OpenApiTypes.OBJECT)
@@ -115,3 +137,49 @@ class PurchaseViewSet(viewsets.GenericViewSet):
         ser.is_valid(raise_exception=True)
         p = services.void_purchase(request.user, pk, ser.validated_data["reason"])
         return Response(services.purchase_dict(p))
+
+
+class SupplierPaymentViewSet(viewsets.GenericViewSet):
+    """Sprint 5 P4: pay credit purchases (Admin). POST is idempotent, like a purchase post."""
+
+    permission_classes = [PolicyPermission]
+    permissions_by_method = ADMIN_ONLY["permissions_by_method"]
+    pagination_class = EnvelopePagination
+    filter_backends = []
+    queryset = Purchase.objects.none()
+
+    def get_queryset(self):
+        qs = payments.payments_queryset(self.request.user.organization)
+        p = self.request.query_params
+        for param in ("supplier_id", "status"):
+            if p.get(param):
+                qs = qs.filter(**{param: p[param]})
+        return qs
+
+    @extend_schema(operation_id="supplier_payments_list", responses=OpenApiTypes.OBJECT)
+    def list(self, request):
+        page = self.paginate_queryset(self.get_queryset())
+        return self.get_paginated_response([payments.payment_dict(x) for x in page])
+
+    @extend_schema(request=SupplierPaymentInputSerializer, responses={201: OpenApiTypes.OBJECT})
+    def create(self, request):
+        ser = SupplierPaymentInputSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        key = idempotency.parse_key(request)
+        result = idempotency.run_idempotent(
+            organization=request.user.organization,
+            user=request.user,
+            scope="supplier_payment",
+            key=key,
+            payload=request.data,
+            handler=lambda: payments.pay_supplier(request.user, ser.validated_data),
+        )
+        return Response(result.body, status=result.status, headers=result.headers())
+
+    @extend_schema(request=VoidPurchaseSerializer, responses=OpenApiTypes.OBJECT)
+    @action(detail=True, methods=["post"], url_path="void")
+    def void(self, request, pk=None):
+        ser = VoidPurchaseSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        pay = payments.void_payment(request.user, pk, ser.validated_data["reason"])
+        return Response(payments.payment_dict(pay))

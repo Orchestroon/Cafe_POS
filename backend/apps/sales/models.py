@@ -36,6 +36,9 @@ class Order(TenantModel):
     # Ingredient cost at sale time (average cost). None = not recorded (older orders, or an
     # ingredient with no cost known yet).
     cost_total = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    # True when cost_total was filled in later by "Recalculate" from the average cost of that day,
+    # not saved at sale time (owner, 2026-11-17): an estimate, shown as such.
+    cost_estimated = models.BooleanField(default=False)
     note = models.CharField(max_length=300, blank=True)
     idempotency_key = models.UUIDField()
 
@@ -97,6 +100,9 @@ class Payment(TenantModel):
     cash_tendered = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     change_given = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     external_reference = models.CharField(max_length=100, blank=True)
+    # Sprint 5 Q-C: the card fee at sale time (amount x the % in settings then). A refund keeps
+    # it (the bank keeps its commission). Admin only, like costs.
+    fee_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     class Meta:
         ordering = ["created_at", "id"]
@@ -144,3 +150,13 @@ class RefundLine(TenantModel):
         constraints = [
             models.CheckConstraint(condition=Q(amount__gt=0), name="refundline_amount_gt_0")
         ]
+
+
+class StockReturn(TenantModel):
+    """Sprint 5 P7: after a refund, the Admin puts back what was not used (e.g. a sealed bottle).
+    Once per order; each ingredient at most what the order consumed, back at the cost it left at."""
+
+    order = models.OneToOneField(Order, on_delete=models.PROTECT, related_name="stock_return")
+    reason = models.CharField(max_length=300)
+    total_value = models.DecimalField(max_digits=12, decimal_places=2)
+    created_by = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="+")

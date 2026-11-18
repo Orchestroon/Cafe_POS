@@ -22,7 +22,7 @@ def milk_item(shop, **over):
         "pack_label": "1 L bottle",
         "pack_count": "12.000",
         "pack_size": "1000.000",
-        "unit_cost": "0.0300",
+        "pack_cost": "30.00",  # one 1 L bottle: 0.03 per ml
         **over,
     }
 
@@ -88,15 +88,26 @@ def test_draft_with_pack_helper_computes_qty_and_totals(admin_c, shop):
     assert Expense.objects.count() == 0
 
 
-def test_draft_with_plain_qty_and_rounded_line_total(admin_c, shop):
-    item = {"ingredient_id": str(shop.ing["Cup"].pk), "qty": "3.000", "unit_cost": "0.3333"}
+def test_quantity_and_total_paid_the_system_works_out_the_cost(admin_c, shop):
+    """Sprint 5 L4 (owner, 2026-11-17): 500 kg for 785 -> 500,000 g; the line is exactly what
+    was paid and the average uses it exactly (0.00157 per g), not a rounded unit cost."""
+    coffee = shop.ing["Coffee Beans"]
+    item = {"ingredient_id": str(coffee.pk), "qty": "500000.000", "line_total": "785.00"}
     d = data(draft(admin_c, shop, [item]))
-    assert d["items"][0]["line_total"] == "1.00" and d["total"] == "1.00"
+    line = d["items"][0]
+    assert (line["qty"], line["line_total"], d["total"]) == ("500000.000", "785.00", "785.00")
+    assert line["unit_cost"] == "0.0016"  # shown only (4 decimals)
+    assert post_it(admin_c, d["id"]).status_code == 200
+    # (1000 g x 1.00 + 785.00) / 501,000 g
+    from apps.inventory.models import StockBalance
+
+    assert StockBalance.objects.get(ingredient=coffee).avg_cost == Decimal("0.003563")
+    assert Expense.objects.get().amount == Decimal("785.00")
 
 
 def test_draft_is_editable_and_deletable(admin_c, shop):
     pid = data(draft(admin_c, shop))["id"]
-    cup = {"ingredient_id": str(shop.ing["Cup"].pk), "qty": "50.000", "unit_cost": "0.2000"}
+    cup = {"ingredient_id": str(shop.ing["Cup"].pk), "qty": "50.000", "line_total": "10.00"}
     r = admin_c.patch(f"/api/v1/purchases/{pid}", {"items": [cup], "notes": "x"}, format="json")
     assert r.status_code == 200 and data(r)["total"] == "10.00" and len(data(r)["items"]) == 1
     assert data(admin_c.get(f"/api/v1/purchases/{pid}"))["notes"] == "x"
@@ -112,7 +123,9 @@ def test_draft_is_editable_and_deletable(admin_c, shop):
     [
         {"qty": "5.000"},  # contradicts pack_count x pack_size
         {"pack_size": None},  # pack fields go together
-        {"unit_cost": "-1.0000"},
+        {"pack_cost": "-1.00"},
+        {"pack_cost": None},  # a pack line needs its price
+        {"line_total": "10.00"},  # pack price or line total, not both
         {"pack_count": "0.000"},
         {"ingredient_id": str(uuid.uuid4())},
     ],
@@ -122,9 +135,19 @@ def test_draft_validation(admin_c, shop, item_over):
     assert r.status_code == 400 and Purchase.objects.count() == 0
 
 
-def test_draft_needs_qty_or_pack(admin_c, shop):
-    item = {"ingredient_id": str(shop.ing["Cup"].pk), "unit_cost": "1.0000"}
-    assert draft(admin_c, shop, [item]).status_code == 400
+@pytest.mark.parametrize(
+    "item",
+    [
+        {"line_total": "1.00"},  # no quantity
+        {"qty": "1.000"},  # no price
+        {"qty": "1.000", "unit_cost": "1.0000"},  # the cost per unit is never typed (L4)
+        {"qty": "1.000", "line_total": "-1.00"},
+        {"qty": "1.000", "line_total": 5},
+    ],
+)
+def test_draft_needs_quantity_and_total_or_pack(admin_c, shop, item):
+    body = {"ingredient_id": str(shop.ing["Cup"].pk), **item}
+    assert draft(admin_c, shop, [body]).status_code == 400
 
 
 def test_drawer_purchase_must_be_cash_and_supplier_must_exist(admin_c, shop):
@@ -216,7 +239,7 @@ def test_post_needs_an_item_a_positive_total_and_a_key(admin_c, shop):
     empty = data(draft(admin_c, shop, []))["id"]
     r = post_it(admin_c, empty)
     assert r.status_code == 400 and r.json()["error"]["code"] == "VALIDATION_ERROR"
-    free = data(draft(admin_c, shop, [milk_item(shop, unit_cost="0.0000")]))["id"]
+    free = data(draft(admin_c, shop, [milk_item(shop, pack_cost="0.00")]))["id"]
     assert post_it(admin_c, free).status_code == 400
     r = admin_c.post(f"/api/v1/purchases/{free}/post", {}, format="json")
     assert r.status_code == 400 and r.json()["error"]["code"] == "IDEMPOTENCY_KEY_REQUIRED"
@@ -228,8 +251,8 @@ def test_post_needs_an_item_a_positive_total_and_a_key(admin_c, shop):
 
 
 def test_the_same_ingredient_on_two_lines_accumulates(admin_c, shop):
-    a = {"ingredient_id": str(shop.ing["Cup"].pk), "qty": "10.000", "unit_cost": "1.0000"}
-    b = {"ingredient_id": str(shop.ing["Cup"].pk), "qty": "5.000", "unit_cost": "2.0000"}
+    a = {"ingredient_id": str(shop.ing["Cup"].pk), "qty": "10.000", "line_total": "10.00"}
+    b = {"ingredient_id": str(shop.ing["Cup"].pk), "qty": "5.000", "line_total": "10.00"}
     pid = data(draft(admin_c, shop, [a, b]))["id"]
     assert post_it(admin_c, pid).status_code == 200
     assert balance(shop.ing["Cup"]) == Decimal("115.000")
@@ -290,7 +313,7 @@ def test_racing_posts_with_different_keys_post_once(org, admin, shop):
 
 
 @pytest.mark.parametrize(
-    "item", [{}, {"qty": "1.000"}, {"ingredient_id": "x", "qty": "1.000", "unit_cost": "1.0000"}]
+    "item", [{}, {"qty": "1.000"}, {"ingredient_id": "x", "qty": "1.000", "line_total": "1.00"}]
 )
 def test_patch_items_missing_fields_is_400_not_500(admin_c, shop, item):
     pid = data(draft(admin_c, shop))["id"]

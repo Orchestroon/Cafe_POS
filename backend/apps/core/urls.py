@@ -7,7 +7,7 @@ from apps.catalog.views import CategoryViewSet, ProductViewSet, VariantViewSet
 from apps.expenses.views import ExpenseViewSet
 from apps.inventory import views as inv
 from apps.modifiers.views import ModifierGroupViewSet, ModifierOptionViewSet
-from apps.purchasing.views import PurchaseViewSet, SupplierViewSet
+from apps.purchasing.views import PurchaseViewSet, SupplierPaymentViewSet, SupplierViewSet
 from apps.reports.views import REPORT_VIEWS
 from apps.sales import views as sales
 from apps.shifts import views as shifts
@@ -28,6 +28,7 @@ router.register("refunds", sales.RefundLedgerView, basename="refund")
 router.register("payments", sales.PaymentLedgerView, basename="payment")
 router.register("suppliers", SupplierViewSet, basename="supplier")
 router.register("purchases", PurchaseViewSet, basename="purchase")
+router.register("supplier-payments", SupplierPaymentViewSet, basename="supplier-payment")
 router.register("expenses", ExpenseViewSet, basename="expense")
 router.register("shifts", shifts.ShiftViewSet, basename="shift")
 router.register("ingredients", inv.IngredientViewSet, basename="ingredient")

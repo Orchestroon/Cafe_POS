@@ -87,7 +87,10 @@
     "noRecipe": "Sizes without a recipe",
     "noRecipeMeta": "Cannot be sold until fixed",
     "optionsNoIngredient_one": "{{count}} option without an ingredient",
-    "optionsNoIngredient_other": "{{count}} options without an ingredient"
+    "optionsNoIngredient_other": "{{count}} options without an ingredient",
+    "noPrice": "Ingredients without a price",
+    "noPriceMeta": "Products using them cannot be sold",
+    "owed": "We owe suppliers"
   },
   "categories": {
     "new": "New category",
@@ -184,18 +187,23 @@
     "categoryRequired": "Choose a category.",
     "costPerServing": "Cost per serving",
     "margin": "Margin",
-    "noCost": "No cost yet for: {{names}}. Post a purchase or set a unit cost on the ingredient.",
-    "costNote": "At today's average cost; options are not included."
+    "noCost": "No price yet for: {{names}}. Post a purchase or enter an opening balance with its value; until then this size cannot be sold.",
+    "costNote": "At today's average cost of each ingredient.",
+    "optionCosts": "With options",
+    "extraCost": "Extra cost",
+    "extraPrice": "Extra price"
   },
   "ingredients": {
     "new": "New ingredient",
     "edit": "Edit ingredient",
     "unit": "Unit",
     "threshold": "Low-stock threshold",
-    "cost": "Reference unit cost",
-    "costHint": "Informational only.",
+    "costHint": "The cost comes from purchases and opening balances (with their value). It is never typed here.",
     "unitLocked": "The unit cannot change after creation.",
-    "note": "Stock quantities are changed only through opening balances and adjustments."
+    "note": "Stock comes in by purchases and opening balances, and goes out by sales, waste and counts.",
+    "stock": "In stock",
+    "avgCost": "Average cost",
+    "noCost": "No price yet"
   },
   "inventory": {
     "tabs": {
@@ -213,25 +221,31 @@
     "balanceAfter": "Balance after",
     "by": "By",
     "mode": "Mode",
-    "modeDelta": "Add / remove quantity",
+    "modeDelta": "Remove stock (waste, spoiled, broken)",
     "modeCount": "Physical count",
-    "deltaQty": "Quantity change",
+    "deltaQty": "Quantity to remove",
     "countedQty": "Counted quantity",
-    "deltaHint": "Use a negative number to remove stock.",
-    "countHint": "The system computes the difference from the current balance.",
+    "deltaHint": "A loss: it lowers profit at the average cost.",
+    "countHint": "The system works out the difference. A shortage is a loss; extra stock only fixes the balance (never profit).",
     "reason": "Reason",
     "reasonRequired": "A reason is required.",
     "pickIngredient": "Choose an ingredient.",
     "adjusted": "Saved. Change {{delta}}, new balance {{balance}}.",
-    "openingNote": "Opening balances can be entered once per ingredient, before any other stock movement.",
+    "openingNote": "Stock that is in the café without a purchase: at the start, or later (a gift, found in storage). Its total value is required, so every gram has a cost. It is not money out and never profit.",
     "openingDone": "Opening balances saved.",
-    "openingInvalid": "Quantities must be numbers greater than 0.",
+    "openingInvalid": "Each line needs a quantity and a total value greater than 0.",
     "types": {
       "opening_balance": "Opening balance",
       "adjustment": "Adjustment",
       "sale": "Sale",
-      "purchase": "Purchase"
-    }
+      "purchase": "Purchase",
+      "purchase_void": "Purchase voided",
+      "refund_return": "Returned after refund"
+    },
+    "addWarning": "Stock is never added here. Bought it? Record it as a purchase. Already had it? Use Opening balances with its value.",
+    "totalValue": "Total value",
+    "openingReasonNeeded": "Required: some of these ingredients already have stock.",
+    "openingReasonHint": "Optional for the first opening balance, e.g. \"Gift from the roaster\" later on."
   },
   "users": {
     "new": "New user",
@@ -263,7 +277,11 @@
     "taxNumber": "Tax registration number",
     "pricesIncludeTax": "Prices include tax",
     "saved": "Settings saved.",
-    "taxRateInvalid": "Tax rate must be a number between 0 and 100."
+    "taxRateInvalid": "Tax rate must be a number between 0 and 100.",
+    "cardFees": "Card fees",
+    "cardFeePct": "Bank fee on card sales (%)",
+    "cardFeeHint": "Saved on each card sale and counted as a cost in Profit. Changing it never changes past sales.",
+    "cardFeeInvalid": "The card fee must be a number between 0 and 100."
   },
   "errors": {
     "UNKNOWN": "Something went wrong. Please try again.",
@@ -275,7 +293,6 @@
     "RATE_LIMITED": "Too many attempts. Wait a minute and try again.",
     "LAST_ADMIN": "The last active admin cannot be deactivated or demoted.",
     "CANNOT_DEACTIVATE_SELF": "You cannot deactivate your own account.",
-    "OPENING_BALANCE_EXISTS": "An ingredient already has stock movements, so an opening balance cannot be set.",
     "SHIFT_NOT_OPEN": "You need an open shift for this. Open one at the point of sale.",
     "SHIFT_ALREADY_OPEN": "You already have an open shift.",
     "PRICE_CHANGED": "The price changed. Review the new total.",
@@ -300,7 +317,11 @@
     "INTERNAL_ERROR": "Something went wrong on the server. Please try again.",
     "INGREDIENT_IN_USE": "This ingredient is used by these recipes or options. Remove it from them first:",
     "PURCHASE_NOT_VOIDABLE": "This purchase cannot be voided (a draft, already voided, or paid from a shift that is already closed).",
-    "CASH_MOVEMENT_NOT_VOIDABLE": "This cannot be cancelled (already cancelled, or the shift is closed)."
+    "CASH_MOVEMENT_NOT_VOIDABLE": "This cannot be cancelled (already cancelled, or the shift is closed).",
+    "COST_MISSING": "An ingredient in this cart has no price yet, so it cannot be sold. Ask an Admin.",
+    "PAYMENT_EXCEEDS_OWED": "The payment is more than what is owed for this purchase.",
+    "PAYMENT_NOT_ALLOWED": "This payment cannot be made or voided.",
+    "STOCK_RETURN_NOT_ALLOWED": "Stock cannot be returned for this order."
   },
   "recipe": {
     "ingredient": "Ingredient",
@@ -457,7 +478,15 @@
     "cardRef": "Card refund reference (optional)",
     "refundCardWarning": "Card refunds must be done on the card terminal by staff.",
     "refundCashNote": "The cash is taken from your open shift.",
-    "refundStockWarning": "Stock is not returned. An Admin can adjust stock if the item is reusable."
+    "refundStockWarning": "Stock is not returned. An Admin can adjust stock if the item is reusable.",
+    "returnStock": "Return to stock",
+    "returnNote": "Put back what was not used (e.g. a sealed bottle). At most what this order used; it goes back at the cost it left at and lowers the cost of sales. Once per order.",
+    "returnConfirm": "Return to stock",
+    "returnNothing": "Type a quantity for at least one ingredient.",
+    "returnTooMuch": "Each quantity must be more than 0 and not more than what was used.",
+    "used": "Used",
+    "giveBack": "Return",
+    "stockReturned": "Stock returned ({{value}}) by {{by}} · Reason: “{{reason}}”"
   },
   "shift": {
     "openingCash": "Opening cash",
@@ -507,7 +536,11 @@
       "transport": "Transport",
       "cleaning": "Cleaning",
       "other": "Other",
-      "purchase": "Purchase"
+      "purchase": "Purchase",
+      "salaries": "Salaries",
+      "marketing": "Marketing",
+      "taxes_fees": "Taxes & fees",
+      "card_fees": "Card fees"
     },
     "sources": {
       "cash_drawer": "Cash drawer",
@@ -524,11 +557,26 @@
     "void": "Void",
     "voidTitle": "Void expense",
     "voidNote": "Voiding removes it from reports and from an open shift's expected cash. It cannot be undone.",
-    "voidedBecause": "Voided: {{reason}}"
+    "voidedBecause": "Voided: {{reason}}",
+    "stockHint": "Bought stock (milk, coffee, cups…)? Record it as a purchase, from the drawer if paid from it, so the stock and its cost go in."
   },
   "suppliers": {
     "phone": "Phone",
-    "notes": "Notes"
+    "notes": "Notes",
+    "owed": "Owed",
+    "paid": "Paid",
+    "pay": "Pay supplier",
+    "payments": "Payments",
+    "payTitle": "Pay {{name}}",
+    "payNow": "Pay now",
+    "all": "All",
+    "payConfirm": "Pay {{amount}}",
+    "payNothing": "Type an amount for at least one purchase.",
+    "payInvalid": "Each amount must be more than 0 and not more than what is owed.",
+    "payUnsure": "We could not confirm the payment. Tap Retry: it is safe, it will not pay twice.",
+    "nothingOwed": "Nothing is owed to this supplier.",
+    "paymentsTitle": "Payments to {{name}}",
+    "voidNote": "Voiding the payment of {{amount}} makes it owed again and cancels its expense."
   },
   "purchases": {
     "draft": "Draft",
@@ -550,13 +598,13 @@
     "drawerNote": "A drawer purchase uses your own open shift when you post.",
     "items": "Items",
     "addItem": "+ Add item",
-    "packHint": "By pack: pack count × pack size = quantity; the cost per unit is the pack cost ÷ pack size.",
+    "packHint": "Type the quantity and what you paid for it; the system works out the cost per unit. By pack: packs × pack size at a price per pack.",
     "entry": "Entry",
     "packCount": "Packs",
     "packSize": "Pack size",
     "packCost": "Cost per pack",
     "byPack": "By pack",
-    "byQty": "By quantity",
+    "byQty": "Quantity + total",
     "postTitle": "Post purchase",
     "postConfirm": "Post (cannot be undone)",
     "postWarning": "Posting adds the stock and records an expense of {{total}}. It cannot be undone or edited.",
@@ -570,7 +618,15 @@
     "voidReason": "Reason",
     "voidReasonRequired": "Enter a reason.",
     "voidConfirm": "Void purchase",
-    "voidedNote": "Voided {{time}} by {{by}} · Reason: “{{reason}}”"
+    "voidedNote": "Voided {{time}} by {{by}} · Reason: “{{reason}}”",
+    "paymentTerms": "Payment",
+    "paidNow": "Paid now",
+    "onCredit": "On credit",
+    "creditHint": "The stock and its cost go in when posted; the money goes out when you pay the supplier.",
+    "creditNeedsSupplier": "A purchase on credit needs its supplier.",
+    "price": "Price",
+    "totalPaid": "Total paid",
+    "postWarningCredit": "Posting adds the stock now. Nothing is paid now: {{total}} is owed to the supplier. It cannot be undone or edited."
   },
   "reports": {
     "today": "Today",
@@ -608,7 +664,7 @@
     "openClosed": "{{open}} open, {{closed}} closed",
     "notes": {
       "money-in-out": "Every pound in and out: sales by sale date, refunds by refund date, expenses and purchases by paid date. Voided ones are left out.",
-      "profit": "Costs use each ingredient's average purchase price, saved on every sale. Purchases are not subtracted here: they become stock and count when sold."
+      "profit": "What the sales earned: net sales − cost of what was sold (average purchase price, saved on every sale) − losses − expenses. Stock that comes in is never profit."
     },
     "qtyRefunded": "Refunded",
     "stockValue": "Stock value",
@@ -633,7 +689,10 @@
       "drawerNote": "Cash put in or taken out of drawers only moves cash (e.g. to the safe), so it is not counted as money in or out.",
       "closedDiff_one": "Over / short ({{count}} closed shift)",
       "closedDiff_other": "Over / short ({{count}} closed shifts)",
-      "eachShift": "See each shift"
+      "eachShift": "See each shift",
+      "drawer_supplier_payments": "Supplier payments from the drawer",
+      "other_supplier_payments": "Other supplier payments",
+      "card_fees": "Card fees (kept by the bank)"
     },
     "profitRows": {
       "sales": "Sales (before tax)",
@@ -641,17 +700,24 @@
       "net_sales": "Net sales",
       "cost_of_sales": "Cost of what was sold",
       "gross_profit": "Gross profit",
-      "stock_losses": "Stock losses (adjustments, counts)",
-      "stock_gains": "Stock gains",
+      "stock_losses": "Losses (waste, count shortages)",
       "general_expenses": "Expenses",
-      "net_profit": "Net profit"
+      "net_profit": "Net profit",
+      "card_fees": "Card fees"
     },
     "margin": "Margin {{pct}}%",
-    "missingOrders_one": "{{count}} order ({{amount}}) has no saved cost (sold before costs were recorded, or an ingredient had no cost). The profit is too high by its cost.",
-    "missingOrders_other": "{{count}} orders ({{amount}}) have no saved cost (sold before costs were recorded, or an ingredient had no cost). The profit is too high by their cost.",
-    "missingAdjustments_one": "{{count}} stock change has no cost and is left out.",
-    "missingAdjustments_other": "{{count}} stock changes have no cost and are left out.",
-    "purchasesInfo": "Purchases in this period: {{amount}} (they became stock; not subtracted here)."
+    "purchasesInfo": "Stock bought in this period: {{amount}} (it becomes a cost when sold or lost, so it is not subtracted here).",
+    "missingOrders_one": "{{count}} order ({{amount}}) has no saved cost, so the cost and profit can't be calculated.",
+    "missingOrders_other": "{{count}} orders ({{amount}}) have no saved cost, so the cost and profit can't be calculated.",
+    "missingAdjustments_one": "{{count}} stock change has no cost, so the net profit can't be calculated.",
+    "missingAdjustments_other": "{{count}} stock changes have no cost, so the net profit can't be calculated.",
+    "estimatedOrders_one": "{{count}} order has a cost recalculated later from the average cost (an estimate).",
+    "estimatedOrders_other": "{{count}} orders have a cost recalculated later from the average cost (an estimate).",
+    "cantCalc": "Can't calculate",
+    "per100Title": "Out of every 100 sold",
+    "per100": "{{cost}} cost of what was sold · {{losses}} losses · {{expenses}} expenses · {{profit}} profit",
+    "returnedInfo": "Already less {{amount}} returned to stock after refunds.",
+    "stockAddedInfo": "Stock added by counts or later opening balances: {{amount}} (not profit)."
   },
   "audit": {
     "title": "Audit log",
@@ -705,7 +771,8 @@
       "accounts_user": "User",
       "tenancy_organizationsettings": "Settings",
       "purchasing_supplier": "Supplier",
-      "shifts_cashmovement": "Cash entry"
+      "shifts_cashmovement": "Cash entry",
+      "purchasing_supplierpayment": "Supplier payment"
     },
     "actions": {
       "order_created": "Sale",
@@ -746,7 +813,11 @@
       "cash_added": "Cash put in",
       "cash_removed": "Cash taken out",
       "cash_voided": "Cash entry cancelled",
-      "purchase_voided": "Purchase voided"
+      "purchase_voided": "Purchase voided",
+      "order_cost_estimated": "Order cost recalculated",
+      "supplier_payment_created": "Supplier paid",
+      "supplier_payment_voided": "Supplier payment voided",
+      "order_stock_returned": "Stock returned after a refund"
     },
     "sentences": {
       "order_created": "Sold invoice {{invoice}} for {{total}} · {{payments}}",
@@ -755,7 +826,7 @@
       "shift_closed": "Closed {{owner}}'s shift · Expected {{expected}} · Counted {{actual}} · Difference {{difference}}",
       "stock_adjusted": "{{ingredient}}: changed by {{delta}} (new balance {{after}}) · Reason: “{{reason}}”",
       "stock_counted": "Counted {{ingredient}}: {{counted}} (difference {{delta}})",
-      "stock_opening_balance": "Opening balance of {{ingredient}}: {{qty}}",
+      "stock_opening_balance": "Opening balance of {{ingredient}}: {{qty}} worth {{value}}",
       "ingredient_created": "Added the ingredient {{name}}",
       "ingredient_updated": "Changed the ingredient {{name}}: {{changes}}",
       "category_created": "Added the category {{name}}",
@@ -787,7 +858,11 @@
       "cash_added": "Put {{amount}} into the drawer · Reason: “{{reason}}”",
       "cash_removed": "Took {{amount}} out of the drawer · Reason: “{{reason}}”",
       "cash_voided": "Cancelled “{{original}}” ({{kind}} {{amount}}) · Reason: “{{reason}}”",
-      "purchase_voided": "Voided a purchase of {{total}} · Reason: “{{reason}}”"
+      "purchase_voided": "Voided a purchase of {{total}} · Reason: “{{reason}}”",
+      "order_cost_estimated": "Recalculated the cost of invoice {{invoice}}: {{cost}} (estimate)",
+      "supplier_payment_created": "Paid {{supplier}} {{amount}}, paid from: {{source}}",
+      "supplier_payment_voided": "Voided a payment of {{amount}} to {{supplier}} · Reason: “{{reason}}”",
+      "order_stock_returned": "Put stock of {{invoice}} back ({{value}}) · Reason: “{{reason}}”"
     },
     "fields": {
       "invoice_no": "Invoice",
@@ -871,7 +946,12 @@
       "notes": "Notes",
       "phone": "Phone",
       "kind": "Type",
-      "original_reason": "Original reason"
+      "original_reason": "Original reason",
+      "cost_total": "Cost",
+      "total_value": "Value",
+      "on_credit": "On credit",
+      "supplier": "Supplier",
+      "amount_paid": "Paid"
     }
   },
   "shortcuts": {
@@ -933,7 +1013,9 @@
     "noRecipe_one": "{{count}} size without a recipe (cannot be sold)",
     "noRecipe_other": "{{count}} sizes without a recipe (cannot be sold)",
     "openShifts_one": "{{count}} shift still open",
-    "openShifts_other": "{{count}} shifts still open"
+    "openShifts_other": "{{count}} shifts still open",
+    "noPrice_one": "{{count}} ingredient has no price (cannot be sold)",
+    "noPrice_other": "{{count}} ingredients have no price (cannot be sold)"
   },
   "cash": {
     "title": "Cash out / in",

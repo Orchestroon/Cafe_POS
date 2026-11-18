@@ -40,6 +40,9 @@ def purchase_dict(p) -> dict:
         "source": p.source,
         "notes": p.notes,
         "total": str(p.total),
+        "on_credit": p.on_credit,
+        "amount_paid": str(p.amount_paid),
+        "owed": str(owed(p)),
         "posted_at": _ts(p.posted_at),
         "posted_by": _user(p.posted_by),
         "created_by": _user(p.created_by),
@@ -63,6 +66,13 @@ def purchase_dict(p) -> dict:
             for i in p.items.all()
         ],
     }
+
+
+def owed(p):
+    """What is still owed to the supplier for this purchase (credit purchases only)."""
+    if p.on_credit and p.status == Purchase.Status.POSTED:
+        return p.total - p.amount_paid
+    return q_money(0)
 
 
 def get_purchase(org, pk, lock=False):
@@ -107,9 +117,9 @@ def _build_items(org, purchase, items):
             pack_cost = q_cost(pack_cost)
             line = q_money(i["pack_count"] * pack_cost)
             cost = q_cost(pack_cost / i["pack_size"])  # shown only; the line total is the truth
-        else:
-            cost = q_cost(i["unit_cost"])
-            line = q_money(qty * cost)
+        else:  # what was paid for the whole line; the cost per unit is worked out (L4)
+            line = q_money(i["line_total"])
+            cost = q_cost(line / qty)  # shown only; item_cost() uses the exact line total
         total += line
         rows.append(
             PurchaseItem(
@@ -134,7 +144,7 @@ def _check_source(source, method):
         raise _bad("payment_method", "A drawer purchase is paid in cash.")
 
 
-_FIELDS = ("supplier_invoice_no", "purchased_on", "payment_method", "source", "notes")
+_FIELDS = ("supplier_invoice_no", "purchased_on", "payment_method", "source", "notes", "on_credit")
 
 
 @transaction.atomic
@@ -191,7 +201,10 @@ def post_purchase(actor, pk, key) -> tuple[int, dict]:
     org = actor.organization
     seen = get_purchase(org, pk)
     shift = None
-    if seen.source == Purchase.Source.CASH_DRAWER:  # the poster's own open shift, even an Admin's
+    if seen.on_credit:  # Sprint 5 P4: owed to someone, so the supplier is required
+        if seen.supplier_id is None:
+            raise _bad("supplier_id", "A purchase on credit needs its supplier.")
+    elif seen.source == Purchase.Source.CASH_DRAWER:  # the poster's own open shift, even Admin
         shift = shift_services.lock_open_shift(actor)
         if shift is None:
             raise ApiError("SHIFT_NOT_OPEN", "Open your shift to pay from the drawer.", 409)
@@ -231,7 +244,8 @@ def post_purchase(actor, pk, key) -> tuple[int, dict]:
             occurred_at=now,
         )
         movement_ids.append(str(mv.pk))
-    expense = create_purchase_expense(actor, p, shift)
+    # Paid now: one expense, today. On credit: no money goes out until a supplier payment.
+    expense = None if p.on_credit else create_purchase_expense(actor, p, shift)
     p.status, p.posted_at, p.posted_by = Purchase.Status.POSTED, now, actor
     p.save()
     record(
@@ -243,13 +257,18 @@ def post_purchase(actor, pk, key) -> tuple[int, dict]:
             "items": len(items),
             "source": p.source,
             "payment_method": p.payment_method,
-            "expense_id": str(expense.pk),
+            "on_credit": p.on_credit,
+            "expense_id": str(expense.pk) if expense else None,
             "shift_id": str(shift.pk) if shift else None,
         },
     )
     # Spec 9.4: the purchase fields plus the ids of what the post created.
     body = purchase_dict(detail(org, p.pk))
-    return 200, {**body, "stock_movement_ids": movement_ids, "expense_id": str(expense.pk)}
+    return 200, {
+        **body,
+        "stock_movement_ids": movement_ids,
+        "expense_id": str(expense.pk) if expense else None,
+    }
 
 
 @transaction.atomic
@@ -280,6 +299,13 @@ def void_purchase(actor, pk, reason) -> Purchase:
     if p.status == Purchase.Status.VOIDED:
         raise ApiError(
             "PURCHASE_NOT_VOIDABLE", "This purchase is already voided.", 409, {"why": "voided"}
+        )
+    if p.amount_paid > 0:  # Sprint 5 P4: void its supplier payments first
+        raise ApiError(
+            "PURCHASE_NOT_VOIDABLE",
+            "This purchase has supplier payments. Void them first.",
+            409,
+            {"why": "has_payments"},
         )
     items = list(p.items.all())
     balances = lock_balances(org, sorted({i.ingredient_id for i in items}))

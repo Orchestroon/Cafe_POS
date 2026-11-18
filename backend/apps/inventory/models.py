@@ -18,9 +18,6 @@ class Ingredient(TenantModel):
     low_stock_threshold = models.DecimalField(
         max_digits=14, decimal_places=3, null=True, blank=True
     )
-    reference_unit_cost = models.DecimalField(
-        max_digits=12, decimal_places=4, null=True, blank=True
-    )
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -36,8 +33,9 @@ class StockBalance(TenantModel):
     ingredient = models.ForeignKey(Ingredient, on_delete=models.PROTECT, related_name="balances")
     location = models.ForeignKey("tenancy.Location", on_delete=models.PROTECT, related_name="+")
     qty = models.DecimalField(max_digits=14, decimal_places=3, default=0)
-    # Weighted average cost per base unit, moved only by purchase post/void (owner, 2026-11-16).
-    # None until the first purchase: the ingredient's reference_unit_cost stands in.
+    # Weighted average cost per base unit (owner, 2026-11-16). The only cost of an ingredient
+    # (Sprint 5 L1/L3): set only by an opening balance with its value or a purchase, moved by
+    # purchase post/void. None = never stocked with a known cost, so it cannot be sold.
     avg_cost = models.DecimalField(max_digits=14, decimal_places=6, null=True, blank=True)
 
     class Meta:
@@ -57,6 +55,8 @@ class StockAdjustment(TenantModel):
     kind = models.CharField(max_length=20, choices=Kind.choices)
     qty_delta = models.DecimalField(max_digits=14, decimal_places=3)
     counted_qty = models.DecimalField(max_digits=14, decimal_places=3, null=True, blank=True)
+    # Opening balance only: what the stock is worth, as typed (Sprint 5 L3/L4).
+    total_value = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     reason = models.CharField(max_length=300, blank=True)
     created_by = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="+")
 
@@ -76,12 +76,14 @@ class StockMovement(AppendOnlyModel, TenantModel):
         PURCHASE = "purchase"
         ADJUSTMENT = "adjustment"
         PURCHASE_VOID = "purchase_void"
+        REFUND_RETURN = "refund_return"  # Sprint 5 P7: unused items of a refunded order
 
     class Source(models.TextChoices):
         ORDER_ITEM = "order_item"
         PURCHASE_ITEM = "purchase_item"
         STOCK_ADJUSTMENT = "stock_adjustment"
         PURCHASE_VOID = "purchase_void"
+        STOCK_RETURN = "stock_return"
 
     ingredient = models.ForeignKey(Ingredient, on_delete=models.PROTECT, related_name="movements")
     location = models.ForeignKey("tenancy.Location", on_delete=models.PROTECT, related_name="+")

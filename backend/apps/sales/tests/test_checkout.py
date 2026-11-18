@@ -401,13 +401,13 @@ def test_at12_balance_row_lock_holds_against_a_concurrent_adjustment(org, admin,
         try:
             c = client_for(admin)
             start.wait()
-            for _ in range(rounds):  # each adjustment: Cup +1
+            for _ in range(rounds):  # each adjustment: Cup -1 (waste)
                 r = c.post(
                     "/api/v1/inventory/adjustments",
                     {
                         "ingredient_id": str(cup.id),
                         "mode": "delta",
-                        "qty_delta": "1.000",
+                        "qty_delta": "-1.000",
                         "reason": "lock test",
                     },
                     format="json",
@@ -422,7 +422,7 @@ def test_at12_balance_row_lock_holds_against_a_concurrent_adjustment(org, admin,
     [t.start() for t in threads]
     [t.join() for t in threads]
     assert not errors
-    assert balance(cup) == Decimal("100.000")  # 100 - 15 + 15: no lost update
+    assert balance(cup) == Decimal("100.000") - 2 * rounds  # every sale and waste: no lost update
     moves = list(
         StockMovement.objects.filter(ingredient=cup, movement_type__in=["sale", "adjustment"])
         .order_by("created_at")

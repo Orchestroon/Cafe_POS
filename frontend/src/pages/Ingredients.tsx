@@ -9,6 +9,9 @@ import { PageHeader } from "../components/PageHeader";
 import { Kbd } from "../components/ShortcutsHelp";
 import { ErrorBanner } from "../components/States";
 import { ListState, Pager, StatusBadge } from "../components/Table";
+import { useAuth } from "../auth/AuthContext";
+import { formatMoney } from "../i18n/format";
+import { costPer, readable } from "../lib/units";
 
 export function Ingredients() {
   const { t } = useTranslation();
@@ -16,6 +19,10 @@ export function Ingredients() {
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Partial<Ingredient> | null>(null);
   const q = useQuery({ queryKey: ["ingredients", page, search], queryFn: () => api.list<Ingredient>("/ingredients", { page, search }) });
+  const { me } = useAuth();
+  const show = (qty: string, u: Unit) => { const r = readable(qty, u); return `${r.qty} ${t(`units.${r.unit}`)}`; };
+  // Sprint 5 L1: the real cost, from purchases and opening balances (never typed here).
+  const perUnit = (avg: string, u: Unit) => { const c = costPer(avg, u); return t("reports.perUnit", { cost: formatMoney(c.amount, me?.settings.currency ?? ""), unit: t(`units.${c.unit}`) }); };
   return (
     <>
       <PageHeader title={t("nav.ingredients")} subtitle={t("ingredients.note")} actions={<button className="btn btn-primary" data-shortcut="new" onClick={() => setEditing({ base_unit: "g", is_active: true })}>{t("common.new")}<Kbd k="N" /></button>} />
@@ -23,11 +30,13 @@ export function Ingredients() {
         <div className="toolbar"><div className="form-group"><label className="form-label">{t("common.search")}</label><input data-shortcut="search" className="form-input" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div></div>
         <ListState loading={q.isLoading} error={q.error} empty={q.data?.data.length === 0}>
           <table className="erp-table">
-            <thead><tr><th>{t("common.name")}</th><th>{t("ingredients.unit")}</th><th className="num">{t("ingredients.threshold")}</th><th className="num">{t("ingredients.cost")}</th><th>{t("common.status")}</th><th /></tr></thead>
+            <thead><tr><th>{t("common.name")}</th><th>{t("ingredients.unit")}</th><th className="num">{t("ingredients.threshold")}</th><th className="num">{t("ingredients.stock")}</th><th className="num">{t("ingredients.avgCost")}</th><th>{t("common.status")}</th><th /></tr></thead>
             <tbody>
               {q.data?.data.map((i) => (
                 <tr key={i.id}>
-                  <td>{i.name}</td><td>{i.base_unit}</td><td className="num mono">{i.low_stock_threshold ?? "—"}</td><td className="num mono">{i.reference_unit_cost ?? "—"}</td>
+                  <td>{i.name}</td><td>{i.base_unit}</td><td className="num mono">{i.low_stock_threshold ?? "—"}</td>
+                  <td className="num mono">{i.stock_qty === null ? "—" : show(i.stock_qty, i.base_unit)}</td>
+                  <td className="num mono">{i.avg_cost === null ? <span className="badge badge-lowstock">{t("ingredients.noCost")}</span> : perUnit(i.avg_cost, i.base_unit)}</td>
                   <td><StatusBadge active={i.is_active} /></td>
                   <td><div className="row-actions"><button className="btn btn-outline btn-sm" onClick={() => setEditing(i)}>{t("common.edit")}</button></div></td>
                 </tr>
@@ -47,7 +56,7 @@ function IngredientForm({ initial, onClose }: { initial: Partial<Ingredient>; on
   const qc = useQueryClient();
   const [f, setF] = useState({
     name: initial.name ?? "", base_unit: (initial.base_unit ?? "g") as Unit,
-    threshold: initial.low_stock_threshold ?? "", cost: initial.reference_unit_cost ?? "", is_active: initial.is_active ?? true,
+    threshold: initial.low_stock_threshold ?? "", is_active: initial.is_active ?? true,
   });
   const [clientErr, setClientErr] = useState<Record<string, string>>({});
   const save = useMutation({
@@ -55,7 +64,6 @@ function IngredientForm({ initial, onClose }: { initial: Partial<Ingredient>; on
       const body: Record<string, unknown> = {
         name: f.name, is_active: f.is_active,
         low_stock_threshold: f.threshold.trim() === "" ? null : f.threshold.trim(),
-        reference_unit_cost: f.cost.trim() === "" ? null : f.cost.trim(),
       };
       if (!initial.id) body.base_unit = f.base_unit; // create-only
       return initial.id ? api.patch(`/ingredients/${initial.id}`, body) : api.post("/ingredients", body);
@@ -65,7 +73,6 @@ function IngredientForm({ initial, onClose }: { initial: Partial<Ingredient>; on
   const submit = () => {
     const e: Record<string, string> = {};
     if (f.threshold.trim() && !isDecimal(f.threshold, 3)) e.threshold = t("common.decimalInvalid");
-    if (f.cost.trim() && !isDecimal(f.cost, 4)) e.cost = t("common.decimalInvalid");
     setClientErr(e);
     if (!Object.keys(e).length) save.mutate();
   };
@@ -82,10 +89,8 @@ function IngredientForm({ initial, onClose }: { initial: Partial<Ingredient>; on
           {(["g", "ml", "pcs"] as const).map((u) => <option key={u} value={u}>{t(`units.${u}`)}</option>)}
         </select>
       </Field>
-      <div className="form-grid">
-        <TextField label={t("ingredients.threshold")} inputMode="decimal" value={f.threshold} onChange={(e) => setF({ ...f, threshold: e.target.value })} error={clientErr.threshold ?? fieldError(save.error, "low_stock_threshold")} />
-        <TextField label={t("ingredients.cost")} inputMode="decimal" value={f.cost} onChange={(e) => setF({ ...f, cost: e.target.value })} error={clientErr.cost ?? fieldError(save.error, "reference_unit_cost")} hint={t("ingredients.costHint")} />
-      </div>
+      <TextField label={t("ingredients.threshold")} inputMode="decimal" value={f.threshold} onChange={(e) => setF({ ...f, threshold: e.target.value })} error={clientErr.threshold ?? fieldError(save.error, "low_stock_threshold")} />
+      <p className="form-hint" style={{ marginBottom: 10 }}>{t("ingredients.costHint")}</p>
       <Check label={t("common.active")} checked={f.is_active} onChange={(v) => setF({ ...f, is_active: v })} />
     </Modal>
   );

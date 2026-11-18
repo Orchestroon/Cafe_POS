@@ -41,7 +41,7 @@ def scenario(org, shop, admin_c, barista_c):
         "ingredient_id": str(shop.ing["Whole Milk"].pk),
         "pack_count": "12.000",
         "pack_size": "1000.000",
-        "unit_cost": "0.0300",
+        "pack_cost": "30.00",
     }
     pid = data(
         admin_c.post(

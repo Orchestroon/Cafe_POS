@@ -191,6 +191,9 @@ def place_order(user, data, key) -> tuple[int, dict]:
             {"server_total": str(priced.total), "quote": quote_payload(priced, required, warnings)},
         )
     pay_rows = validate_payments(data["payments"], priced.total)  # 5.
+    fee_pct = OrganizationSettings.objects.get(organization=org).card_fee_pct
+    for row in pay_rows:  # Sprint 5 Q-C: the card fee is a cost of the sale, saved with it
+        row["fee_amount"] = q_money(row["amount"] * fee_pct / 100) if row["method"] == "card" else 0
 
     seq, invoice_no = _next_invoice(org)  # 6. gapless: rolls back with a failed checkout
     balances = _lock_stock(org, consumptions)  # 6b. stock locks, and the costs at this moment

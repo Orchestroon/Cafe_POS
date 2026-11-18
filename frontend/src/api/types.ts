@@ -8,6 +8,8 @@ export interface Settings {
   receipt_header: string; receipt_footer: string; receipt_paper_width: PaperWidth;
   tax_enabled: boolean; tax_rate: string; prices_include_tax: boolean; tax_label: string;
   tax_registration_number: string; invoice_prefix?: string;
+  /** Admin only (Sprint 5 Q-C): the bank's commission on card sales, in %. */
+  card_fee_pct?: string;
 }
 export interface Me { user: User; organization: { id: string; name: string }; settings: Settings; }
 export interface Category { id: string; name: string; sort_order: number; is_active: boolean; }
@@ -44,32 +46,42 @@ export interface Quote { subtotal: string; discount_total: string; tax_total: st
 export interface PaymentRow { method: "cash" | "card"; amount: string; cash_tendered?: string; change_given?: string; external_reference?: string; }
 export interface CheckoutResult { order_id: string; invoice_no: string; status: string; subtotal: string; discount_total: string; tax_total: string; total: string; payments: PaymentRow[]; change_due: string; receipt_url: string; stock_warnings: StockWarning[]; }
 export interface OrderSummary { id: string; invoice_no: string; status: "paid" | "refunded"; total: string; created_at: string; cashier: { id: string; display_name: string }; items_count: number; payment_methods: string[]; }
-export interface OrderDetail extends OrderSummary { shift_id: string; subtotal: string; discount_total: string; tax_total: string; tax: { enabled: boolean; rate: string; inclusive: boolean; label: string }; note: string; items: { id: string; product_name: string; variant_label: string; quantity: number; unit_price: string; line_total: string; modifiers: { option_label: string; price_delta: string }[] }[]; payments: PaymentRow[]; refund: RefundInfo | null; }
+/** Sprint 5 P7 (Admin only): what was put back in stock after the refund. */
+export interface StockReturnInfo { created_at: string; reason: string; total_value: string; created_by: string; }
+export interface ConsumptionRow { ingredient_id: string; ingredient_name: string; unit: Unit; total_qty: string; unit_cost: string | null; }
+export interface OrderDetail extends OrderSummary { stock_return?: StockReturnInfo | null; cost_total?: string | null; shift_id: string; subtotal: string; discount_total: string; tax_total: string; tax: { enabled: boolean; rate: string; inclusive: boolean; label: string }; note: string; items: { id: string; product_name: string; variant_label: string; quantity: number; unit_price: string; line_total: string; modifiers: { option_label: string; price_delta: string }[]; consumption?: ConsumptionRow[] }[]; payments: PaymentRow[]; refund: RefundInfo | null; }
 export interface Receipt { business: { name: string; header: string; footer: string; tax_registration_number: string }; invoice_no: string; status: string; created_at: string; timezone: string; cashier: string; items: { name: string; variant: string; quantity: number; modifiers: string[]; unit_price: string; line_total: string }[]; subtotal: string; discount_total: string; tax: { enabled: boolean; label: string; rate: string; inclusive: boolean; amount: string }; total: string; payments: PaymentRow[]; refund: RefundInfo | null; paper_width: PaperWidth; currency: string; }
 export type Unit = "g" | "ml" | "pcs";
-export interface Ingredient { id: string; name: string; base_unit: Unit; low_stock_threshold: string | null; reference_unit_cost: string | null; is_active: boolean; }
-/** unit_cost: average cost per base unit (else the reference cost); null = unknown. */
+/** stock_qty / avg_cost come from the stock balance (Sprint 5 L1): the cost is never typed. */
+export interface Ingredient { id: string; name: string; base_unit: Unit; low_stock_threshold: string | null; stock_qty: string | null; avg_cost: string | null; is_active: boolean; }
+/** unit_cost: weighted average cost per base unit; null = never stocked with a value. */
 export interface Balance { ingredient_id: string; ingredient_name: string; base_unit: Unit; is_active: boolean; qty: string; low_stock_threshold: string | null; is_low: boolean; is_negative: boolean; unit_cost: string | null; }
 export interface Movement { id: string; ingredient_id: string; ingredient_name: string; base_unit: Unit; qty_delta: string; movement_type: string; source_type: string; balance_after: string; created_by_username: string; occurred_at: string; }
 
 export interface RefundLine { method: "cash" | "card"; amount: string; external_reference: string; }
 export interface RefundInfo { id: string; created_at: string; actor: Person; reason: string; total_amount: string; shift_id: string | null; lines: RefundLine[]; inventory_restored: boolean; }
 export interface RefundResult { refund_id: string; order_id: string; invoice_no: string; status: string; total_amount: string; lines: RefundLine[]; shift_id: string | null; inventory_restored: boolean; }
-export const EXPENSE_CATEGORIES = ["utilities", "rent", "maintenance", "supplies", "transport", "cleaning", "other"] as const;
+export const EXPENSE_CATEGORIES = ["salaries", "rent", "utilities", "maintenance", "supplies", "transport", "cleaning", "marketing", "taxes_fees", "card_fees", "other"] as const;
 export type PayMethod = "cash" | "card" | "transfer";
 export type PaySource = "cash_drawer" | "external";
 export interface Expense {
-  id: string; type: "general" | "purchase"; category: string; description: string; amount: string; payment_method: PayMethod; source: PaySource;
+  id: string; type: "general" | "purchase" | "supplier_payment"; category: string; description: string; amount: string; payment_method: PayMethod; source: PaySource;
   shift_id: string | null; purchase_id: string | null; paid_at: string; status: "posted" | "voided"; void_reason: string; voided_at: string | null; created_by: Person;
 }
-export interface Supplier { id: string; name: string; phone: string; notes: string; is_active: boolean; }
+export interface Supplier { id: string; name: string; phone: string; notes: string; is_active: boolean; owed: string; }
+/** Sprint 5 P4: money paid to a supplier for purchases bought on credit. */
+export interface SupplierPayment {
+  id: string; supplier: { id: string; name: string }; amount: string; source: PaySource; payment_method: PayMethod; note: string;
+  status: "posted" | "voided"; paid_at: string; created_by: Person | null; void_reason: string; voided_at: string | null; voided_by: Person | null;
+  lines: { purchase_id: string; supplier_invoice_no: string; purchased_on: string; amount: string }[];
+}
 export interface PurchaseItem {
   id?: string; ingredient_id: string; ingredient_name?: string; unit?: Unit; qty: string; unit_cost: string; line_total?: string;
   pack_label: string; pack_count: string | null; pack_size: string | null; pack_cost?: string | null;
 }
 export interface Purchase {
   id: string; supplier: { id: string; name: string } | null; supplier_invoice_no: string; purchased_on: string; status: "draft" | "posted" | "voided";
-  payment_method: PayMethod; source: PaySource; notes: string; total: string; posted_at: string | null; posted_by: Person | null; created_by: Person | null; items: PurchaseItem[];
+  payment_method: PayMethod; source: PaySource; notes: string; total: string; on_credit: boolean; amount_paid: string; owed: string; posted_at: string | null; posted_by: Person | null; created_by: Person | null; items: PurchaseItem[];
   void_reason: string; voided_at: string | null; voided_by: Person | null;
 }
 export interface ReportEnvelope<T> { data: T; meta: { range: { from: string; to: string; timezone: string } }; }
@@ -93,9 +105,13 @@ export interface MoneyInOut {
   drawer: { cash_in: string; cash_out: string; gap_total: string; closed_count: number; total_difference: string };
 }
 export interface ProfitReport {
-  sales: string; refunds: string; net_sales: string; cost_of_sales: string; gross_profit: string; gross_margin_pct: string | null;
-  stock_losses: string; stock_gains: string; general_expenses: string; net_profit: string; purchases_info: string;
+  // cost, profit and margin are null when any order or stock change has no cost (never shown as 0)
+  sales: string; refunds: string; net_sales: string; cost_of_sales: string | null; gross_profit: string | null; gross_margin_pct: string | null;
+  returned_to_stock: string; stock_losses: string; general_expenses: string; card_fees: string; expenses_by_category: { category: string; amount: string }[];
+  net_profit: string | null; per_100: { cost: string; losses: string; expenses: string; profit: string } | null;
+  purchases_info: string; stock_added_info: string;
   orders_without_cost: number; sales_without_cost: string; adjustments_without_cost: number;
+  estimated_orders: number; ingredients_without_cost: string[];
 }
 export const REPORT_NAMES = ["money-in-out", "profit", "sales-summary", "payment-breakdown", "top-products", "stock", "purchases-expenses", "shifts"] as const;
 export type ReportName = (typeof REPORT_NAMES)[number];

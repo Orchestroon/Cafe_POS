@@ -110,6 +110,8 @@ Drip Café needs a web-based **POS for day-to-day sales**, not a demo.
 | D17 | Card terminal reference | Optional on card payments and card refunds. **Confirmed by the owner (2026-11-10).** | Final |
 | D18 | Packaged goods (no recipe) | Modeled as an ingredient in `pcs` with a one-line recipe (qty 1, waste 0). No separate stock-item model. A size that truly uses no stock (a service item) is marked "No stock tracking" (`track_stock = false`, Sprint 4 B3). | Final (design) |
 | D19 | Money review | **Owner, 2026-11-16 — "every pound in or out":** (1) a pack purchase costs exactly packs × pack price; (2) an ingredient used by a recipe or option cannot be switched off; (3) top products count a sale on its day and a refund on its day; (4) a **Money in & out** report; (5a) the gap between a person's previous count and their next opening is shown; (5b) **cash taken out / put in** of the drawer during a shift (Barista and Admin, own shift; Admin cancels while the shift is open); (6) a posted purchase can be **voided** (Admin, reason); (8) **cost and profit now** (brought in from Section 3.4): weighted average cost per ingredient, the cost saved on every sale, a **Profit** report, stock value. Supplier/inventory/ingredient cycle review is the next step. | Final |
+| D20 | Missing costs | **Owner, 2026-11-17 — "how can profit be 100%?":** (1) when any order in the period has no saved cost, the Profit report shows cost, gross profit, margin and net profit as **"can't calculate"** (null), never as 0 / 100 %, and names the ingredients that still have no price (net profit also when a stock change has no cost); (2) a one-time migration fills each ingredient's average cost from purchases posted before D19 (replayed with the D19 rules; balances that already have an average are kept; the stock ledger is not changed); (3) an Admin can **recalculate** the cost of past orders sold without one (`POST /orders/recost?from=&to=`): rows without a cost get today's average cost marked `estimated`, rows that had a cost keep it, the order gets `cost_estimated = true`, each order is audited `order.cost_estimated`; an order with any ingredient still without a price is left untouched; running it again changes nothing. **Part (3) removed by D21 (Sprint 5 P8).** | Final |
+| D21 | Profit cycle (Sprint 5) | **Owner, 2026-11-17 — "I sell for 100, all my costs are 90, so I made 10. Nothing may enter the system without knowing what it cost and where it came from":** (1) the typed `reference_unit_cost` is removed; an ingredient's only cost is its weighted average (L1); (2) stock comes in only by a purchase, an opening balance **with its total value** (any time; a reason once the ingredient has stock, Q-E) or a count surplus; adjustments only take stock out (L2); a count surplus or opening balance is **never profit** (Q-A); (3) an ingredient with no average cost cannot be sold (422 `COST_MISSING`) nor adjusted; (4) a purchase line is quantity + total paid (or by pack); the cost per unit is computed (L4); (5) **buying on credit** with partial supplier payments (P4); (6) a **card fee %** saved on each card payment (Q-C); (7) packaging is part of the recipe (Q-B); (8) **return to stock** after a refund, at the cost it left at (P7); (9) the Profit report reads sales − cost of sales − losses − expenses (by category) − card fees = net profit, with "out of every 100"; (10) expense categories add salaries, card fees, marketing, taxes & fees; (11) **Recalculate cost** (D20 part 3) is removed (P8). P1 (per-person drawer) and P9 (posting day) unchanged. Details: `docs/sprints/sprint-5-plan.md`, `docs/SYSTEM_LOGIC.md`. | Final |
 
 ---
 
@@ -255,9 +257,9 @@ Drip Café needs a web-based **POS for day-to-day sales**, not a demo.
    ├─ PROJECT_SPEC.md
    ├─ PROGRESS.md
    ├─ sprints/
-   ├─ OPERATIONS.md                # Sprint 5
-   ├─ BACKUP_RESTORE.md            # Sprint 5
-   └─ USER_GUIDE.md                # Sprint 5
+   ├─ OPERATIONS.md                # Sprint 6
+   ├─ BACKUP_RESTORE.md            # Sprint 6
+   └─ USER_GUIDE.md                # Sprint 6
 ```
 
 If the existing frontend repo has a different shape, propose the move in the Sprint 0 audit and wait for approval before restructuring.
@@ -502,10 +504,10 @@ A product is sellable only if it and its category are active and it has at least
 
 | Model | Fields | Constraints / notes |
 |---|---|---|
-| `Ingredient` | name, base_unit (`g`/`ml`/`pcs`), low_stock_threshold (qty, nullable), reference_unit_cost (decimal 12,4, nullable, informational), is_active | unique(org, name). A `StockBalance` row is created automatically for the default location |
-| `StockBalance` | ingredient, location, qty (may be negative) | unique(ingredient, location). Never edited directly by API |
-| `StockAdjustment` | ingredient, location, kind (`adjustment`/`count`/`opening_balance`), qty_delta, counted_qty (nullable, for `count`), reason, created_by | reason required for adjustment and count |
-| `StockMovement` | ingredient, location, qty_delta (≠ 0), movement_type (`opening_balance`/`sale`/`purchase`/`adjustment`), source_type (`order_item`/`purchase_item`/`stock_adjustment`), source_id (UUID), balance_after, created_by, occurred_at | **append-only**; unique(source_type, source_id, ingredient) prevents double posting; index (ingredient, occurred_at) |
+| `Ingredient` | name, base_unit (`g`/`ml`/`pcs`), low_stock_threshold (qty, nullable), is_active. **[D21]** no typed cost; the API returns read-only `stock_qty` and `avg_cost` from the balance | unique(org, name). A `StockBalance` row is created automatically for the default location |
+| `StockBalance` | ingredient, location, qty (may be negative), avg_cost (decimal 14,6, nullable: never stocked with a value) | unique(ingredient, location). Never edited directly by API |
+| `StockAdjustment` | ingredient, location, kind (`adjustment`/`count`/`opening_balance`), qty_delta, counted_qty (nullable, for `count`), total_value (opening balance only, D21), reason, created_by | reason required for adjustment and count |
+| `StockMovement` | ingredient, location, qty_delta (≠ 0), movement_type (`opening_balance`/`sale`/`purchase`/`purchase_void`/`adjustment`/`refund_return`), source_type (`order_item`/`purchase_item`/`stock_adjustment`/`purchase_void`/`stock_return`), source_id (UUID), balance_after, unit_cost, created_by, occurred_at | **append-only**; unique(source_type, source_id, ingredient) prevents double posting; index (ingredient, occurred_at) |
 
 ### 7.6 shifts
 
@@ -527,18 +529,21 @@ Constraint: **partial unique (user) where status = 'open'**.
 | `InvoiceCounter` | organization (unique), last_number (int) | Locked with `select_for_update` |
 | `Order` | branch, shift, cashier, invoice_seq (int), invoice_no, status (`paid`/`refunded`), subtotal, discount_total, tax_total, total, tax_snapshot (JSON: enabled, rate, inclusive, label), note, idempotency_key | unique(org, invoice_no); unique(org, invoice_seq); unique(org, idempotency_key) |
 | `OrderItem` | order, variant (FK), quantity (int ≥ 1), product_name_snapshot, variant_label_snapshot, unit_price, unit_discount, line_subtotal, line_discount, line_total, modifiers_snapshot (JSON), recipe_snapshot (JSON), consumption_snapshot (JSON), promotion_snapshot (JSON, nullable) | see Section 8.4 for snapshot shapes |
-| `Payment` | order, shift, method (`cash`/`card`), amount (> 0), cash_tendered (nullable), change_given (nullable), external_reference (blank) | unique(order, method). Mixed = one cash row + one card row |
+| `Payment` | order, shift, method (`cash`/`card`), amount (> 0), cash_tendered (nullable), change_given (nullable), external_reference (blank), fee_amount (D21: card amount × `card_fee_pct` at sale time; Admin only) | unique(order, method). Mixed = one cash row + one card row |
 | `Refund` | order (**1:1**, full refunds only), actor, shift (nullable), reason, total_amount, idempotency_key | |
 | `RefundLine` | refund, original_payment, method, amount, external_reference (blank) | |
+| `StockReturn` | order (**1:1**), reason, total_value, created_by | D21 (P7): once per refunded order |
 
 ### 7.8 purchasing and expenses
 
 | Model | Fields | Constraints / notes |
 |---|---|---|
 | `Supplier` | name, phone (blank), notes (blank), is_active | unique(org, name) |
-| `Purchase` | supplier (nullable), supplier_invoice_no (blank), purchased_on (date), status (`draft`/`posted`), payment_method (`cash`/`card`/`transfer`), source (`external`/`cash_drawer`), notes, total, posted_at, posted_by, created_by | Editable and deletable only while `draft` |
-| `PurchaseItem` | purchase, ingredient, qty (base units, > 0), unit_cost (decimal 12,4 per base unit, ≥ 0), line_total, pack_label (blank), pack_count (nullable), pack_size (nullable) | Pack fields are an input convenience: `qty = pack_count × pack_size` |
-| `Expense` | type (`general`/`purchase`), category (`utilities`/`rent`/`maintenance`/`supplies`/`transport`/`cleaning`/`other`/`purchase`), description, amount (> 0), payment_method (`cash`/`card`/`transfer`), source (`cash_drawer`/`external`), shift (nullable), purchase (1:1 nullable, unique), paid_at, status (`posted`/`voided`), void_reason, voided_by, voided_at, created_by | Check: source=`cash_drawer` ⇒ shift not null and payment_method=`cash`. A purchase has at most one expense |
+| `Purchase` | supplier (nullable), supplier_invoice_no (blank), purchased_on (date), status (`draft`/`posted`/`voided`), payment_method (`cash`/`card`/`transfer`), source (`external`/`cash_drawer`), notes, total, **on_credit, amount_paid (D21)**, posted_at, posted_by, created_by | Editable and deletable only while `draft`. Check: 0 ≤ amount_paid ≤ total; amount_paid = 0 unless on_credit |
+| `PurchaseItem` | purchase, ingredient, qty (base units, > 0), unit_cost (decimal 12,4 per base unit, shown only), line_total (the truth: what was paid), pack_label (blank), pack_count (nullable), pack_size (nullable), pack_cost (nullable) | Pack fields are an input convenience: `qty = pack_count × pack_size` |
+| `SupplierPayment` | supplier, amount (> 0), source, payment_method, shift (nullable), note, status (`posted`/`voided`), void_reason, voided_at, voided_by, created_by | D21 (P4). Check: source=`cash_drawer` ⇒ shift and cash |
+| `SupplierPaymentLine` | payment, purchase, amount (> 0) | unique(payment, purchase) |
+| `Expense` | type (`general`/`purchase`/`supplier_payment`), category (`salaries`/`rent`/`utilities`/`maintenance`/`supplies`/`transport`/`cleaning`/`marketing`/`taxes_fees`/`card_fees`/`other`/`purchase`), description, amount (> 0), payment_method (`cash`/`card`/`transfer`), source (`cash_drawer`/`external`), shift (nullable), purchase (1:1 nullable, unique), supplier_payment (1:1 nullable, D21), paid_at, status (`posted`/`voided`), void_reason, voided_by, voided_at, created_by | Check: source=`cash_drawer` ⇒ shift not null and payment_method=`cash`. A purchase has at most one expense |
 
 ### 7.9 promotions (P1) and audit
 
@@ -707,9 +712,10 @@ Rules:
    - Sets `status = posted`, `posted_at`, `posted_by`.
    - Records an audit event.
 3. If the purchase is already posted and the call uses a different key, return 409 `PURCHASE_ALREADY_POSTED`.
-4. **Pack price [D19]:** an item may send `pack_count`, `pack_size` and `pack_cost` (instead of `unit_cost`); then `line_total = pack_count × pack_cost` exactly and `unit_cost` is only shown (rounded to 4 dp). `pack_cost` without packs, or with `unit_cost`, is 400.
-5. **Average cost [D19]:** posting sets each ingredient's `avg_cost = (on_hand × avg + qty × cost) / (on_hand + qty)`, where `cost = line_total / qty` (6 dp). With nothing on hand (zero or negative) or no known cost, the purchase cost becomes the average. Before the first purchase the ingredient's `reference_unit_cost` stands in. Every stock movement stores the `unit_cost` it was made at.
-6. **Void [D19]:** `POST /purchases/{id}/void {reason}` (Admin). Writes `purchase_void` movements taking the stock back out (it may go negative), takes the purchase out of the average (`(on_hand × avg − qty × cost) / (on_hand − qty)`, kept unchanged if nothing would be left or the result would be negative), voids its expense, sets `status = voided` with reason, who and when, and records `purchase.voided`. A draft (422 `draft`), an already voided purchase (409 `voided`), or a drawer purchase whose shift is **closed** (422 `shift_closed`) is refused (`PURCHASE_NOT_VOIDABLE`). Lock order: the expense's shift → purchase → balances.
+4. **A line is what was bought and what was paid [D21, L4]:** either `qty` (base units; the UI converts kg/L) + `line_total`, or by pack: `pack_count`, `pack_size` and `pack_cost`, with `line_total = pack_count × pack_cost` exactly. `unit_cost` is never sent: it is computed and only shown (4 dp). A pack line without its price, both a pack price and a line total, or a line without a quantity or price is 400.
+5. **Average cost [D19]:** posting sets each ingredient's `avg_cost = (on_hand × avg + qty × cost) / (on_hand + qty)`, where `cost = line_total / qty` (6 dp). With nothing on hand (zero or negative) or no known cost, the purchase cost becomes the average. Every stock movement stores the `unit_cost` it was made at.
+5b. **On credit [D21, P4]:** a draft may set `on_credit = true`; posting it needs a supplier (400 `supplier_id`), takes no shift and creates **no expense**: the purchase is owed (`owed = total − amount_paid`). `GET /purchases?owed=true` lists credit purchases not fully paid; each supplier returns `owed`. **Supplier payment:** `POST /supplier-payments {supplier_id, source, payment_method, note, lines:[{purchase_id, amount}]}` (Admin, idempotent, scope `supplier_payment`): every line must be a posted credit purchase of that supplier (400 / 422 `PAYMENT_NOT_ALLOWED`), never more than owed (422 `PAYMENT_EXCEEDS_OWED`); a drawer payment needs the payer's open shift (409 `SHIFT_NOT_OPEN`). It raises `amount_paid` and creates one expense `type = supplier_payment` (category `purchase`, attached to the shift for the drawer). `POST /supplier-payments/{id}/void {reason}` reverses it (409 already voided, 422 `shift_closed`). Lock order: the payer's shift → purchases (by id) → payment.
+6. **Void [D19]:** `POST /purchases/{id}/void {reason}` (Admin). Writes `purchase_void` movements taking the stock back out (it may go negative), takes the purchase out of the average (`(on_hand × avg − qty × cost) / (on_hand − qty)`, kept unchanged if nothing would be left or the result would be negative), voids its expense, sets `status = voided` with reason, who and when, and records `purchase.voided`. A draft (422 `draft`), an already voided purchase (409 `voided`), a drawer purchase whose shift is **closed** (422 `shift_closed`), or a credit purchase that still has supplier payments (409 `has_payments`, D21) is refused (`PURCHASE_NOT_VOIDABLE`). Lock order: the expense's shift → purchase → balances.
 
 ### 8.8 Expenses
 
@@ -718,7 +724,7 @@ Rules:
   - The server forces `source = cash_drawer`, `payment_method = cash`, and `shift` = the user's own open shift (409 `SHIFT_NOT_OPEN` if none).
   - Category and description are required.
 - **Void:** `POST /expenses/{id}/void {reason}`, Admin only.
-  - Purchase-type expenses cannot be voided this way (422 `EXPENSE_NOT_VOIDABLE`).
+  - Purchase and supplier-payment expenses cannot be voided this way (422 `EXPENSE_NOT_VOIDABLE`); they go with their purchase or payment.
   - A drawer expense whose shift is already **closed** cannot be voided either (422 `EXPENSE_NOT_VOIDABLE`, owner kickoff 2026-11-10), and neither can an already voided one. This keeps a closed shift's numbers true as well as frozen.
   - Voided expenses are excluded from reports and from open-shift expected cash.
   - Records an audit event.
@@ -727,11 +733,15 @@ Rules:
 ### 8.9 Inventory operations (Admin)
 
 - **Adjustment:** `POST /inventory/adjustments` with `{ingredient_id, mode:"delta", qty_delta, reason}` or `{ingredient_id, mode:"count", counted_qty, reason}`.
-  - For `count`, `delta = counted_qty − current balance` (computed under lock). If delta is 0, record the count but create no movement.
+  - **[D21, L2]** `delta` mode only takes stock out: `qty_delta` must be negative (a loss: waste, spoiled, broken); otherwise 400.
+  - For `count`, `delta = counted_qty − current balance` (computed under lock). If delta is 0, record the count but create no movement. A surplus only fixes the balance; it is never profit.
+  - The ingredient must have a cost (422 `COST_MISSING`), so every movement has a value.
   - The reason is mandatory.
-- **Opening balance:** `POST /inventory/opening-balances {items:[{ingredient_id, qty}]}`.
-  - Allowed only for ingredients with **no** prior movements. Otherwise 409 `OPENING_BALANCE_EXISTS`.
-  - Creates `opening_balance` movements. Never creates an expense [D15].
+- **Opening balance [D21, L3/Q-E]:** `POST /inventory/opening-balances {items:[{ingredient_id, qty, total_value}], reason}`.
+  - `total_value` (> 0) is required: the cost per unit is `total_value / qty`, weighted into the average like a purchase.
+  - Allowed any time; `reason` is required when an ingredient already has movements (400 `reason`).
+  - Creates `opening_balance` movements. Never creates an expense [D15] and is never profit.
+- **Return to stock [D21, P7]:** `POST /orders/{id}/return-stock {reason, lines:[{ingredient_id, qty}]}` (Admin): only a refunded order (422 `STOCK_RETURN_NOT_ALLOWED`), once (409), each ingredient at most what the order consumed (400). `refund_return` movements at the cost each ingredient left at (consumption snapshot); the average is recalculated; the Profit report lowers the cost of sales by that value. Audited `order.stock_returned`.
 - Ingredient `PATCH` never accepts balance fields.
 - **[D19]** An ingredient used by any recipe line or modifier effect cannot be switched off: 409 `INGREDIENT_IN_USE` with `used_by` (product sizes and options). Adjustments and opening balances store the ingredient's current cost on their movement.
 
@@ -777,11 +787,11 @@ All reports are Admin-only and are derived from persisted records only. Period f
 | `sales-summary` | `orders_count` (orders created in period, any status); `gross_sales` = Σ subtotal; `discounts` = Σ discount_total; `tax` = Σ tax_total; `collected` = Σ total; `refunds` = Σ refund total_amount with refund created in period; `net_sales` = collected − refunds; `refunded_orders_count` |
 | `payment-breakdown` | `cash_collected`, `card_collected` (Σ Payment.amount by method, payment date in period); `cash_refunded`, `card_refunded` (Σ RefundLine by method, refund date in period); `cash_net`, `card_net` |
 | `top-products` | Per variant from order-item snapshots. **[D19]** Sold on the order's day (`qty_sold`), taken off on the refund's day (`qty_refunded`, `refunded_revenue`), so a past period never changes: `net_revenue` = Σ line_total sold − Σ line_total refunded (before tax). Before D19 refunded orders were excluded entirely. Sort by `qty` or `revenue` (`ordering` param). **At most 100 rows**; `meta.limit` = 100 and `meta.truncated` = true when rows were cut (Q6 item 4A, owner 2026-11-11) |
-| `stock` | Per ingredient: unit, balance, threshold, is_low (balance ≤ threshold), is_negative, consumed_qty_period (Σ −qty_delta of `sale` movements in period); **[D19]** is_active (a switched-off ingredient is still listed while its balance ≠ 0), unit_cost (average, else reference, else null), value = balance × unit_cost; `stock_value` (total of known values) and `without_cost_count` |
-| `purchases-expenses` | From `Expense` only (status=posted), so no double counting: `purchase_total`, `general_expenses_total`, `cash_drawer_total`, `external_total`, `breakdown` by category. **No `cashier_id` / `shift_id` filter:** sending either returns 400 (purchases and external expenses have no shift, so a filter would silently drop them — Q6 item 3A, owner 2026-11-11) |
+| `stock` | Per ingredient: unit, balance, threshold, is_low (balance ≤ threshold), is_negative, consumed_qty_period (Σ −qty_delta of `sale` movements in period; **[D21, P11]** `cashier_id` / `shift_id` narrow it to that cashier's / shift's sales, balances stay current); **[D19]** is_active (a switched-off ingredient is still listed while its balance ≠ 0), unit_cost (the average, else null), value = balance × unit_cost; `stock_value` (total of known values) and `without_cost_count` |
+| `purchases-expenses` | From `Expense` only (status=posted), so no double counting: `purchase_total` (purchase and supplier-payment expenses, D21), `general_expenses_total`, `cash_drawer_total`, `external_total`, `breakdown` by category. **No `cashier_id` / `shift_id` filter:** sending either returns 400 (purchases and external expenses have no shift, so a filter would silently drop them — Q6 item 3A, owner 2026-11-11) |
 | `shifts` | `shifts_count`, `open_count`, `closed_count`, `expected_cash_total`, `actual_cash_total`, `total_difference`, `cash_in_total`, `cash_out_total`, `gap_total`, `shifts[]` (user, opened_at, closed_at, opening_cash, expected, actual, difference, orders_count, cash_in, cash_out, previous_actual, gap) |
-| `money-in-out` **[D19]** | Rows by method (`cash`, `card`, `transfer`, `total`): in = `sales` (payments of orders in period); out = `refunds` (refund lines, refund date), `drawer_expenses`, `other_expenses` (general, by source), `drawer_purchases`, `other_purchases` (purchase expenses, by source; voided excluded, by `paid_at`). `total_in`, `total_out`, `net`. `drawer`: `cash_in`, `cash_out` (moved, never counted as in/out), `gap_total`, `closed_count`, `total_difference`. No `cashier_id` / `shift_id` filter (400) |
-| `profit` **[D19]** | `sales` = Σ (total − tax_total) of orders in period; `refunds` = the same for orders refunded in period; `net_sales`; `cost_of_sales` = Σ `Order.cost_total` (saved at sale time; refunded orders keep their cost, D8); `gross_profit`, `gross_margin_pct`; `stock_losses` / `stock_gains` = value of `adjustment` movements in period; `general_expenses` (posted, general); `net_profit` = gross − losses + gains − general expenses. Purchases are **not** subtracted (`purchases_info` shows them). Unknown costs are never 0: `orders_without_cost`, `sales_without_cost`, `adjustments_without_cost`. No person filter (400) |
+| `money-in-out` **[D19]** | Rows by method (`cash`, `card`, `transfer`, `total`): in = `sales` (payments of orders in period); out = `refunds` (refund lines, refund date), `drawer_expenses`, `other_expenses` (general, by source), `drawer_purchases`, `other_purchases` (purchase expenses, by source; voided excluded, by `paid_at`); **[D21]** `drawer_supplier_payments`, `other_supplier_payments` (by `paid_at`), `card_fees` (Σ `Payment.fee_amount` of orders in period, card column). `total_in`, `total_out`, `net`. `drawer`: `cash_in`, `cash_out` (moved, never counted as in/out), `gap_total`, `closed_count`, `total_difference`. No `cashier_id` / `shift_id` filter (400) |
+| `profit` **[D19]** | `sales` = Σ (total − tax_total) of orders in period; `refunds` = the same for orders refunded in period; `net_sales`; `cost_of_sales` = Σ `Order.cost_total` (saved at sale time; refunded orders keep their cost, D8); `gross_profit`, `gross_margin_pct` (null unless net sales > 0: a refunds-only day is not a 100 % margin, D20); **[D21]** `cost_of_sales` is net of `returned_to_stock` (value of `refund_return` movements in period); `stock_losses` = value of negative `adjustment` movements (losses, count shortages); stock coming in is **never profit**: `stock_added_info` = value of positive adjustment movements (information only); `general_expenses` (posted, general) and `expenses_by_category`; `card_fees` (Σ `Payment.fee_amount` of orders in period); `net_profit` = gross − losses − general expenses − card fees; `per_100` = cost, losses, expenses (incl. card fees) and profit per 100 of net sales (null when net profit is null or net sales ≤ 0). Purchases are **not** subtracted; `purchases_info` = Σ total of purchases posted in period (paid now or on credit). Unknown costs are never 0: `orders_without_cost`, `sales_without_cost`, `adjustments_without_cost`; **[D20]** when `orders_without_cost > 0` then `cost_of_sales`, `gross_profit`, `gross_margin_pct`, `net_profit` are null, and `net_profit` is null when `adjustments_without_cost > 0`; `ingredients_without_cost` (names still without a price), `estimated_orders` (cost filled in later). No person filter (400) |
 
 **Dates and filters (implemented in Sprint 3):** orders, their payments and their items are dated by the order's `created_at`; refunds and their lines by the refund's `created_at`; expenses by `paid_at`; stock movements by `occurred_at`; shifts by `opened_at`. Orders and payments share the order's date so the invariant below holds at any midnight boundary. `cashier_id` filters orders by their cashier and refunds by the **refunding** user; `shift_id` filters orders and payments by their shift and refunds by the refunding user's shift. With no dates a report covers the café's local today, and `meta.range` echoes the resolved range.
 
@@ -818,12 +828,15 @@ All reports are Admin-only and are derived from persisted records only. Period f
 | 409 | `REFUND_ALREADY_APPLIED` | Order already refunded |
 | 409 | `PURCHASE_ALREADY_POSTED` | Re-post with a different key |
 | 409 | `PURCHASE_NOT_EDITABLE` | Editing or deleting a posted purchase |
-| 409 | `OPENING_BALANCE_EXISTS` | Ingredient already has movements |
 | 422 | `EMPTY_CART` | No items |
 | 422 | `INVALID_QUANTITY` | Quantity outside 1–99 |
 | 422 | `ITEM_UNAVAILABLE` | Inactive variant, product or category |
 | 422 | `INVALID_MODIFIER` | Option is inactive, not linked, has a missing slot, has no effect for the variant, or (Sprint 4 R2) is tracked but has no effects at all (`reason: no_effect`) |
 | 422 | `RECIPE_MISSING` | Sprint 4 B3: a tracked variant (`track_stock = true`) has no recipe lines |
+| 422 | `COST_MISSING` | D21: an ingredient has no cost yet (never stocked with a value): quote, checkout, adjustment. `details.ingredients` = names |
+| 422 | `PAYMENT_EXCEEDS_OWED` | D21: a supplier payment line is more than what is owed (`details.owed`) |
+| 400/409/422 | `PAYMENT_NOT_ALLOWED` | D21: a purchase of another supplier, not a posted credit purchase, already voided, or a drawer payment of a closed shift (`details.why`) |
+| 409/422 | `STOCK_RETURN_NOT_ALLOWED` | D21: the order is not refunded, or stock was already returned (`details.why`) |
 | 422 | `REGISTER_NOT_CONFIGURED` | Sprint 2: opening a shift when the café has no single default register |
 | 422 | `MODIFIER_SELECTION_INVALID` | min/max violated |
 | 422 | `INVALID_PAYMENT` | Duplicate method, tendered < amount, amount ≤ 0 |
@@ -833,7 +846,7 @@ All reports are Admin-only and are derived from persisted records only. Period f
 | 422 | `LAST_ADMIN` | Deactivating or demoting the last admin |
 | 422 | `INVALID_RECIPE` | Recipe validation failed |
 | 409 | `INGREDIENT_IN_USE` | D19: switching off an ingredient a recipe or option uses (`details.used_by`) |
-| 409/422 | `PURCHASE_NOT_VOIDABLE` | D19: draft, already voided, or a drawer purchase of a closed shift (`details.why`) |
+| 409/422 | `PURCHASE_NOT_VOIDABLE` | D19: draft, already voided, or a drawer purchase of a closed shift; D21: a credit purchase with supplier payments (`details.why`) |
 | 422 | `CASH_MOVEMENT_NOT_VOIDABLE` | D19: already cancelled, or the shift is closed |
 | 429 | `RATE_LIMITED` | Login throttled |
 
@@ -872,13 +885,15 @@ Insufficient stock is **not** an error: it returns 200/201 with `stock_warnings`
 | GET | `/inventory/balances` | A | Filters `is_low`, `is_negative`, `search` |
 | GET | `/inventory/movements` | A | Filters `ingredient_id`, `movement_type`, `from`, `to` |
 | POST | `/inventory/adjustments` | A | Delta or count, with reason |
-| POST | `/inventory/opening-balances` | A | Bulk opening balances |
-| GET, POST | `/suppliers` | A | |
+| POST | `/inventory/opening-balances` | A | Bulk opening balances with their value (D21) |
+| GET, POST | `/suppliers` | A | Each supplier returns `owed` (D21) |
 | PATCH | `/suppliers/{id}` | A | |
 | GET, POST | `/purchases` | A | List or create draft |
 | GET, PATCH, DELETE | `/purchases/{id}` | A | Draft only for PATCH and DELETE |
 | POST | `/purchases/{id}/post` | A | Idempotent post |
 | POST | `/purchases/{id}/void` | A | `{reason}`: void a posted purchase (Section 8.7, D19) |
+| GET, POST | `/supplier-payments` | A | D21: list (filters `supplier_id`, `status`); pay credit purchases (idempotent) |
+| POST | `/supplier-payments/{id}/void` | A | D21: `{reason}` |
 | GET, POST | `/expenses` | GET A (B: own only), POST A/B | Section 8.8 |
 | POST | `/expenses/{id}/void` | A | Void with reason |
 | GET | `/shifts/current` | A/B | Own open shift + live totals, or null (+ `meta.last_closed`, C2) |
@@ -894,6 +909,7 @@ Insufficient stock is **not** an error: it returns 200/201 with `stock_warnings`
 | GET | `/orders/{id}` | A; B if visible | Full detail with snapshots, payments, refund |
 | GET | `/orders/{id}/receipt` | A; B if visible | Print-ready receipt data |
 | POST | `/orders/{id}/refunds` | A/B | Idempotent full refund |
+| POST | `/orders/{id}/return-stock` | A | D21: return unused items of a refunded order to stock, once |
 | GET | `/refunds` | A | Filters `from`, `to`, `actor_id`, `method` |
 | GET | `/payments` | A | Payment ledger |
 | GET | `/reports/sales-summary` | A | Section 8.13 |
@@ -1037,9 +1053,10 @@ Close response — the same shift object as `GET /shifts/current` and `GET /shif
 ```json
 POST /purchases
 {"supplier_id":"…","supplier_invoice_no":"INV-102","purchased_on":"2026-11-10",
- "payment_method":"cash","source":"external","notes":"",
- "items":[{"ingredient_id":"<milk>","qty":"12000.000","unit_cost":"0.0450",
-           "pack_label":"1L carton","pack_count":"12","pack_size":"1000.000"}]}
+ "payment_method":"cash","source":"external","notes":"","on_credit":false,
+ "items":[{"ingredient_id":"<milk>","pack_label":"1L carton","pack_count":"12",
+           "pack_size":"1000.000","pack_cost":"45.00"},
+          {"ingredient_id":"<coffee>","qty":"500000.000","line_total":"785.00"}]}
 ```
 
 Response: `status: "draft"`, `total: "540.00"` (computed by the server).
@@ -1392,7 +1409,18 @@ Days are guidance for a 14-day schedule. Each sprint ends with a STOP for owner 
 
 **STOP.**
 
-### Sprint 5 — Release readiness (Days 13–14)
+### Sprint 5 — Logic review and fixes (added by the owner, 2026-11-17)
+
+- The owner reviews and audits the whole system logic (`docs/SYSTEM_LOGIC.md`): products, recipes, ingredients, suppliers, purchases, stock, cost and profit, sales, refunds, shifts, cash and reports.
+- Includes D20 (missing costs) and the open decision points (`docs/SYSTEM_LOGIC.md` §12, S3).
+- Each finding gets a decision and a fix plan the owner approves before any code. Spec, `SYSTEM_LOGIC.md` and tests change in the same commit as the fix.
+- Plan and findings: `docs/sprints/sprint-5-plan.md`.
+
+**Exit criteria:** every finding is fixed or recorded as an owner decision; the logic doc matches the code; full check suite and CI green.
+
+**STOP.**
+
+### Sprint 6 — Release readiness (Days 13–14; moved from Sprint 5 by the owner, 2026-11-17)
 
 - **`docker-compose.prod.yml`:**
   - reverse proxy with HTTPS (Caddy recommended for automatic certificates, or nginx + certbot) serving the built frontend and proxying `/api` on the same origin;
@@ -1449,7 +1477,7 @@ Days are guidance for a 14-day schedule. Each sprint ends with a STOP for owner 
 | AT-20 | Connection lost during checkout | No phantom or duplicate sale after retry | 4 |
 | AT-21 | Real printer | Legible receipt, invoice no visible | Owner |
 | AT-22 | Report reconciliation | All figures consistent | 3 |
-| AT-23 | Backup and restore | Restored data queryable | 5 |
+| AT-23 | Backup and restore | Restored data queryable | 6 |
 | AT-24 | Customer UAT with real data | Customer accepts | Owner |
 | AT-25 | Tenant isolation | Organization B never sees organization A data | 1 |
 | AT-26 | Tax enabled (inclusive and exclusive) | Correct tax_total and total; receipt shows tax | 2 |
@@ -1494,6 +1522,6 @@ Any unresolved issue affecting payment collection, financial integrity, security
 | D17 Card terminal reference | **Confirmed (2026-11-10):** optional | Serializer flag |
 | Tax pricing default | **Owner (2026-11-10): tax added on top** (`prices_include_tax=False`), tax disabled until the Admin enables it and types the rate | `OrganizationSettings` |
 | Barista order visibility | Today's orders (all cashiers) + exact invoice lookup | `sales/selectors.py` |
-| Hosting / domain | Generic Linux VPS with Docker | Sprint 5 |
+| Hosting / domain | Generic Linux VPS with Docker | Sprint 6 |
 
 Record any answer from the owner in `docs/PROGRESS.md`, and update this table in the same commit.

@@ -196,7 +196,7 @@ def test_every_recorded_action_has_a_readable_text_in_both_languages():
     pattern = re.compile(
         r'"([a-z_]+\.(?:created|updated|replaced|deleted|posted|voided|opened|'
         r"closed|adjusted|counted|opening_balance|deactivated|reactivated|"
-        r'password_reset|modifier_groups_replaced|added|removed))"'
+        r'password_reset|modifier_groups_replaced|added|removed|cost_estimated))"'
     )
     actions = set()
     for f in apps.rglob("*.py"):

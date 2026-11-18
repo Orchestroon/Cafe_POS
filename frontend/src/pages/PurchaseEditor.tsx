@@ -3,32 +3,39 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, NetworkError } from "../api/client";
-import type { Ingredient, PayMethod, PaySource, Purchase, Supplier } from "../api/types";
+import type { Ingredient, PayMethod, PaySource, Purchase, Supplier, Unit } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { Field, fieldError, isDecimal, TextField } from "../components/Form";
 import { Modal } from "../components/Modal";
 import { PageHeader } from "../components/PageHeader";
 import { HistoryLink } from "./AuditLog";
 import { ErrorBanner, Loading } from "../components/States";
-import { addMoney, lineTotal, packCostFrom, packQty, unitCostFromPack } from "../lib/decimal";
+import { addMoney, lineTotal, normMoney, packCostFrom, packQty, toUnits } from "../lib/decimal";
+import { avgFrom, costPer, readable, toBase, unitsFor, validEntry, type EntryUnit } from "../lib/units";
+import { PaySupplierDialog } from "../components/PaySupplierDialog";
 import { formatDateTime, formatMoney } from "../i18n/format";
 import { newKey } from "../lib/uuid";
 
-interface Row { key: string; ingredient_id: string; mode: "pack" | "qty"; pack_label: string; pack_count: string; pack_size: string; pack_cost: string; qty: string; unit_cost: string }
-interface Head { supplier_id: string; supplier_invoice_no: string; purchased_on: string; payment_method: PayMethod; source: PaySource; notes: string }
+// Sprint 5 L4 (owner, 2026-11-17): a line is what was bought and what was paid ("500 kg for 785");
+// the system works out the cost per unit. "By pack" stays as a second way to type it.
+interface Row { key: string; ingredient_id: string; mode: "pack" | "qty"; pack_label: string; pack_count: string; pack_size: string; pack_cost: string; qty: string; entry_unit: EntryUnit; total: string }
+interface Head { supplier_id: string; supplier_invoice_no: string; purchased_on: string; payment_method: PayMethod; source: PaySource; notes: string; on_credit: boolean }
 
-const blank = (): Row => ({ key: newKey(), ingredient_id: "", mode: "pack", pack_label: "", pack_count: "", pack_size: "", pack_cost: "", qty: "", unit_cost: "" });
+const blank = (): Row => ({ key: newKey(), ingredient_id: "", mode: "qty", pack_label: "", pack_count: "", pack_size: "", pack_cost: "", qty: "", entry_unit: "kg", total: "" });
 
-/** Derived values for a row: the server recomputes everything; these are previews only. */
-const derive = (r: Row) => {
-  const pack = r.mode === "pack";
-  const qty = pack ? (isDecimal(r.pack_count, 3) && isDecimal(r.pack_size, 3) ? packQty(r.pack_count, r.pack_size) : "") : r.qty;
-  const unit = pack ? (isDecimal(r.pack_cost, 4) && isDecimal(r.pack_size, 3) ? unitCostFromPack(r.pack_cost, r.pack_size) : "") : r.unit_cost;
-  // By pack, the line is exactly packs x pack price (what was typed is what is paid); the unit cost is shown only.
-  const total = pack
-    ? (isDecimal(r.pack_count, 3) && isDecimal(r.pack_cost, 4) ? lineTotal(r.pack_count, r.pack_cost) : "")
-    : (isDecimal(qty, 3) && isDecimal(unit, 4) ? lineTotal(qty, unit) : "");
-  return { qty, unit, total };
+/** Derived values for a row (base quantity, cost per base unit, line total): previews only, the
+ * server recomputes everything. The line total is always what was typed / paid. */
+const derive = (r: Row, base: Unit | undefined) => {
+  if (r.mode === "pack") {
+    const qty = isDecimal(r.pack_count, 3) && isDecimal(r.pack_size, 3) ? packQty(r.pack_count, r.pack_size) : "";
+    const total = isDecimal(r.pack_count, 3) && isDecimal(r.pack_cost, 4) ? lineTotal(r.pack_count, r.pack_cost) : "";
+    return { qty, total, avg: qty && total ? avgFrom(total, qty) : null };
+  }
+  const units = base ? unitsFor(base) : [];
+  const unit = units.includes(r.entry_unit) ? r.entry_unit : units[0];
+  const qty = unit && validEntry(r.qty.trim(), unit) ? toBase(r.qty.trim(), unit) : "";
+  const total = isDecimal(r.total, 2) ? normMoney(r.total) : "";
+  return { qty, total, avg: qty && total ? avgFrom(total, qty) : null };
 };
 
 export function PurchaseEditor() {
@@ -51,14 +58,14 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
   const [head, setHead] = useState<Head>({
     supplier_id: purchase?.supplier?.id ?? "", supplier_invoice_no: purchase?.supplier_invoice_no ?? "",
     purchased_on: purchase?.purchased_on ?? new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date()),
-    payment_method: purchase?.payment_method ?? "cash", source: purchase?.source ?? "external", notes: purchase?.notes ?? "",
+    payment_method: purchase?.payment_method ?? "cash", source: purchase?.source ?? "external", notes: purchase?.notes ?? "", on_credit: purchase?.on_credit ?? false,
   });
   const [rows, setRows] = useState<Row[]>(() =>
     purchase && purchase.items.length > 0
       ? purchase.items.map((i) => {
           const pack = i.pack_count !== null && i.pack_size !== null;
           return { key: newKey(), ingredient_id: i.ingredient_id, mode: pack ? "pack" : "qty", pack_label: i.pack_label, pack_count: i.pack_count ?? "", pack_size: i.pack_size ?? "",
-            pack_cost: pack ? i.pack_cost ?? packCostFrom(i.unit_cost, i.pack_size!) : "", qty: i.qty, unit_cost: i.unit_cost };
+            pack_cost: pack ? i.pack_cost ?? packCostFrom(i.unit_cost, i.pack_size!) : "", qty: i.qty, entry_unit: i.unit ?? "g", total: i.line_total ?? "" };
         })
       : [blank()],
   );
@@ -66,18 +73,22 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
   const [clientErr, setClientErr] = useState("");
   const [confirmPost, setConfirmPost] = useState(false);
   const [voiding, setVoiding] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const qtyText = (q: string, u: Unit) => { const r = readable(q, u); return `${r.qty} ${t(`units.${r.unit}`)}`; };
+  const perText = (avg: string, u: Unit) => { const c = costPer(avg, u); return t("reports.perUnit", { cost: formatMoney(c.amount, cur), unit: t(`units.${c.unit}`) }); };
 
   const setH = <K extends keyof Head>(k: K, v: Head[K]) => { setDirty(true); setHead({ ...head, [k]: v }); };
   const setRow = (key: string, patch: Partial<Row>) => { setDirty(true); setRows(rows.map((r) => (r.key === key ? { ...r, ...patch } : r))); };
-  const total = rows.reduce((s, r) => { const d = derive(r); return d.total ? addMoney(s, d.total) : s; }, "0.00");
+  const baseOf = (id: string) => ings.data?.find((i) => i.id === id)?.base_unit;
+  const total = rows.reduce((s, r) => { const d = derive(r, baseOf(r.ingredient_id)); return d.total ? addMoney(s, d.total) : s; }, "0.00");
 
   const body = () => ({
     supplier_id: head.supplier_id || null, supplier_invoice_no: head.supplier_invoice_no.trim(), purchased_on: head.purchased_on,
-    payment_method: head.source === "cash_drawer" ? "cash" : head.payment_method, source: head.source, notes: head.notes.trim(),
+    payment_method: head.source === "cash_drawer" ? "cash" : head.payment_method, source: head.source, notes: head.notes.trim(), on_credit: head.on_credit,
     items: rows.map((r) => {
-      return r.mode === "pack"
-        ? { ingredient_id: r.ingredient_id, pack_label: r.pack_label.trim(), pack_count: r.pack_count.trim(), pack_size: r.pack_size.trim(), pack_cost: r.pack_cost.trim() }
-        : { ingredient_id: r.ingredient_id, qty: r.qty.trim(), unit_cost: r.unit_cost.trim(), pack_label: "" };
+      if (r.mode === "pack") return { ingredient_id: r.ingredient_id, pack_label: r.pack_label.trim(), pack_count: r.pack_count.trim(), pack_size: r.pack_size.trim(), pack_cost: r.pack_cost.trim() };
+      const d = derive(r, baseOf(r.ingredient_id));
+      return { ingredient_id: r.ingredient_id, qty: d.qty, line_total: d.total, pack_label: "" };
     }),
   });
   const save = useMutation({
@@ -93,9 +104,10 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
     if (!head.purchased_on) return t("purchases.dateRequired");
     if (rows.length === 0) return t("purchases.itemsRequired");
     for (const r of rows) {
-      const d = derive(r);
-      if (!r.ingredient_id || !d.qty || !d.unit || Number(d.qty) <= 0) return t("purchases.rowInvalid");
+      const d = derive(r, baseOf(r.ingredient_id));
+      if (!r.ingredient_id || !d.qty || !d.total || toUnits(d.qty, 3) <= 0n) return t("purchases.rowInvalid");
     }
+    if (head.on_credit && !head.supplier_id) return t("purchases.creditNeedsSupplier");
     return "";
   };
   const submit = () => { const e = validate(); setClientErr(e); if (!e) save.mutate(); };
@@ -127,18 +139,29 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
           <table className="erp-table">
             <thead><tr><th>{t("nav.ingredients")}</th><th className="num">{t("inventory.qty")}</th><th className="num">{t("purchases.unitCost")}</th><th className="num">{t("pos.total")}</th></tr></thead>
             <tbody>
-              {purchase.items.map((i) => (
-                <tr key={i.id}><td>{i.ingredient_name}{i.pack_count && <div className="form-hint">{i.pack_count} × {i.pack_size} {i.unit} {i.pack_label}</div>}</td>
-                  <td className="num mono">{i.qty} {i.unit}</td><td className="num mono">{i.unit_cost}</td><td className="num">{i.line_total}</td></tr>
-              ))}
+              {purchase.items.map((i) => {
+                const avg = i.line_total ? avgFrom(i.line_total, i.qty) : null;
+                return (
+                  <tr key={i.id}><td>{i.ingredient_name}{i.pack_count && <div className="form-hint">{i.pack_count} × {i.pack_size} {i.unit} {i.pack_label}</div>}</td>
+                    <td className="num mono">{i.unit ? qtyText(i.qty, i.unit) : i.qty}</td><td className="num mono">{avg && i.unit ? perText(avg, i.unit) : "—"}</td><td className="num">{i.line_total}</td></tr>
+                );
+              })}
             </tbody>
           </table>
           <div className="totals" style={{ marginTop: 12 }}>
-            <div className="totals-row"><span>{t("purchases.pay")}</span><span>{t(`expenses.sources.${purchase.source}`)} · {t(`expenses.methods.${purchase.payment_method}`)}</span></div>
+            <div className="totals-row"><span>{t("purchases.pay")}</span><span>{purchase.on_credit ? t("purchases.onCredit") : `${t(`expenses.sources.${purchase.source}`)} · ${t(`expenses.methods.${purchase.payment_method}`)}`}</span></div>
             <div className="totals-row grand"><span>{t("pos.total")}</span><span>{formatMoney(purchase.total, cur)}</span></div>
+            {purchase.on_credit && <>
+              <div className="totals-row"><span>{t("suppliers.paid")}</span><span>{formatMoney(purchase.amount_paid, cur)}</span></div>
+              <div className="totals-row grand"><span>{t("suppliers.owed")}</span><span className={purchase.owed !== "0.00" ? "text-negative" : ""}>{formatMoney(purchase.owed, cur)}</span></div>
+            </>}
           </div>
+          {purchase.on_credit && purchase.owed !== "0.00" && purchase.supplier && (
+            <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => setPaying(true)}>{t("suppliers.pay")}</button>
+          )}
         </div>
         {voiding && <VoidPurchaseDialog purchase={purchase} onClose={() => setVoiding(false)} />}
+        {paying && purchase.supplier && <PaySupplierDialog supplier={purchase.supplier} preselect={purchase.id} onClose={() => setPaying(false)} />}
       </>
     );
   }
@@ -164,12 +187,17 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
           </Field>
           <TextField label={t("purchases.invoiceNo")} value={head.supplier_invoice_no} maxLength={60} onChange={(e) => setH("supplier_invoice_no", e.target.value)} error={err("supplier_invoice_no")} />
           <TextField label={t("common.date")} type="date" value={head.purchased_on} onChange={(e) => setH("purchased_on", e.target.value)} error={err("purchased_on")} />
-          <Field label={t("purchases.source")} error={err("source")} hint={head.source === "cash_drawer" ? t("purchases.drawerNote") : undefined}>
+          <Field label={t("purchases.paymentTerms")} hint={head.on_credit ? t("purchases.creditHint") : undefined}>
+            <select className="form-select" value={head.on_credit ? "credit" : "paid"} onChange={(e) => setH("on_credit", e.target.value === "credit")}>
+              <option value="paid">{t("purchases.paidNow")}</option><option value="credit">{t("purchases.onCredit")}</option>
+            </select>
+          </Field>
+          {!head.on_credit && <Field label={t("purchases.source")} error={err("source")} hint={head.source === "cash_drawer" ? t("purchases.drawerNote") : undefined}>
             <select className="form-select" value={head.source} onChange={(e) => setH("source", e.target.value as PaySource)}>
               <option value="external">{t("expenses.sources.external")}</option><option value="cash_drawer">{t("expenses.sources.cash_drawer")}</option>
             </select>
-          </Field>
-          {head.source === "external" && (
+          </Field>}
+          {!head.on_credit && head.source === "external" && (
             <Field label={t("expenses.method")} error={err("payment_method")}>
               <select className="form-select" value={head.payment_method} onChange={(e) => setH("payment_method", e.target.value as PayMethod)}>
                 {(["cash", "card", "transfer"] as const).map((m) => <option key={m} value={m}>{t(`expenses.methods.${m}`)}</option>)}
@@ -185,23 +213,38 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
         <p className="form-hint" style={{ marginBottom: 8 }}>{t("purchases.packHint")}</p>
         <div className="table-scroll">
           <table className="erp-table">
-            <thead><tr><th>{t("nav.ingredients")}</th><th>{t("purchases.entry")}</th><th className="num">{t("purchases.packCount")}</th><th className="num">{t("purchases.packSize")}</th><th className="num">{t("purchases.packCost")}</th><th className="num">{t("inventory.qty")}</th><th className="num">{t("purchases.unitCost")}</th><th className="num">{t("pos.total")}</th><th /></tr></thead>
+            <thead><tr><th>{t("nav.ingredients")}</th><th>{t("purchases.entry")}</th><th>{t("inventory.qty")}</th><th className="num">{t("purchases.price")}</th><th className="num">{t("purchases.unitCost")}</th><th className="num">{t("pos.total")}</th><th /></tr></thead>
             <tbody>
               {rows.map((r) => {
-                const d = derive(r);
-                const unit = ings.data?.find((i) => i.id === r.ingredient_id)?.base_unit ?? "";
+                const base = baseOf(r.ingredient_id);
+                const d = derive(r, base);
+                const units = base ? unitsFor(base) : [];
+                const unit = units.includes(r.entry_unit) ? r.entry_unit : units[0];
                 const pack = r.mode === "pack";
                 return (
                   <tr key={r.key}>
                     <td><select aria-label={t("nav.ingredients")} className="form-select" value={r.ingredient_id} onChange={(e) => setRow(r.key, { ingredient_id: e.target.value })}>
-                      <option value="">—</option>{ings.data?.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.base_unit})</option>)}</select></td>
+                      <option value="">—</option>{ings.data?.map((i) => <option key={i.id} value={i.id}>{i.name} ({t(`units.${i.base_unit}`)})</option>)}</select></td>
                     <td><select aria-label={t("purchases.entry")} className="form-select" value={r.mode} onChange={(e) => setRow(r.key, { mode: e.target.value as Row["mode"] })}>
-                      <option value="pack">{t("purchases.byPack")}</option><option value="qty">{t("purchases.byQty")}</option></select></td>
-                    <td>{pack && <input aria-label={t("purchases.packCount")} className="form-input inline-input num" inputMode="decimal" value={r.pack_count} onChange={(e) => setRow(r.key, { pack_count: e.target.value })} />}</td>
-                    <td>{pack && <input aria-label={t("purchases.packSize")} className="form-input inline-input num" inputMode="decimal" placeholder={unit} value={r.pack_size} onChange={(e) => setRow(r.key, { pack_size: e.target.value })} />}</td>
-                    <td>{pack && <input aria-label={t("purchases.packCost")} className="form-input inline-input num" inputMode="decimal" value={r.pack_cost} onChange={(e) => setRow(r.key, { pack_cost: e.target.value })} />}</td>
-                    <td className="num mono">{pack ? `${d.qty} ${unit}` : <input aria-label={t("inventory.qty")} className="form-input inline-input num" inputMode="decimal" value={r.qty} onChange={(e) => setRow(r.key, { qty: e.target.value })} />}</td>
-                    <td className="num mono">{pack ? d.unit : <input aria-label={t("purchases.unitCost")} className="form-input inline-input num" inputMode="decimal" value={r.unit_cost} onChange={(e) => setRow(r.key, { unit_cost: e.target.value })} />}</td>
+                      <option value="qty">{t("purchases.byQty")}</option><option value="pack">{t("purchases.byPack")}</option></select></td>
+                    <td>{pack ? (
+                      <div className="inline-pair">
+                        <input aria-label={t("purchases.packCount")} placeholder={t("purchases.packCount")} className="form-input inline-input num" inputMode="decimal" value={r.pack_count} onChange={(e) => setRow(r.key, { pack_count: e.target.value })} />
+                        <span>×</span>
+                        <input aria-label={t("purchases.packSize")} placeholder={base ? t(`units.${base}`) : t("purchases.packSize")} className="form-input inline-input num" inputMode="decimal" value={r.pack_size} onChange={(e) => setRow(r.key, { pack_size: e.target.value })} />
+                      </div>
+                    ) : (
+                      <div className="inline-pair">
+                        <input aria-label={t("inventory.qty")} className="form-input inline-input num" inputMode="decimal" value={r.qty} onChange={(e) => setRow(r.key, { qty: e.target.value })} />
+                        <select aria-label={t("ingredients.unit")} className="form-select" value={unit ?? ""} onChange={(e) => setRow(r.key, { entry_unit: e.target.value as EntryUnit })}>
+                          {units.map((u) => <option key={u} value={u}>{t(`units.${u}`)}</option>)}
+                        </select>
+                      </div>
+                    )}</td>
+                    <td>{pack
+                      ? <input aria-label={t("purchases.packCost")} placeholder={t("purchases.packCost")} className="form-input inline-input num" inputMode="decimal" value={r.pack_cost} onChange={(e) => setRow(r.key, { pack_cost: e.target.value })} />
+                      : <input aria-label={t("purchases.totalPaid")} placeholder={t("purchases.totalPaid")} className="form-input inline-input num" inputMode="decimal" value={r.total} onChange={(e) => setRow(r.key, { total: e.target.value })} />}</td>
+                    <td className="num mono">{d.avg && base ? perText(d.avg, base) : "—"}</td>
                     <td className="num">{d.total}</td>
                     <td><button className="icon-btn" aria-label={t("common.remove")} onClick={() => { setDirty(true); setRows(rows.filter((x) => x.key !== r.key)); }}>✕</button></td>
                   </tr>
@@ -217,8 +260,8 @@ function Editor({ purchase }: { purchase: Purchase | null }) {
           <button className="btn btn-outline" onClick={() => setConfirmPost(false)}>{t("common.cancel")}</button>
           <button className="btn btn-primary" disabled={post.isPending} onClick={() => post.mutate()}>{post.error instanceof NetworkError ? t("pos.retry") : t("purchases.postConfirm")}</button>
         </>}>
-          <p>{t("purchases.postWarning", { total: formatMoney(purchase!.total, cur) })}</p>
-          {head.source === "cash_drawer" && <p className="form-hint">{t("purchases.drawerNote")}</p>}
+          <p>{head.on_credit ? t("purchases.postWarningCredit", { total: formatMoney(purchase!.total, cur) }) : t("purchases.postWarning", { total: formatMoney(purchase!.total, cur) })}</p>
+          {!head.on_credit && head.source === "cash_drawer" && <p className="form-hint">{t("purchases.drawerNote")}</p>}
           {post.error instanceof NetworkError ? <div className="alert-banner alert-warning" role="alert">{t("purchases.postUnsure")}</div> : <ErrorBanner error={post.error} />}
         </Modal>
       )}

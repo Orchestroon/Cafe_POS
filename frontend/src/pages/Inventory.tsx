@@ -4,11 +4,13 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { Balance, Ingredient, Movement } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
-import { Field, fieldError, isDecimal, TextField } from "../components/Form";
+import { Field, fieldError, TextField } from "../components/Form";
 import { PageHeader } from "../components/PageHeader";
 import { ErrorBanner } from "../components/States";
 import { ListState, Pager } from "../components/Table";
-import { formatDateTime } from "../i18n/format";
+import { formatDateTime, formatMoney } from "../i18n/format";
+import { isDec, normMoney, toUnits } from "../lib/decimal";
+import { avgFrom, costPer, readable, toBase, unitsFor, validEntry, type EntryUnit } from "../lib/units";
 
 type Tab = "balances" | "movements" | "adjust" | "opening";
 
@@ -90,7 +92,7 @@ function Movements() {
         <div className="form-group"><label className="form-label">{t("inventory.type")}</label>
           <select className="form-select" value={f.movement_type} onChange={(e) => set("movement_type", e.target.value)}>
             <option value="">{t("common.all")}</option>
-            {["opening_balance", "adjustment", "sale", "purchase"].map((m) => <option key={m} value={m}>{t(`inventory.types.${m}`)}</option>)}
+            {["opening_balance", "adjustment", "sale", "purchase", "purchase_void", "refund_return"].map((m) => <option key={m} value={m}>{t(`inventory.types.${m}`)}</option>)}
           </select></div>
         <div className="form-group"><label className="form-label">{t("common.from")}</label><input type="date" className="form-input" value={f.from} onChange={(e) => set("from", e.target.value)} /></div>
         <div className="form-group"><label className="form-label">{t("common.to")}</label><input type="date" className="form-input" value={f.to} onChange={(e) => set("to", e.target.value)} /></div>
@@ -117,37 +119,44 @@ function Adjust({ initialId }: { initialId: string }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const ings = useIngredients();
-  const [f, setF] = useState({ ingredient_id: initialId, mode: "delta", qty: "", reason: "" });
+  // Sprint 5 L2: an adjustment only takes stock out (a loss); a count fixes the balance.
+  const [f, setF] = useState({ ingredient_id: initialId, mode: "delta", qty: "", unit: "g" as EntryUnit, reason: "" });
   const [clientErr, setClientErr] = useState("");
   const [done, setDone] = useState("");
+  const ing = ings.data?.find((i) => i.id === f.ingredient_id);
+  const units = ing ? unitsFor(ing.base_unit) : [];
+  const unit = units.includes(f.unit) ? f.unit : units[0] ?? "g";
   const save = useMutation({
-    mutationFn: () => api.post<{ balance_after: string; qty_delta: string }>("/inventory/adjustments", {
-      ingredient_id: f.ingredient_id, mode: f.mode, reason: f.reason,
-      ...(f.mode === "delta" ? { qty_delta: f.qty.trim() } : { counted_qty: f.qty.trim() }),
-    }),
+    mutationFn: () => {
+      const base = toBase(f.qty.trim(), unit);
+      return api.post<{ balance_after: string; qty_delta: string }>("/inventory/adjustments", {
+        ingredient_id: f.ingredient_id, mode: f.mode, reason: f.reason,
+        ...(f.mode === "delta" ? { qty_delta: `-${base}` } : { counted_qty: base }),
+      });
+    },
     onSuccess: (r) => {
       setDone(t("inventory.adjusted", { delta: r.qty_delta, balance: r.balance_after }));
       setF({ ...f, qty: "", reason: "" });
-      for (const k of ["balances", "movements"]) void qc.invalidateQueries({ queryKey: [k] });
+      for (const k of ["balances", "movements", "ingredients"]) void qc.invalidateQueries({ queryKey: [k] });
     },
   });
   const submit = () => {
     setDone("");
     if (!f.ingredient_id) return setClientErr(t("inventory.pickIngredient"));
-    if (!isDecimal(f.qty, 3, f.mode === "delta")) return setClientErr(t("common.decimalInvalid"));
+    if (!validEntry(f.qty.trim(), unit) || (f.mode === "delta" && toUnits(toBase(f.qty.trim(), unit), 3) <= 0n)) return setClientErr(t("common.decimalInvalid"));
     if (!f.reason.trim()) return setClientErr(t("inventory.reasonRequired"));
     setClientErr("");
     save.mutate();
   };
-  const unit = ings.data?.find((i) => i.id === f.ingredient_id)?.base_unit ?? "";
   return (
     <div className="card" style={{ maxWidth: 560 }}>
+      <div className="alert-banner alert-warning" role="note" style={{ marginBottom: 12 }}>{t("inventory.addWarning")}</div>
       <ErrorBanner error={save.error} />
       {clientErr && <div className="alert-banner alert-warning" role="alert" style={{ marginBottom: 12 }}>{clientErr}</div>}
       {done && <div className="alert-banner alert-success" role="status" style={{ marginBottom: 12 }}>{done}</div>}
       <Field label={t("nav.ingredients")} error={fieldError(save.error, "ingredient_id")}>
         <select className="form-select" value={f.ingredient_id} onChange={(e) => setF({ ...f, ingredient_id: e.target.value })}>
-          <option value="">—</option>{ings.data?.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.base_unit})</option>)}
+          <option value="">—</option>{ings.data?.map((i) => <option key={i.id} value={i.id}>{i.name} ({t(`units.${i.base_unit}`)})</option>)}
         </select>
       </Field>
       <Field label={t("inventory.mode")}>
@@ -155,49 +164,90 @@ function Adjust({ initialId }: { initialId: string }) {
           <option value="delta">{t("inventory.modeDelta")}</option><option value="count">{t("inventory.modeCount")}</option>
         </select>
       </Field>
-      <TextField label={`${f.mode === "delta" ? t("inventory.deltaQty") : t("inventory.countedQty")} ${unit}`} inputMode="decimal" value={f.qty} onChange={(e) => setF({ ...f, qty: e.target.value })}
-        hint={f.mode === "delta" ? t("inventory.deltaHint") : t("inventory.countHint")} error={fieldError(save.error, "qty_delta") ?? fieldError(save.error, "counted_qty")} />
+      <div className="form-grid">
+        <TextField label={f.mode === "delta" ? t("inventory.deltaQty") : t("inventory.countedQty")} inputMode="decimal" value={f.qty} onChange={(e) => setF({ ...f, qty: e.target.value })}
+          hint={f.mode === "delta" ? t("inventory.deltaHint") : t("inventory.countHint")} error={fieldError(save.error, "qty_delta") ?? fieldError(save.error, "counted_qty")} />
+        <Field label={t("ingredients.unit")}>
+          <select className="form-select" value={unit} onChange={(e) => setF({ ...f, unit: e.target.value as EntryUnit })}>
+            {units.map((u) => <option key={u} value={u}>{t(`units.${u}`)}</option>)}
+          </select>
+        </Field>
+      </div>
       <TextField label={t("inventory.reason")} value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} error={fieldError(save.error, "reason")} />
       <button className="btn btn-primary" disabled={save.isPending} onClick={submit}>{t("common.save")}</button>
     </div>
   );
 }
 
+interface OpeningRow { qty: string; unit: EntryUnit; value: string }
+
+/** Sprint 5 L3/Q-E: stock in the café without a purchase (at the start, or a gift / found later),
+ * always with its total value, so every gram has a cost. Never profit. */
 function Opening() {
   const { t } = useTranslation();
+  const { me } = useAuth();
   const qc = useQueryClient();
   const ings = useIngredients();
-  const [qty, setQty] = useState<Record<string, string>>({});
+  const [rows, setRows] = useState<Record<string, OpeningRow>>({});
+  const [reason, setReason] = useState("");
   const [done, setDone] = useState(false);
-  const entries = Object.entries(qty).filter(([, v]) => v.trim() !== "");
-  const bad = entries.some(([, v]) => !isDecimal(v, 3) || Number(v) <= 0);
+  const cur = me?.settings.currency ?? "";
+  const entries = (ings.data ?? []).filter((i) => rows[i.id]?.qty.trim() || rows[i.id]?.value.trim()).map((i) => ({ ing: i, row: rows[i.id] }));
+  const lineOk = (i: Ingredient, r: OpeningRow) => {
+    const unit = unitsFor(i.base_unit).includes(r.unit) ? r.unit : unitsFor(i.base_unit)[0];
+    return validEntry(r.qty.trim(), unit) && toUnits(toBase(r.qty.trim(), unit), 3) > 0n && isDec(r.value.trim(), 2) && toUnits(r.value.trim()) > 0n;
+  };
+  const bad = entries.some(({ ing, row }) => !lineOk(ing, row));
+  const hasStock = entries.some(({ ing }) => ing.stock_qty !== null && toUnits(ing.stock_qty, 3) !== 0n);
   const save = useMutation({
-    mutationFn: () => api.post("/inventory/opening-balances", { items: entries.map(([ingredient_id, v]) => ({ ingredient_id, qty: v.trim() })) }),
+    mutationFn: () => api.post("/inventory/opening-balances", {
+      reason: reason.trim(),
+      items: entries.map(({ ing, row }) => {
+        const unit = unitsFor(ing.base_unit).includes(row.unit) ? row.unit : unitsFor(ing.base_unit)[0];
+        return { ingredient_id: ing.id, qty: toBase(row.qty.trim(), unit), total_value: normMoney(row.value.trim()) };
+      }),
+    }),
     onSuccess: () => {
-      setDone(true); setQty({});
-      for (const k of ["balances", "movements"]) void qc.invalidateQueries({ queryKey: [k] });
+      setDone(true); setRows({}); setReason("");
+      for (const k of ["balances", "movements", "ingredients"]) void qc.invalidateQueries({ queryKey: [k] });
     },
   });
+  const blank: OpeningRow = { qty: "", unit: "g", value: "" };
+  const set = (id: string, patch: Partial<OpeningRow>) => { setDone(false); setRows({ ...rows, [id]: { ...blank, ...rows[id], ...patch } }); };
   return (
     <div className="card">
       <div className="alert-banner alert-neutral" style={{ marginBottom: 12 }}>{t("inventory.openingNote")}</div>
       <ErrorBanner error={save.error} />
       {done && <div className="alert-banner alert-success" role="status" style={{ marginBottom: 12 }}>{t("inventory.openingDone")}</div>}
       <ListState loading={ings.isLoading} error={ings.error} empty={ings.data?.length === 0}>
-        <table className="erp-table">
-          <thead><tr><th>{t("nav.ingredients")}</th><th>{t("ingredients.unit")}</th><th className="num">{t("inventory.qty")}</th></tr></thead>
-          <tbody>
-            {ings.data?.map((i) => (
-              <tr key={i.id}>
-                <td>{i.name}</td><td>{i.base_unit}</td>
-                <td><input aria-label={i.name} className="form-input inline-input num" inputMode="decimal" value={qty[i.id] ?? ""} onChange={(e) => { setDone(false); setQty({ ...qty, [i.id]: e.target.value }); }} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="table-scroll">
+          <table className="erp-table">
+            <thead><tr><th>{t("nav.ingredients")}</th><th className="num">{t("ingredients.stock")}</th><th className="num">{t("inventory.qty")}</th><th>{t("ingredients.unit")}</th><th className="num">{t("inventory.totalValue")}</th><th className="num">{t("purchases.unitCost")}</th></tr></thead>
+            <tbody>
+              {ings.data?.filter((i) => i.is_active).map((i) => {
+                const units = unitsFor(i.base_unit);
+                const r = rows[i.id] ?? { qty: "", unit: units[0], value: "" };
+                const unit = units.includes(r.unit) ? r.unit : units[0];
+                const avg = lineOk(i, r) ? avgFrom(normMoney(r.value.trim()), toBase(r.qty.trim(), unit)) : null;
+                const per = avg ? costPer(avg, i.base_unit) : null;
+                return (
+                  <tr key={i.id}>
+                    <td>{i.name}</td>
+                    <td className="num mono">{i.stock_qty === null ? "—" : `${readable(i.stock_qty, i.base_unit).qty} ${t(`units.${readable(i.stock_qty, i.base_unit).unit}`)}`}</td>
+                    <td><input aria-label={`${i.name} ${t("inventory.qty")}`} className="form-input inline-input num" inputMode="decimal" value={r.qty} onChange={(e) => set(i.id, { qty: e.target.value, unit })} /></td>
+                    <td><select aria-label={`${i.name} ${t("ingredients.unit")}`} className="form-select" value={unit} onChange={(e) => set(i.id, { unit: e.target.value as EntryUnit })}>{units.map((u) => <option key={u} value={u}>{t(`units.${u}`)}</option>)}</select></td>
+                    <td><input aria-label={`${i.name} ${t("inventory.totalValue")}`} className="form-input inline-input num" inputMode="decimal" value={r.value} onChange={(e) => set(i.id, { value: e.target.value, unit })} /></td>
+                    <td className="num mono">{per ? t("reports.perUnit", { cost: formatMoney(per.amount, cur), unit: t(`units.${per.unit}`) }) : "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </ListState>
       {bad && <div className="field-error" role="alert">{t("inventory.openingInvalid")}</div>}
-      <button className="btn btn-primary" style={{ marginTop: 12 }} disabled={save.isPending || bad || entries.length === 0} onClick={() => save.mutate()}>{t("common.save")}</button>
+      <TextField label={t("inventory.reason")} value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} hint={hasStock ? t("inventory.openingReasonNeeded") : t("inventory.openingReasonHint")} error={fieldError(save.error, "reason")} />
+      <button className="btn btn-primary" disabled={save.isPending || bad || entries.length === 0 || (hasStock && !reason.trim())} onClick={() => save.mutate()}>{t("common.save")}</button>
     </div>
   );
 }

@@ -2,7 +2,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -16,7 +16,13 @@ from . import presenters, selectors, services
 from .checkout import place_order
 from .models import Order, Payment, Refund
 from .refunds import refund_order
-from .serializers import CheckoutSerializer, QuoteSerializer, RefundSerializer
+from .returns import return_stock
+from .serializers import (
+    CheckoutSerializer,
+    QuoteSerializer,
+    RefundSerializer,
+    StockReturnSerializer,
+)
 
 
 class QuoteView(APIView):
@@ -99,6 +105,18 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Ge
             handler=lambda: refund_order(request.user, pk, ser.validated_data, key),
         )
         return Response(result.body, status=result.status, headers=result.headers())
+
+    @extend_schema(request=StockReturnSerializer, responses={201: OpenApiTypes.OBJECT})
+    @action(detail=True, methods=["post"], url_path="return-stock")
+    def return_stock(self, request, pk=None):
+        """Sprint 5 P7: Admin only (stock and costs), on a refunded order, once."""
+        if not has_perm(request.user, "inventory.manage"):
+            raise PermissionDenied()
+        ser = StockReturnSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        return_stock(request.user, pk, ser.validated_data)
+        order = selectors.get_order(request.user, pk)
+        return Response(presenters.order_detail(order, admin=True), status=201)
 
 
 class _Ledger(mixins.ListModelMixin, viewsets.GenericViewSet):

@@ -1,13 +1,17 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
-from apps.core.serializers import CostField, QtyField, StrictSerializerMixin
+from apps.core.serializers import MoneyField, QtyField, StrictSerializerMixin
 
 from .models import Ingredient, StockBalance, StockMovement
 
 
 class IngredientSerializer(StrictSerializerMixin, serializers.ModelSerializer):
     low_stock_threshold = QtyField(required=False, allow_null=True, min_value=0)
-    reference_unit_cost = CostField(required=False, allow_null=True, min_value=0)
+    # Read-only, from the stock balance (Sprint 5 L1): the cost is never typed on the ingredient.
+    stock_qty = serializers.SerializerMethodField()
+    avg_cost = serializers.SerializerMethodField()
 
     class Meta:
         model = Ingredient
@@ -16,7 +20,8 @@ class IngredientSerializer(StrictSerializerMixin, serializers.ModelSerializer):
             "name",
             "base_unit",
             "low_stock_threshold",
-            "reference_unit_cost",
+            "stock_qty",
+            "avg_cost",
             "is_active",
         ]
         read_only_fields = ["id"]
@@ -27,6 +32,17 @@ class IngredientSerializer(StrictSerializerMixin, serializers.ModelSerializer):
         if self.instance is not None:  # base_unit is create-only: the ledger depends on it
             fields["base_unit"].read_only = True
         return fields
+
+    def _balance(self, ing):
+        return next(iter(ing.balances.all()), None)  # one location in v1; prefetched by the view
+
+    def get_stock_qty(self, ing) -> str | None:
+        b = self._balance(ing)
+        return None if b is None else str(b.qty)
+
+    def get_avg_cost(self, ing) -> str | None:
+        b = self._balance(ing)
+        return None if b is None or b.avg_cost is None else str(b.avg_cost)
 
     def validate_name(self, value):
         org = self.context["request"].user.organization
@@ -65,7 +81,7 @@ class BalanceSerializer(serializers.ModelSerializer):
         ]
 
     def get_unit_cost(self, b) -> str | None:
-        """Average cost per base unit (else the reference cost); None = unknown."""
+        """Weighted average cost per base unit; None = unknown."""
         from .services import unit_cost
 
         c = unit_cost(b)
@@ -118,9 +134,11 @@ class AdjustmentInputSerializer(StrictSerializerMixin, serializers.Serializer):
 
     def validate(self, a):
         if a["mode"] == "delta":
-            if "qty_delta" not in a or a["qty_delta"] == 0:
+            # Sprint 5 L2: stock is never added by hand. Bought: a purchase; already had it: an
+            # opening balance with its value.
+            if "qty_delta" not in a or a["qty_delta"] >= 0:
                 raise serializers.ValidationError(
-                    {"qty_delta": "A non-zero qty_delta is required."}
+                    {"qty_delta": "Only stock going out (a negative quantity) is allowed."}
                 )
             if "counted_qty" in a:
                 raise serializers.ValidationError({"counted_qty": "Not allowed in delta mode."})
@@ -134,13 +152,13 @@ class AdjustmentInputSerializer(StrictSerializerMixin, serializers.Serializer):
 
 class OpeningItemSerializer(StrictSerializerMixin, serializers.Serializer):
     ingredient_id = serializers.UUIDField()
-    qty = QtyField(min_value=0)
-
-    def validate_qty(self, v):
-        if v <= 0:
-            raise serializers.ValidationError("Must be greater than 0.")
-        return v
+    qty = QtyField(min_value=Decimal("0.001"))
+    total_value = MoneyField(min_value=Decimal("0.01"))  # Sprint 5 L3: the cost is always known
 
 
 class OpeningBalancesSerializer(StrictSerializerMixin, serializers.Serializer):
     items = OpeningItemSerializer(many=True, allow_empty=False)
+    reason = serializers.CharField(max_length=300, required=False, allow_blank=True, default="")
+
+    def validate_reason(self, value):
+        return value.strip()

@@ -57,7 +57,7 @@ def test_seed_demo_command_dev_only_and_idempotent(settings):
     call_command("seed_demo")
     call_command("seed_demo")
     assert Product.objects.get(name="Iced Latte").variants.count() == 3
-    assert Ingredient.objects.count() == 6 and StockBalance.objects.count() == 6
+    assert Ingredient.objects.count() == 7 and StockBalance.objects.count() == 7
     assert sorted(
         __import__("apps.accounts.models", fromlist=["User"]).User.objects.values_list(
             "username", "role"
@@ -136,8 +136,8 @@ def two_orgs(org, org2, admin, admin2):
         )
         ing = data(c.post("/api/v1/ingredients", {"name": "Ing", "base_unit": "g"}, format="json"))
         c.post(
-            "/api/v1/inventory/adjustments",
-            {"ingredient_id": ing["id"], "mode": "delta", "qty_delta": "5.000", "reason": "x"},
+            "/api/v1/inventory/opening-balances",
+            {"items": [{"ingredient_id": ing["id"], "qty": "5.000", "total_value": "5.00"}]},
             format="json",
         )
         u = make_user(o, f"extra-{o.slug}", "barista")
@@ -191,13 +191,13 @@ def test_detail_and_mutations_on_other_org_objects_are_404(two_orgs, admin_c):
     assert make_user  # other org untouched
     r = admin_c.post(
         "/api/v1/inventory/adjustments",
-        {"ingredient_id": o["ing"], "mode": "delta", "qty_delta": "1.000", "reason": "x"},
+        {"ingredient_id": o["ing"], "mode": "delta", "qty_delta": "-1.000", "reason": "x"},
         format="json",
     )
     assert r.status_code == 404
     r = admin_c.post(
         "/api/v1/inventory/opening-balances",
-        {"items": [{"ingredient_id": o["ing"], "qty": "1.000"}]},
+        {"items": [{"ingredient_id": o["ing"], "qty": "1.000", "total_value": "1.00"}]},
         format="json",
     )
     assert r.status_code == 400

@@ -42,7 +42,7 @@ def _resolvers(tz):
     from apps.expenses.models import Expense
     from apps.inventory.models import Ingredient, StockAdjustment
     from apps.modifiers.models import ModifierGroup, ModifierOption
-    from apps.purchasing.models import Purchase, Supplier
+    from apps.purchasing.models import Purchase, Supplier, SupplierPayment
     from apps.sales.models import Order, Refund
     from apps.shifts.models import CashierShift
     from apps.tenancy.models import OrganizationSettings
@@ -79,6 +79,7 @@ def _resolvers(tz):
         ),
         (Expense, (), lambda e: e.description),
         (Supplier, (), lambda s: s.name),
+        (SupplierPayment, ("supplier",), lambda p: f"{p.supplier.name} · {p.amount}"),
         (OrganizationSettings, (), lambda s: "settings"),
     ]
 

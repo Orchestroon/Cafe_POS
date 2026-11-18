@@ -9,6 +9,7 @@ class Expense(TenantModel):
     class Type(models.TextChoices):
         GENERAL = "general"
         PURCHASE = "purchase"
+        SUPPLIER_PAYMENT = "supplier_payment"  # Sprint 5 P4: paying off a credit purchase
 
     class Category(models.TextChoices):
         UTILITIES = "utilities"
@@ -17,6 +18,10 @@ class Expense(TenantModel):
         SUPPLIES = "supplies"
         TRANSPORT = "transport"
         CLEANING = "cleaning"
+        SALARIES = "salaries"  # Sprint 5: so every cost reaches net profit
+        CARD_FEES = "card_fees"
+        MARKETING = "marketing"
+        TAXES_FEES = "taxes_fees"
         OTHER = "other"
         PURCHASE = "purchase"
 
@@ -33,7 +38,7 @@ class Expense(TenantModel):
         POSTED = "posted"
         VOIDED = "voided"
 
-    type = models.CharField(max_length=8, choices=Type.choices, default=Type.GENERAL)
+    type = models.CharField(max_length=16, choices=Type.choices, default=Type.GENERAL)
     category = models.CharField(max_length=12, choices=Category.choices)
     description = models.CharField(max_length=300)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
@@ -44,6 +49,13 @@ class Expense(TenantModel):
     )
     purchase = models.OneToOneField(
         "purchasing.Purchase",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="expense",
+    )
+    supplier_payment = models.OneToOneField(
+        "purchasing.SupplierPayment",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -71,5 +83,9 @@ class Expense(TenantModel):
             models.CheckConstraint(
                 condition=~Q(type="purchase") | Q(purchase__isnull=False),
                 name="expense_purchase_type_has_purchase",
+            ),
+            models.CheckConstraint(
+                condition=~Q(type="supplier_payment") | Q(supplier_payment__isnull=False),
+                name="expense_supplier_payment_type_has_payment",
             ),
         ]

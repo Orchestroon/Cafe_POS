@@ -23,11 +23,41 @@ def balance(ing_id):
     return StockBalance.objects.get(ingredient_id=ing_id).qty
 
 
+def opening(c, ing, qty, value, reason=None):
+    body = {"items": [{"ingredient_id": ing["id"], "qty": qty, "total_value": value}]}
+    if reason is not None:
+        body["reason"] = reason
+    return c.post("/api/v1/inventory/opening-balances", body, format="json")
+
+
+def stock(c, ing, qty="100.000", value="100.00"):
+    """Stock with a known cost (Sprint 5: the only way to add stock besides a purchase)."""
+    assert opening(c, ing, qty, value).status_code == 201
+
+
 def test_ingredient_creates_zero_balance_in_default_location(admin_c, org):
-    ing = new_ing(admin_c, low_stock_threshold="500.000", reference_unit_cost="0.0450")
+    ing = new_ing(admin_c, low_stock_threshold="500.000")
     b = StockBalance.objects.get(ingredient_id=ing["id"])
     assert b.qty == 0 and b.location.is_default and b.location.organization == org
-    assert ing["low_stock_threshold"] == "500.000" and ing["reference_unit_cost"] == "0.0450"
+    assert ing["low_stock_threshold"] == "500.000"
+    assert ing["stock_qty"] == "0.000" and ing["avg_cost"] is None
+
+
+def test_cost_is_never_typed_on_the_ingredient(admin_c):
+    """Sprint 5 L1: the cost comes only from an opening balance with its value or a purchase."""
+    r = admin_c.post(
+        "/api/v1/ingredients",
+        {"name": "X", "base_unit": "g", "reference_unit_cost": "1.0000"},
+        format="json",
+    )
+    assert r.status_code == 400
+    ing = new_ing(admin_c)
+    for field in ("reference_unit_cost", "avg_cost", "stock_qty"):
+        r = admin_c.patch(f"/api/v1/ingredients/{ing['id']}", {field: "1"}, format="json")
+        assert r.status_code == 400
+    stock(admin_c, ing, "2000.000", "300.00")
+    got = data(admin_c.get(f"/api/v1/ingredients/{ing['id']}"))
+    assert got["stock_qty"] == "2000.000" and got["avg_cost"] == "0.150000"
 
 
 @pytest.mark.parametrize("unit", ["g", "ml", "pcs"])
@@ -88,8 +118,8 @@ def test_opening_balance_creates_movement_and_audit(admin_c):
         "/api/v1/inventory/opening-balances",
         {
             "items": [
-                {"ingredient_id": a["id"], "qty": "5000.000"},
-                {"ingredient_id": b["id"], "qty": "100.000"},
+                {"ingredient_id": a["id"], "qty": "5000.000", "total_value": "4000.00"},
+                {"ingredient_id": b["id"], "qty": "100.000", "total_value": "150.00"},
             ]
         },
         format="json",
@@ -97,51 +127,67 @@ def test_opening_balance_creates_movement_and_audit(admin_c):
     assert r.status_code == 201
     assert balance(a["id"]) == D("5000") and balance(b["id"]) == D("100")
     m = StockMovement.objects.get(ingredient_id=a["id"])
-    assert (m.movement_type, m.source_type, m.qty_delta, m.balance_after) == (
+    assert (m.movement_type, m.source_type, m.qty_delta, m.balance_after, m.unit_cost) == (
         "opening_balance",
         "stock_adjustment",
         D("5000"),
         D("5000"),
+        D("0.8"),
     )
-    assert AuditEvent.objects.filter(action="stock.opening_balance").count() == 2
+    assert StockBalance.objects.get(ingredient_id=a["id"]).avg_cost == D("0.8")
+    assert StockAdjustment.objects.get(ingredient_id=b["id"]).total_value == D("150")
+    ev = AuditEvent.objects.filter(action="stock.opening_balance").order_by("created_at")
+    assert ev.count() == 2 and {e.summary["total_value"] for e in ev} == {"4000.00", "150.00"}
 
 
-def test_opening_balance_rejected_when_movements_exist_and_all_or_nothing(admin_c):
+def test_later_opening_balance_needs_a_reason_and_is_weighted_in(admin_c):
+    """Sprint 5 Q-E: stock that appears after the start (a gift, found in storage) comes in as
+    an opening balance with its value and a reason; it is weighted into the average."""
     a, b = new_ing(admin_c, "A", "g"), new_ing(admin_c, "B", "g")
-    admin_c.post(
-        "/api/v1/inventory/adjustments",
-        {"ingredient_id": a["id"], "mode": "delta", "qty_delta": "10", "reason": "found"},
-        format="json",
-    )
+    stock(admin_c, a, "1000.000", "1000.00")  # 1.00/g
     r = admin_c.post(
         "/api/v1/inventory/opening-balances",
         {
             "items": [
-                {"ingredient_id": b["id"], "qty": "50.000"},
-                {"ingredient_id": a["id"], "qty": "50.000"},
+                {"ingredient_id": b["id"], "qty": "50.000", "total_value": "5.00"},
+                {"ingredient_id": a["id"], "qty": "1000.000", "total_value": "500.00"},
             ]
         },
         format="json",
     )
-    assert r.status_code == 409 and r.json()["error"]["code"] == "OPENING_BALANCE_EXISTS"
+    assert r.status_code == 400 and "reason" in r.json()["error"]["details"]["fields"]
     assert balance(b["id"]) == 0  # nothing partially applied
     assert StockMovement.objects.count() == 1
-    again = admin_c.post(
-        "/api/v1/inventory/opening-balances",
-        {"items": [{"ingredient_id": b["id"], "qty": "50.000"}]},
-        format="json",
-    )
-    assert again.status_code == 201
-    second = admin_c.post(
-        "/api/v1/inventory/opening-balances",
-        {"items": [{"ingredient_id": b["id"], "qty": "50.000"}]},
-        format="json",
-    )
-    assert second.status_code == 409 and balance(b["id"]) == D("50")
+    r = opening(admin_c, a, "1000.000", "500.00", reason="Gift from the roaster")
+    assert r.status_code == 201
+    bal = StockBalance.objects.get(ingredient_id=a["id"])
+    assert bal.qty == D("2000") and bal.avg_cost == D("0.75")  # (1000 + 500) / 2000
+    adj = StockAdjustment.objects.filter(ingredient_id=a["id"]).latest("created_at")
+    assert adj.reason == "Gift from the roaster" and adj.total_value == D("500")
+
+
+@pytest.mark.parametrize("value", [None, "0.00", "-1.00", 5, "1.001"])
+def test_opening_balance_needs_a_value(admin_c, value):
+    a = new_ing(admin_c, "A", "g")
+    item = {"ingredient_id": a["id"], "qty": "10.000"}
+    if value is not None:
+        item["total_value"] = value
+    r = admin_c.post("/api/v1/inventory/opening-balances", {"items": [item]}, format="json")
+    assert r.status_code == 400 and not StockMovement.objects.exists()
 
 
 @pytest.mark.parametrize(
-    "items", [[], [{"ingredient_id": "00000000-0000-0000-0000-000000000000", "qty": "1.000"}]]
+    "items",
+    [
+        [],
+        [
+            {
+                "ingredient_id": "00000000-0000-0000-0000-000000000000",
+                "qty": "1.000",
+                "total_value": "1.00",
+            }
+        ],
+    ],
 )
 def test_opening_balance_validation(admin_c, items):
     assert (
@@ -157,11 +203,11 @@ def test_opening_balance_qty_must_be_positive_string_and_unique(admin_c):
     for qty in ("0.000", "-1.000", 5):
         r = admin_c.post(
             "/api/v1/inventory/opening-balances",
-            {"items": [{"ingredient_id": a["id"], "qty": qty}]},
+            {"items": [{"ingredient_id": a["id"], "qty": qty, "total_value": "1.00"}]},
             format="json",
         )
         assert r.status_code == 400
-    dup = {"items": [{"ingredient_id": a["id"], "qty": "1.000"}] * 2}
+    dup = {"items": [{"ingredient_id": a["id"], "qty": "1.000", "total_value": "1.00"}] * 2}
     assert admin_c.post("/api/v1/inventory/opening-balances", dup, format="json").status_code == 400
 
 
@@ -173,31 +219,51 @@ def adjust(c, ing, **kw):
 
 def test_adjustment_requires_reason(admin_c):
     a = new_ing(admin_c)
+    stock(admin_c, a)
     for bad in ({}, {"reason": ""}, {"reason": "   "}):
-        assert adjust(admin_c, a, mode="delta", qty_delta="5.000", **bad).status_code == 400
+        assert adjust(admin_c, a, mode="delta", qty_delta="-5.000", **bad).status_code == 400
         assert adjust(admin_c, a, mode="count", counted_qty="5.000", **bad).status_code == 400
-    assert balance(a["id"]) == 0 and not StockAdjustment.objects.exists()
+    assert (
+        balance(a["id"]) == D("100")
+        and not StockAdjustment.objects.exclude(kind="opening_balance").exists()
+    )
 
 
-def test_delta_adjustment_updates_balance_ledger_and_audit(admin_c):
+def test_delta_adjustment_only_takes_stock_out(admin_c):
+    """Sprint 5 L2: stock is never added by hand (it was bought, or already in the café)."""
     a = new_ing(admin_c)
+    stock(admin_c, a, "250.500", "250.50")
     r = adjust(admin_c, a, mode="delta", qty_delta="250.500", reason="Delivery")
-    assert r.status_code == 201 and data(r)["balance_after"] == "250.500"
-    adjust(admin_c, a, mode="delta", qty_delta="-50.000", reason="Spill")
-    assert balance(a["id"]) == D("200.500")
+    assert r.status_code == 400 and "qty_delta" in r.json()["error"]["details"]["fields"]
+    r = adjust(admin_c, a, mode="delta", qty_delta="-50.000", reason="Spill")
+    assert r.status_code == 201 and data(r)["balance_after"] == "200.500"
     ms = list(
         StockMovement.objects.order_by("created_at").values_list(
-            "qty_delta", "balance_after", "movement_type"
+            "qty_delta", "balance_after", "movement_type", "unit_cost"
         )
     )
-    assert ms == [(D("250.5"), D("250.5"), "adjustment"), (D("-50"), D("200.5"), "adjustment")]
+    assert ms == [
+        (D("250.5"), D("250.5"), "opening_balance", D("1")),
+        (D("-50"), D("200.5"), "adjustment", D("1")),
+    ]
     ev = AuditEvent.objects.filter(action="stock.adjusted").latest("created_at")
     assert ev.summary["reason"] == "Spill" and ev.summary["balance_before"] == "250.500"
 
 
+def test_adjustment_and_count_need_a_known_cost(admin_c):
+    """Every movement has a value: an ingredient never stocked with a cost cannot be adjusted."""
+    a = new_ing(admin_c)
+    for kw in ({"mode": "delta", "qty_delta": "-1.000"}, {"mode": "count", "counted_qty": "5"}):
+        r = adjust(admin_c, a, reason="x", **kw)
+        assert r.status_code == 422 and r.json()["error"]["code"] == "COST_MISSING"
+        assert r.json()["error"]["details"]["ingredients"] == ["Milk"]
+    assert not StockMovement.objects.exists() and not StockAdjustment.objects.exists()
+
+
 def test_balance_may_go_negative(admin_c):
     a = new_ing(admin_c)
-    adjust(admin_c, a, mode="delta", qty_delta="-5.000", reason="Waste")
+    stock(admin_c, a, "1.000", "1.00")
+    adjust(admin_c, a, mode="delta", qty_delta="-6.000", reason="Waste")
     assert balance(a["id"]) == D("-5")
     assert (
         data(admin_c.get("/api/v1/inventory/balances?is_negative=true"))[0]["is_negative"] is True
@@ -206,7 +272,7 @@ def test_balance_may_go_negative(admin_c):
 
 def test_count_computes_delta_from_current_balance(admin_c):
     a = new_ing(admin_c)
-    adjust(admin_c, a, mode="delta", qty_delta="100.000", reason="start")
+    stock(admin_c, a, "100.000", "100.00")
     r = adjust(admin_c, a, mode="count", counted_qty="80.000", reason="Monthly count")
     assert (
         r.status_code == 201
@@ -223,7 +289,7 @@ def test_count_computes_delta_from_current_balance(admin_c):
 
 def test_count_with_zero_delta_records_count_without_movement(admin_c):
     a = new_ing(admin_c)
-    adjust(admin_c, a, mode="delta", qty_delta="40.000", reason="start")
+    stock(admin_c, a, "40.000", "40.00")
     r = adjust(admin_c, a, mode="count", counted_qty="40.000", reason="Verified")
     assert r.status_code == 201 and data(r)["movement_id"] is None
     assert (
@@ -239,18 +305,20 @@ def test_count_with_zero_delta_records_count_without_movement(admin_c):
         {"mode": "delta"},
         {"mode": "delta", "qty_delta": "0.000"},
         {"mode": "delta", "qty_delta": 5},
-        {"mode": "delta", "qty_delta": "1.000", "counted_qty": "1.000"},
+        {"mode": "delta", "qty_delta": "-1.000", "counted_qty": "1.000"},
+        {"mode": "delta", "qty_delta": "1.000"},
         {"mode": "count"},
         {"mode": "count", "counted_qty": "-1.000"},
         {"mode": "count", "counted_qty": "1", "qty_delta": "1"},
         {"mode": "other", "qty_delta": "1.000"},
-        {"mode": "delta", "qty_delta": "1.0001"},
+        {"mode": "delta", "qty_delta": "-1.0001"},
     ],
 )
 def test_adjustment_validation(admin_c, payload):
     a = new_ing(admin_c)
+    stock(admin_c, a)
     assert adjust(admin_c, a, reason="because", **payload).status_code == 400
-    assert not StockMovement.objects.exists()
+    assert StockMovement.objects.count() == 1
 
 
 def test_adjustment_unknown_ingredient_404(admin_c):
@@ -259,7 +327,7 @@ def test_adjustment_unknown_ingredient_404(admin_c):
         {
             "ingredient_id": "00000000-0000-0000-0000-000000000000",
             "mode": "delta",
-            "qty_delta": "1.000",
+            "qty_delta": "-1.000",
             "reason": "x",
         },
         format="json",
@@ -269,7 +337,7 @@ def test_adjustment_unknown_ingredient_404(admin_c):
 
 def test_movements_are_append_only(admin_c, admin):
     a = new_ing(admin_c)
-    adjust(admin_c, a, mode="delta", qty_delta="10.000", reason="x")
+    stock(admin_c, a, "10.000", "10.00")
     m = StockMovement.objects.get()
     m.qty_delta = D("99")
     with pytest.raises(RuntimeError):
@@ -318,8 +386,8 @@ def test_balances_and_movements_endpoints_filters(admin_c):
         new_ing(admin_c, "Low", "g", low_stock_threshold="100.000"),
         new_ing(admin_c, "Ok", "g", low_stock_threshold="100.000"),
     )
-    adjust(admin_c, low, mode="delta", qty_delta="50.000", reason="x")
-    adjust(admin_c, ok, mode="delta", qty_delta="500.000", reason="x")
+    stock(admin_c, low, "50.000", "5.00")
+    stock(admin_c, ok, "500.000", "50.00")
 
     def names(q):
         return [b["ingredient_name"] for b in data(admin_c.get(f"/api/v1/inventory/balances{q}"))]
@@ -334,6 +402,7 @@ def test_balances_and_movements_endpoints_filters(admin_c):
         return admin_c.get(f"/api/v1/inventory/movements{q}").json()["meta"]["total_count"]
 
     assert mv("") == 2 and mv(f"?ingredient_id={low['id']}") == 1 and mv("?movement_type=sale") == 0
+    assert mv("?movement_type=opening_balance") == 2
     assert mv("?from=2000-01-01&to=2000-01-02") == 0 and mv("?from=2000-01-01") == 2
     assert admin_c.get("/api/v1/inventory/movements?from=bad").status_code == 400
 
@@ -342,7 +411,7 @@ def test_movement_date_filter_uses_org_timezone(admin_c, org):
     from datetime import UTC, datetime
 
     a = new_ing(admin_c)
-    adjust(admin_c, a, mode="delta", qty_delta="1.000", reason="x")
+    stock(admin_c, a, "1.000", "1.00")
     # 22:30 UTC on Jan 9 is 00:30 on Jan 10 in Cairo (+02:00)
     with connection.cursor() as cur:
         cur.execute(
@@ -361,7 +430,13 @@ def test_movement_date_filter_uses_org_timezone(admin_c, org):
 def test_concurrent_adjustments_do_not_lose_updates(org, admin):
     """Row lock (select_for_update) serializes read-modify-write on the balance."""
     ing = Ingredient.objects.create(organization=org, name="Beans", base_unit="g")
-    StockBalance.objects.create(organization=org, ingredient=ing, location=default_location(org))
+    StockBalance.objects.create(
+        organization=org,
+        ingredient=ing,
+        location=default_location(org),
+        qty="100.000",
+        avg_cost="1.000000",
+    )
     errors = []
 
     def work():
@@ -373,7 +448,7 @@ def test_concurrent_adjustments_do_not_lose_updates(org, admin):
                     {
                         "ingredient_id": str(ing.id),
                         "mode": "delta",
-                        "qty_delta": "1.000",
+                        "qty_delta": "-1.000",
                         "reason": "t",
                     },
                     format="json",
@@ -388,19 +463,25 @@ def test_concurrent_adjustments_do_not_lose_updates(org, admin):
     [t.start() for t in threads]
     [t.join() for t in threads]
     assert not errors
-    assert StockBalance.objects.get(ingredient=ing).qty == D("20")
+    assert StockBalance.objects.get(ingredient=ing).qty == D("80")
     assert sorted(StockMovement.objects.values_list("balance_after", flat=True)) == [
-        D(i) for i in range(1, 21)
+        D(i) for i in range(80, 100)
     ]
 
 
 def test_adjustment_overflowing_balance_is_rejected_not_500(admin_c):
     a = new_ing(admin_c, "A", "g")
-    big = {"ingredient_id": a["id"], "mode": "delta", "qty_delta": "99999999999.999", "reason": "t"}
+    stock(admin_c, a, "1.000", "1.00")
+    big = {
+        "ingredient_id": a["id"],
+        "mode": "delta",
+        "qty_delta": "-99999999999.999",
+        "reason": "t",
+    }
     assert admin_c.post("/api/v1/inventory/adjustments", big, format="json").status_code == 201
     r = admin_c.post("/api/v1/inventory/adjustments", big, format="json")
     assert r.status_code == 400 and r.json()["error"]["code"] == "VALIDATION_ERROR"
-    assert balance(a["id"]) == D("99999999999.999") and StockMovement.objects.count() == 1
+    assert balance(a["id"]) == D("-99999999998.999") and StockMovement.objects.count() == 2
 
 
 @pytest.mark.django_db(transaction=True)
@@ -415,7 +496,7 @@ def test_concurrent_opening_balances_apply_once(org, admin):
             barrier.wait()
             r = c.post(
                 "/api/v1/inventory/opening-balances",
-                {"items": [{"ingredient_id": str(ing.id), "qty": "100.000"}]},
+                {"items": [{"ingredient_id": str(ing.id), "qty": "100.000", "total_value": "10"}]},
                 format="json",
             )
             statuses.append(r.status_code)
@@ -425,6 +506,7 @@ def test_concurrent_opening_balances_apply_once(org, admin):
     threads = [threading.Thread(target=work) for _ in range(2)]
     [t.start() for t in threads]
     [t.join() for t in threads]
-    assert sorted(statuses) == [201, 409]
+    # The second one waits for the row lock, then sees stock already there and needs a reason.
+    assert sorted(statuses) == [201, 400]
     assert StockBalance.objects.get(ingredient=ing).qty == D("100")
     assert StockMovement.objects.filter(ingredient=ing).count() == 1

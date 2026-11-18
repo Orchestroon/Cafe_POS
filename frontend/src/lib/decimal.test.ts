@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { avgFrom, costPer } from "./units";
 import { addMoney, cmpMoney, fromUnits, isDec, lineTotal, marginPct, normMoney, packCostFrom, packQty, perUnitQty, roundUpTo, servingCost, subMoney, toUnits, unitCostFromPack } from "./decimal";
 
 describe("decimal strings (spec 5.1, no floats)", () => {
@@ -58,5 +59,24 @@ describe("serving cost and margin (money review)", () => {
     expect(marginPct("10.00", "12.00")).toBe("-20.0");
     expect(marginPct("114.00", "50.00", "14.00")).toBe("50.0"); // 114 incl. 14% = 100 net
     expect(marginPct("0.00", "1.00")).toBeNull();
+  });
+});
+
+
+describe("cost per unit for reading (Sprint 5 L1)", () => {
+  it("shows g and ml per kg / L, pieces per piece", () => {
+    expect(costPer("0.001570", "g")).toEqual({ amount: "1.57", unit: "kg" });
+    expect(costPer("0.680851", "g")).toEqual({ amount: "680.85", unit: "kg" });
+    expect(costPer("0.030000", "ml")).toEqual({ amount: "30.00", unit: "L" });
+    expect(costPer("1.500000", "pcs")).toEqual({ amount: "1.50", unit: "pcs" });
+  });
+});
+
+describe("cost from a total (Sprint 5 L4)", () => {
+  it("500 kg for 785 is 0.00157 per g", () => {
+    expect(avgFrom("785.00", "500000.000")).toBe("0.001570");
+    expect(avgFrom("300.00", "2000.000")).toBe("0.150000");
+    expect(avgFrom("1.00", "3.000")).toBe("0.333333");
+    expect(avgFrom("1.00", "0")).toBeNull();
   });
 });

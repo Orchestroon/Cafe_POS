@@ -24,6 +24,7 @@ from apps.core.money import q_money
 from apps.expenses.models import Expense
 from apps.inventory.models import StockBalance, StockMovement
 from apps.inventory.services import unit_cost
+from apps.purchasing.models import Purchase
 from apps.sales.models import Order, OrderItem, Payment, Refund, RefundLine
 from apps.shifts.models import CashierShift, CashMovement
 
@@ -153,16 +154,21 @@ def top_products(org, lo, hi, p) -> dict:
 
 
 def stock(org, lo, hi, p) -> dict:
+    """Balances are current; the date range (and, Sprint 5 P11, a cashier or shift) only narrow
+    the consumed column: sales made by that cashier / in that shift."""
+    sales = StockMovement.objects.filter(
+        organization=org, movement_type="sale", occurred_at__gte=lo, occurred_at__lt=hi
+    )
+    if p.get("cashier_id") or p.get("shift_id"):
+        orders = Order.objects.filter(organization=org)
+        if p.get("cashier_id"):
+            orders = orders.filter(cashier_id=p["cashier_id"])
+        if p.get("shift_id"):
+            orders = orders.filter(shift_id=p["shift_id"])
+        sales = sales.filter(source_id__in=OrderItem.objects.filter(order__in=orders).values("pk"))
     consumed = {
         r["ingredient_id"]: r["t"]
-        for r in StockMovement.objects.filter(
-            organization=org,
-            movement_type="sale",
-            occurred_at__gte=lo,
-            occurred_at__lt=hi,
-        )
-        .values("ingredient_id")
-        .annotate(t=Sum(-F("qty_delta")))
+        for r in sales.values("ingredient_id").annotate(t=Sum(-F("qty_delta")))
     }
     # A switched-off ingredient stays listed while it still holds stock (money review).
     rows = (
@@ -206,7 +212,8 @@ def purchases_expenses(org, lo, hi, p) -> dict:
 
     breakdown = qs.values("category").annotate(t=Sum("amount")).order_by("-t", "category")
     return {
-        "purchase_total": total(Q(type="purchase")),
+        # money paid for purchases: paid at post, or later by supplier payments (Sprint 5 P4)
+        "purchase_total": total(Q(type__in=("purchase", "supplier_payment"))),
         "general_expenses_total": total(Q(type="general")),
         "cash_drawer_total": total(Q(source="cash_drawer")),
         "external_total": total(Q(source="external")),
@@ -312,6 +319,23 @@ def money_in_out(org, lo, hi, p) -> dict:
             "drawer_purchases", "out", _by_method(exp.filter(type="purchase", source="cash_drawer"))
         ),
         _row("other_purchases", "out", _by_method(exp.filter(type="purchase", source="external"))),
+        # Sprint 5 P4: credit purchases go out on the day they are paid, not when posted.
+        _row(
+            "drawer_supplier_payments",
+            "out",
+            _by_method(exp.filter(type="supplier_payment", source="cash_drawer")),
+        ),
+        _row(
+            "other_supplier_payments",
+            "out",
+            _by_method(exp.filter(type="supplier_payment", source="external")),
+        ),
+        # Sprint 5 Q-C: what the bank keeps from card sales (by sale date, like the sales)
+        _row(
+            "card_fees",
+            "out",
+            _by_method(Payment.objects.filter(order__in=orders), "method", "fee_amount"),
+        ),
     ]
     tot = {}
     for d in ("in", "out"):
@@ -349,12 +373,15 @@ _VALUE = ExpressionWrapper(
 
 
 def profit(org, lo, hi, p) -> dict:
-    """Profit for the period (owner, 2026-11-16: weighted average cost).
-    net sales (before tax, minus refunds by refund date) - cost of what was sold (saved on each
-    order at sale time) = gross profit; then + stock gains - stock losses (adjustments and counts,
-    valued at average cost) - general expenses = net profit. Purchases are not subtracted: they
-    become stock and are counted when sold. Refunded orders keep their cost (the ingredients were
-    used; D8: no stock is returned). Unknown costs are reported, never treated as 0."""
+    """What the sales earned (owner, 2026-11-17: "I sell for 100, all my costs are 90, so I made
+    10"). Net sales (before tax, minus refunds by refund date) - cost of what was sold (saved on
+    each order at sale time) = gross profit; - losses (stock taken out: waste, broken, count
+    shortages, valued at average cost) - expenses (rent, salaries, bills...) = net profit.
+    Purchases are not subtracted: they become stock and are counted when sold or lost. Stock that
+    comes in is never profit (Sprint 5 L2/L3): an opening balance, a count surplus, or an old
+    positive adjustment only show as information. Refunded orders keep their cost (the
+    ingredients were used; D8). Unknown costs are never 0: cost / gross / margin / net are None
+    when an order has no cost (old data, D20), net is None when a loss has no cost."""
     orders = Order.objects.filter(organization=org, created_at__gte=lo, created_at__lt=hi)
     ex_tax = F("total") - F("tax_total")
     o = orders.aggregate(rev=Sum(ex_tax), cost=Sum("cost_total"))
@@ -363,43 +390,96 @@ def profit(org, lo, hi, p) -> dict:
         organization=org, refund__created_at__gte=lo, refund__created_at__lt=hi
     ).aggregate(rev=Sum(ex_tax))
     revenue, refunded = o["rev"] or ZERO, back["rev"] or ZERO
-    net_sales, cogs = revenue - refunded, o["cost"] or ZERO
+    # Sprint 5 P7: unused items of refunded orders put back in stock, at the cost they left at
+    returned = q_money(
+        StockMovement.objects.filter(
+            organization=org, movement_type="refund_return", occurred_at__gte=lo, occurred_at__lt=hi
+        ).aggregate(v=Sum(_VALUE))["v"]
+        or 0
+    )
+    net_sales, cogs = revenue - refunded, (o["cost"] or ZERO) - returned
     adj = StockMovement.objects.filter(
         organization=org, movement_type="adjustment", occurred_at__gte=lo, occurred_at__lt=hi
     )
-    valued = adj.filter(unit_cost__isnull=False)
-    losses = valued.filter(qty_delta__lt=0).aggregate(v=Sum(_VALUE))["v"] or ZERO
-    gains = valued.filter(qty_delta__gt=0).aggregate(v=Sum(_VALUE))["v"] or ZERO
-    losses, gains = q_money(-losses), q_money(gains)
-    general = (
-        Expense.objects.filter(
-            organization=org, status="posted", type="general", paid_at__gte=lo, paid_at__lt=hi
-        ).aggregate(t=Sum("amount"))["t"]
-        or ZERO
-    )
+    out, came_in = adj.filter(qty_delta__lt=0), adj.filter(qty_delta__gt=0)
+    losses = q_money(-(out.filter(unit_cost__isnull=False).aggregate(v=Sum(_VALUE))["v"] or 0))
+    added = q_money(came_in.filter(unit_cost__isnull=False).aggregate(v=Sum(_VALUE))["v"] or 0)
+    exp = Expense.objects.filter(organization=org, status="posted", paid_at__gte=lo, paid_at__lt=hi)
+    by_cat = {
+        r["category"]: r["t"]
+        for r in exp.filter(type="general").values("category").annotate(t=Sum("amount"))
+    }
+    general = sum(by_cat.values(), ZERO)
+    # stock bought in the period (posted, paid now or on credit): information only
     purchases = (
-        Expense.objects.filter(
-            organization=org, status="posted", type="purchase", paid_at__gte=lo, paid_at__lt=hi
-        ).aggregate(t=Sum("amount"))["t"]
+        Purchase.objects.filter(
+            organization=org, status="posted", posted_at__gte=lo, posted_at__lt=hi
+        ).aggregate(t=Sum("total"))["t"]
         or ZERO
     )
-    gross = net_sales - cogs
+    # Sprint 5 Q-C: the bank's fee on card sales, saved on each payment (kept on a refund)
+    fees = Payment.objects.filter(order__in=orders).aggregate(t=Sum("fee_amount"))["t"] or ZERO
+    unvalued = out.filter(unit_cost__isnull=True)
+    gross = None if missing["n"] else net_sales - cogs
+    net = None if gross is None or unvalued.exists() else gross - losses - general - fees
+
+    def share(v):  # out of every 100 of net sales
+        return S(q_money(v * 100 / net_sales)) if net is not None and net_sales > 0 else None
+
     return {
         "sales": S(revenue),
         "refunds": S(refunded),
         "net_sales": S(net_sales),
-        "cost_of_sales": S(cogs),
-        "gross_profit": S(gross),
-        "gross_margin_pct": S(q_money(gross * 100 / net_sales)) if net_sales else None,
+        "cost_of_sales": None if gross is None else S(cogs),
+        "returned_to_stock": S(returned),
+        "gross_profit": None if gross is None else S(gross),
+        "gross_margin_pct": (
+            # only over positive sales: a refunds-only day would give -65 / -65 = 100 %
+            S(q_money(gross * 100 / net_sales)) if gross is not None and net_sales > 0 else None
+        ),
         "stock_losses": S(losses),
-        "stock_gains": S(gains),
         "general_expenses": S(general),
-        "net_profit": S(gross - losses + gains - general),
+        "card_fees": S(fees),
+        "expenses_by_category": [
+            {"category": c, "amount": S(by_cat[c])}
+            for c in sorted(by_cat, key=lambda c: -by_cat[c])
+        ],
+        "net_profit": None if net is None else S(net),
+        "per_100": None
+        if share(cogs) is None
+        else {
+            "cost": share(cogs),
+            "losses": share(losses),
+            "expenses": share(general + fees),
+            "profit": share(net),
+        },
         "purchases_info": S(purchases),
+        "stock_added_info": S(added),
         "orders_without_cost": missing["n"],
         "sales_without_cost": S(missing["rev"]),
-        "adjustments_without_cost": adj.filter(unit_cost__isnull=True).count(),
+        "estimated_orders": orders.filter(cost_estimated=True).count(),
+        "adjustments_without_cost": unvalued.count(),
+        "ingredients_without_cost": _ingredients_without_cost(
+            org,
+            {
+                r["ingredient_id"]
+                for snap in OrderItem.objects.filter(
+                    order__in=orders.filter(cost_total__isnull=True)
+                ).values_list("consumption_snapshot", flat=True)
+                for r in snap
+                if r.get("unit_cost") is None
+            }
+            | {str(i) for i in unvalued.values_list("ingredient_id", flat=True)},
+        ),
     }
+
+
+def _ingredients_without_cost(org, ids) -> list[str]:
+    """Names of the given ingredients that still have no cost today (what the owner must price)."""
+    rows = StockBalance.objects.filter(organization=org, ingredient_id__in=ids).select_related(
+        "ingredient"
+    )
+    return sorted({b.ingredient.name for b in rows if unit_cost(b) is None})
 
 
 REPORTS = {

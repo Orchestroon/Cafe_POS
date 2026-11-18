@@ -18,7 +18,7 @@ from apps.modifiers.models import (
     ModifierOption,
     ModifierOptionPrice,
 )
-from apps.purchasing.models import Purchase, PurchaseItem, Supplier
+from apps.purchasing.models import Purchase, PurchaseItem, Supplier, SupplierPayment
 from apps.sales.models import Order, Payment, Refund, RefundLine
 from apps.shifts.models import CashierShift, CashMovement
 
@@ -76,6 +76,7 @@ MATRIX = [
     ("POST", "shifts/current/cash-movements", BOTH),
     ("POST", "cash-movements/{cash_movement}/void", ADMIN),
     ("POST", "orders/{order}/refunds", BOTH),
+    ("POST", "orders/{order}/return-stock", ADMIN),
     ("GET", "refunds", ADMIN),
     ("GET", "payments", ADMIN),
     ("GET", "suppliers", ADMIN),
@@ -88,6 +89,9 @@ MATRIX = [
     ("DELETE", "purchases/{purchase}", ADMIN),
     ("POST", "purchases/{purchase}/post", ADMIN),
     ("POST", "purchases/{purchase}/void", ADMIN),
+    ("GET", "supplier-payments", ADMIN),
+    ("POST", "supplier-payments", ADMIN),
+    ("POST", "supplier-payments/{supplier_payment}/void", ADMIN),
     ("GET", "expenses", BOTH),
     ("POST", "expenses", BOTH),
     ("POST", "expenses/{expense}/void", ADMIN),
@@ -144,6 +148,14 @@ def ids(org, admin, barista):
     purchase = Purchase.objects.create(
         organization=org, purchased_on="2026-11-10", created_by=admin, total="0.00"
     )
+    supplier_payment = SupplierPayment.objects.create(
+        organization=org,
+        supplier=supplier,
+        amount="1.00",
+        source="external",
+        payment_method="transfer",
+        created_by=admin,
+    )
     expense = Expense.objects.create(
         organization=org,
         category="supplies",
@@ -167,6 +179,7 @@ def ids(org, admin, barista):
         "cash_movement": move.id,
         "supplier": supplier.id,
         "purchase": purchase.id,
+        "supplier_payment": supplier_payment.id,
         "expense": expense.id,
         "shift": shift.id,
         "order": order.id,

@@ -129,8 +129,8 @@ def void_expense(actor, pk, reason) -> Expense:
     def refuse(why):
         raise ApiError("EXPENSE_NOT_VOIDABLE", "This expense cannot be voided.", 422, {"why": why})
 
-    if exp.type == Expense.Type.PURCHASE:
-        refuse("purchase_expense")
+    if exp.type in (Expense.Type.PURCHASE, Expense.Type.SUPPLIER_PAYMENT):
+        refuse("purchase_expense")  # voided with its purchase or supplier payment
     if exp.status == Expense.Status.VOIDED:
         refuse("already_voided")
     if exp.shift_id and exp.shift.status == "closed":

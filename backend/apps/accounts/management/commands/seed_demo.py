@@ -66,6 +66,7 @@ class Command(BaseCommand):
             ("Ice", "g"),
             ("Sugar Syrup", "ml"),
             ("Cups 12oz", "pcs"),
+            ("Lids 12oz", "pcs"),
         ]:
             ing, _ = Ingredient.objects.get_or_create(
                 organization=org, name=name, defaults={"base_unit": unit}
@@ -98,7 +99,9 @@ class Command(BaseCommand):
                 variant=v, ingredient=ing["Whole Milk"], base_qty=milk, slot_key="milk", **o
             )
             RecipeLine.objects.create(variant=v, ingredient=ing["Ice"], base_qty="100", **o)
+            # Packaging is part of the recipe, so its cost is on every sale (Sprint 5 Q-B).
             RecipeLine.objects.create(variant=v, ingredient=ing["Cups 12oz"], base_qty="1", **o)
+            RecipeLine.objects.create(variant=v, ingredient=ing["Lids 12oz"], base_qty="1", **o)
 
         milk_g, created = ModifierGroup.objects.get_or_create(
             organization=org,
@@ -154,17 +157,19 @@ class Command(BaseCommand):
             )
 
     def _opening_stock(self, admin, org, ing):
+        # (quantity in the base unit, what it is worth): every stock line has a known cost.
         stock = {
-            "Coffee Beans": "5000",
-            "Whole Milk": "20000",
-            "Oat Milk": "5000",
-            "Ice": "30000",
-            "Sugar Syrup": "2000",
-            "Cups 12oz": "200",
+            "Coffee Beans": ("5000", "4000.00"),
+            "Whole Milk": ("20000", "800.00"),
+            "Oat Milk": ("5000", "450.00"),
+            "Ice": ("30000", "150.00"),
+            "Sugar Syrup": ("2000", "200.00"),
+            "Cups 12oz": ("200", "300.00"),
+            "Lids 12oz": ("200", "100.00"),
         }
         items = [
-            {"ingredient_id": ing[n].pk, "qty": q}
-            for n, q in stock.items()
+            {"ingredient_id": ing[n].pk, "qty": q, "total_value": v}
+            for n, (q, v) in stock.items()
             if not StockMovement.objects.filter(organization=org, ingredient=ing[n]).exists()
         ]
         if items and admin:
